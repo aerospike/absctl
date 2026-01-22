@@ -28,7 +28,6 @@ func TestApp_NewFlagSet(t *testing.T) {
 	flagSet := app.NewFlagSet()
 
 	args := []string{
-		"--version",
 		"--verbose",
 		"--log-level", "error",
 		"--log-json",
