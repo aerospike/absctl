@@ -39,7 +39,6 @@ func TestApp_NewFlagSet(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.False(t, app.Help, "Help flag should default to false")
-	assert.True(t, app.Version, "Version flag should be true when set")
 	assert.True(t, app.Verbose, "Verbose flag should be true when set")
 	assert.Equal(t, app.LogLevel, "error", "Log level flag should be error")
 	assert.True(t, app.LogJSON, "Log JSON flag should be true when set")
@@ -57,7 +56,6 @@ func TestApp_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.False(t, app.Help, "Help flag should default to false")
-	assert.False(t, app.Version, "Version flag should default to false")
 	assert.False(t, app.Verbose, "Verbose flag should default to false")
 	assert.Equal(t, app.LogLevel, "debug", "Log level flag should default be debug")
 	assert.False(t, app.LogJSON, "Log JSON flag should default to false")

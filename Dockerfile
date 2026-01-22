@@ -28,8 +28,7 @@ RUN --mount=type=secret,id=GOPROXY <<-EOF
         export GOPROXY="$(cat /run/secrets/GOPROXY)"
     fi
     OS=${TARGETOS} ARCH=${TARGETARCH} make build
-    xx-verify /app/aerospike-backup-cli/dist/abs-backup-cli_${TARGETOS}_${TARGETARCH}
-    xx-verify /app/aerospike-backup-cli/dist/abs-restore-cli_${TARGETOS}_${TARGETARCH}
+    xx-verify /app/aerospike-backup-cli/dist/absctl_${TARGETOS}_${TARGETARCH}
 EOF
 
 FROM ${REGISTRY}/alpine:3.23
@@ -45,11 +44,7 @@ RUN addgroup -g 65532 -S abtgroup && \
     adduser -S -u 65532 -G abtgroup -h /home/abtuser abtuser
 
 COPY --chown=abtuser:abtgroup --chmod=0755 --from=builder \
-    /app/aerospike-backup-cli/dist/abs-restore-cli_${TARGETOS}_${TARGETARCH} \
-    /usr/bin/abs-restore-cli
-
-COPY --chown=abtuser:abtgroup --chmod=0755 --from=builder \
-    /app/aerospike-backup-cli/dist/abs-backup-cli_${TARGETOS}_${TARGETARCH} \
-    /usr/bin/abs-backup-cli
+    /app/aerospike-backup-cli/dist/absctl_${TARGETOS}_${TARGETARCH} \
+    /usr/bin/absctl
 
 USER abtuser

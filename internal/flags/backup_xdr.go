@@ -144,7 +144,7 @@ func (f *BackupXDR) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.Int64VarP(&f.InfoTimeout, "info-timeout", "T",
 		models.DefaultBackupXDRInfoTimeout,
-		"Set the timeout (ms) for asinfo commands sent from abs-backup-cli to the database.\n"+
+		"Set the timeout (ms) for asinfo commands sent from backup tool to the database.\n"+
 			"The info commands are to check version, get indexes, get udfs, count records, and check batch write support.")
 
 	return flagSet

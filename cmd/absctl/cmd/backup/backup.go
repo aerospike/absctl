@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package backup
 
 import (
 	"fmt"
@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	VersionDev     = "dev"
-	welcomeMessage = "Welcome to the Aerospike backup CLI tool!"
+	welcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
+	welcomeMessageShort = "Aerospike backup CLI tool"
+	useCommand          = "backup"
 )
 
 // Cmd represents the base command when called without any subcommands
@@ -42,6 +43,7 @@ type Cmd struct {
 	buildTime  string
 
 	// Root flags
+	flagsRoot         *flags.Root
 	flagsApp          *flags.App
 	flagsAerospike    *asFlags.AerospikeFlags
 	flagsClientPolicy *flags.ClientPolicy
@@ -60,12 +62,12 @@ type Cmd struct {
 	Logger *slog.Logger
 }
 
-func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
+func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	c := &Cmd{
-		appVersion: appVersion,
-		commitHash: commitHash,
-		buildTime:  buildTime,
-
+		appVersion:        appVersion,
+		commitHash:        commitHash,
+		buildTime:         buildTime,
+		flagsRoot:         flagsRoot,
 		flagsApp:          flags.NewApp(),
 		flagsAerospike:    asFlags.NewDefaultAerospikeFlags(),
 		flagsClientPolicy: flags.NewClientPolicy(),
@@ -82,16 +84,16 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	}
 	c.flagsCommon = flags.NewCommon(&c.flagsBackup.Common, flags.OperationBackup)
 
-	rootCmd := &cobra.Command{
-		Use:   "abs-backup-cli",
-		Short: "Aerospike backup CLI tool",
+	backupCmd := &cobra.Command{
+		Use:   useCommand,
+		Short: welcomeMessageShort,
 		Long:  welcomeMessage,
 		RunE:  c.run,
 	}
 
 	// Disable sorting
-	rootCmd.PersistentFlags().SortFlags = false
-	rootCmd.SilenceUsage = true
+	backupCmd.PersistentFlags().SortFlags = false
+	backupCmd.SilenceUsage = true
 
 	// Add sub command
 	// xdrCmd := xdr.NewCmd(
@@ -105,7 +107,7 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	// 	c.flagsGcp,
 	// 	c.flagsAzure,
 	// )
-	// rootCmd.AddCommand(xdrCmd)
+	// backupCmd.AddCommand(xdrCmd)
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
@@ -121,27 +123,27 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	localFlagSet := c.flagsLocal.NewFlagSet()
 
 	// App flags.
-	rootCmd.PersistentFlags().AddFlagSet(appFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(appFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
 
-	rootCmd.Flags().AddFlagSet(commonFlagSet)
-	rootCmd.Flags().AddFlagSet(backupFlagSet)
+	backupCmd.Flags().AddFlagSet(commonFlagSet)
+	backupCmd.Flags().AddFlagSet(backupFlagSet)
 
-	rootCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(azureFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(localFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(awsFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(azureFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(localFlagSet)
 
 	// Deprecated fields.
-	if err := rootCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
+	if err := backupCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
 
-	rootCmd.Flags().Lookup("nice").Hidden = false
+	backupCmd.Flags().Lookup("nice").Hidden = false
 
 	// Beautify help and usage.
 	helpFunc := newHelpFunction(
@@ -159,25 +161,19 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 		localFlagSet,
 	)
 
-	rootCmd.SetUsageFunc(func(_ *cobra.Command) error {
+	backupCmd.SetUsageFunc(func(_ *cobra.Command) error {
 		helpFunc()
 		return nil
 	})
-	rootCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+	backupCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		helpFunc()
 	})
 
-	// Set cobra output to logger.
-	logWriter := logging.NewCobraLogger(c.Logger)
-	rootCmd.SetOut(logWriter)
-	rootCmd.SetErr(logWriter)
-
-	return rootCmd, c
+	return backupCmd
 }
 
 func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
-	// Show version.
-	if c.flagsApp.Version {
+	if c.flagsRoot.Version {
 		c.printVersion()
 
 		return nil
@@ -274,10 +270,7 @@ func newHelpFunction(
 		fmt.Println(welcomeMessage)
 		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
 		fmt.Println("\nUsage:")
-		fmt.Println("  abs-backup-cli [flags]")
-
-		// Printing hint for xdr command.
-		//	fmt.Println("  abs-backup-cli xdr [flags]")
+		fmt.Println("  absctl backup [flags]")
 
 		// Print section: App Flags
 		fmt.Println("\nGeneral Flags:")
@@ -305,10 +298,10 @@ func newHelpFunction(
 		fmt.Println("\nSecret Agent Flags:\n" +
 			"Options pertaining to the Aerospike Secret Agent.\n" +
 			"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
-			"Both abs-backup-cli and abs-restore-cli support getting all the cloud configuration parameters\n" +
+			"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 			"from the Aerospike Secret Agent.\n" +
 			"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-			"Example: abs-backup-cli --azure-account-name secret:resource1:azaccount")
+			"Example: absctl backup --azure-account-name secret:resource1:azaccount")
 		secretAgentFlagSet.PrintDefaults()
 
 		// Print section: Local Flags

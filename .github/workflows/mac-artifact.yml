@@ -78,8 +78,7 @@ jobs:
           cache-index: "1"
         with:
           path: |
-            ${{ steps.working-dir.outputs.value }}/bin/abs-backup-cli
-            ${{ steps.working-dir.outputs.value }}/bin/abs-restore-cli
+            ${{ steps.working-dir.outputs.value }}/bin/absctl
           key: ${{ env.cache-name }}-${{ env.cache-index }}-${{ matrix.os }}-${{ runner.arch }}-${{ steps.system-info.outputs.release }}-${{ steps.tag.outputs.tag }}
       - name: Build backup CLI binaries for tools
         if: steps.cache-backup-cli.outputs.cache-hit != 'true'
@@ -89,12 +88,10 @@ jobs:
       - name: Sanity Test backup CLI
         working-directory: ${{ steps.working-dir.outputs.value }}
         run: |
-          ./bin/abs-backup-cli --version
-          ./bin/abs-restore-cli --version
+          ./bin/absctl --version
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.system-info.outputs.platform }}-${{ runner.arch }}-${{ matrix.os }}-${{ steps.system-info.outputs.release }}-backup-cli
           path: |
-            ${{ steps.working-dir.outputs.value }}/bin/abs-backup-cli
-            ${{ steps.working-dir.outputs.value }}/bin/abs-restore-cli
+            ${{ steps.working-dir.outputs.value }}/bin/absctl
           if-no-files-found: error

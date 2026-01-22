@@ -39,13 +39,13 @@ func (f *Restore) NewFlagSet() *pflag.FlagSet {
 		models.DefaultRestoreDirectoryList,
 		"A comma-separated list of paths to directories that hold the backup files. Required,\n"+
 			"unless -i or -d is used. The paths may not contain commas.\n"+
-			"Example: 'abs-restore-cli --directory-list /path/to/dir1/,/path/to/dir2'\n")
+			"Example: 'absctl restore --directory-list /path/to/dir1/,/path/to/dir2'\n")
 
 	flagSet.StringVar(&f.ParentDirectory, "parent-directory",
 		models.DefaultRestoreParentDirectory,
 		"A common root path for all paths used in --directory-list.\n"+
 			"This path is prepended to all entries in --directory-list.\n"+
-			"Example: 'abs-restore-cli --parent-directory /common/root/path\n"+
+			"Example: 'absctl restore --parent-directory /common/root/path\n"+
 			"--directory-list /path/to/dir1/,/path/to/dir2'\n")
 
 	flagSet.BoolVarP(&f.Uniq, "unique", "u",
@@ -73,18 +73,18 @@ func (f *Restore) NewFlagSet() *pflag.FlagSet {
 			"AEROSPIKE_FAIL_FORBIDDEN,\n"+
 			"AEROSPIKE_BIN_TYPE_ERROR,\n"+
 			"AEROSPIKE_BIN_NOT_FOUND.\n"+
-			"By default, these errors are not ignored and abs-restore-cli terminates.")
+			"By default, these errors are not ignored and restore tool terminates.")
 
 	flagSet.BoolVar(&f.DisableBatchWrites, "disable-batch-writes",
 		models.DefaultRestoreDisableBatchWrites,
 		"Disables the use of batch writes when restoring records to the Aerospike cluster.\n"+
 			"By default, the cluster is checked for batch write support. Only set this flag if you explicitly\n"+
-			"don't want batch writes to be used or if abs-restore-cli is failing to work because it cannot recognize\n"+
+			"don't want batch writes to be used or if restore tool is failing to work because it cannot recognize\n"+
 			"that batch writes are disabled.\n")
 
 	flagSet.IntVar(&f.MaxAsyncBatches, "max-async-batches",
 		models.DefaultRestoreMaxAsyncBatches,
-		"To send data to Aerospike Database, abs-restore-cli creates write workers that work in parallel.\n"+
+		"To send data to Aerospike Database, restore tool creates write workers that work in parallel.\n"+
 			"This value is the number of workers that form batches and send them to the database.\n"+
 			"For Aerospike Database versions prior to 6.0, 'batches' are only a logical grouping of records,\n"+
 			"and each record is uploaded individually.\n"+
@@ -102,8 +102,8 @@ func (f *Restore) NewFlagSet() *pflag.FlagSet {
 			"Default is 128 with batch writes enabled. If you disable batch writes,\n"+
 			"this flag is superseded because each worker sends writes one by one.\n"+
 			"All three batch flags are linked. If --disable-batch-writes=false,\n"+
-			"abs-restore-cli uses batch write workers to send data to the database.\n"+
-			"abs-restore-cli creates a number of workers equal to --max-async-batches that work in parallel,\n"+
+			"The restore tool uses batch write workers to send data to the database.\n"+
+			"restore tool creates a number of workers equal to --max-async-batches that work in parallel,\n"+
 			"and form and send a number of records equal to --batch-size to the database.\n")
 
 	flagSet.Int64Var(&f.ExtraTTL, "extra-ttl",

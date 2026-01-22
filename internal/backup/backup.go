@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	idBackup = "abs-backup-cli"
+	idBackup = "absctl-backup"
 )
 
 var xdrSupportedVersion = asinfo.AerospikeVersion{Major: 8}

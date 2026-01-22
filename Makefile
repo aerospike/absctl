@@ -1,5 +1,5 @@
 SHELL = bash
-NAME = aerospike-backup-cli
+NAME = absctl
 WORKSPACE = $(shell pwd)
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --abbrev-ref HEAD)
 MAINTAINER = "Aerospike <info@aerospike.com>"
@@ -25,13 +25,11 @@ IMAGE_REPO ?= aerospike/aerospike-backup-cli
 IMAGE_CACHE_FROM ?=
 IMAGE_CACHE_TO ?=
 IMAGE_OUTPUT ?= type=image,push=true
-BACKUP_BINARY_NAME = abs-backup-cli
-RESTORE_BINARY_NAME = abs-restore-cli
+BINARY_NAME = absctl
 TARGET_DIR = $(WORKSPACE)/dist
 BIN_DIR = $(WORKSPACE)/bin
 PACKAGE_DIR= $(WORKSPACE)/scripts/package
-CMD_BACKUP_DIR = $(WORKSPACE)/cmd/backup
-CMD_RESTORE_DIR = $(WORKSPACE)/cmd/restore
+CMD_DIR = $(WORKSPACE)/cmd/absctl
 
 PREFIX ?= /usr
 BINDIR ?= $(PREFIX)/bin
@@ -84,19 +82,15 @@ docker-buildx:
 .PHONY: build
 build:
 	mkdir -p "$(TARGET_DIR)"
-	@echo "Building $(BACKUP_BINARY_NAME) with version $(VERSION)..."
-	$(GOBUILD) -o $(TARGET_DIR)/$(BACKUP_BINARY_NAME)_$(OS)_$(ARCH) $(CMD_BACKUP_DIR)
-	@echo "Building $(RESTORE_BINARY_NAME) with version $(VERSION)..."
-	$(GOBUILD) -o $(TARGET_DIR)/$(RESTORE_BINARY_NAME)_$(OS)_$(ARCH) $(CMD_RESTORE_DIR)
+	@echo "Building $(BINARY_NAME) with version $(VERSION)..."
+	$(GOBUILD) -o $(TARGET_DIR)/$(BINARY_NAME)_$(OS)_$(ARCH) $(CMD_DIR)
 
 # Build for aerospike-tools
 .PHONY: tools-build
 tools-build:
 	mkdir -p "$(BIN_DIR)"
-	@echo "Building $(BACKUP_BINARY_NAME) for tools with version $(VERSION)..."
-	$(GOBUILD) -o $(BIN_DIR)/$(BACKUP_BINARY_NAME) $(CMD_BACKUP_DIR)
-	@echo "Building $(RESTORE_BINARY_NAME) for tools with version $(VERSION)..."
-	$(GOBUILD) -o $(BIN_DIR)/$(RESTORE_BINARY_NAME) $(CMD_RESTORE_DIR)
+	@echo "Building $(BINARY_NAME) for tools with version $(VERSION)..."
+	$(GOBUILD) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_DIR)
 
 .PHONY: buildx
 buildx:
@@ -109,13 +103,11 @@ buildx:
 .PHONY: install
 install: build
 	install -d $(DESTDIR)$(BINDIR)
-	install -m 755 $(TARGET_DIR)/$(BACKUP_BINARY_NAME)_$(OS)_$(ARCH) $(DESTDIR)$(BINDIR)/$(BACKUP_BINARY_NAME)
-	install -m 755 $(TARGET_DIR)/$(RESTORE_BINARY_NAME)_$(OS)_$(ARCH) $(DESTDIR)$(BINDIR)/$(RESTORE_BINARY_NAME)
+	install -m 755 $(TARGET_DIR)/$(BINARY_NAME)_$(OS)_$(ARCH) $(DESTDIR)$(BINDIR)/$(BINARY_NAME)
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/$(BACKUP_BINARY_NAME)
-	rm -f $(DESTDIR)$(BINDIR)/$(RESTORE_BINARY_NAME)
+	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_NAME)
 
 .PHONY: packages
 packages: buildx
@@ -131,9 +123,8 @@ packages: buildx
 		HOMEPAGE=$(HOMEPAGE) \
 		VENDOR=$(VENDOR) \
 		LICENSE=$(LICENSE) \
-		BACKUP_BINARY_NAME=$(BACKUP_BINARY_NAME) \
-		RESTORE_BINARY_NAME=$(RESTORE_BINARY_NAME) \
-		envsubst '$$OS $$ARCH $$NAME $$VERSION $$WORKSPACE $$MAINTAINER $$DESCRIPTION $$HOMEPAGE $$VENDOR $$LICENSE $$BACKUP_BINARY_NAME $$RESTORE_BINARY_NAME' \
+		BINARY_NAME=$(BINARY_NAME) \
+		envsubst '$$OS $$ARCH $$NAME $$VERSION $$WORKSPACE $$MAINTAINER $$DESCRIPTION $$HOMEPAGE $$VENDOR $$LICENSE $$BINARY_NAME $$RESTORE_BINARY_NAME' \
 		< $(PACKAGE_DIR)/nfpm.tmpl.yaml > $(PACKAGE_DIR)/nfpm-$$OS-$$ARCH.yaml; \
 		for packager in $(PACKAGERS); do \
 			$(NFPM) package \

@@ -3,7 +3,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/aerospike-backup-cli)](https://pkg.go.dev/github.com/aerospike/aerospike-backup-cli)
 [![codecov](https://codecov.io/gh/aerospike/aerospike-backup-cli/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/aerospike-backup-cli)
 
-The repository includes the [abs-backup-cli](cmd/backup) and [abs-restore-cli](cmd/restore) CLI tools,
+The repository includes the [backup](cmd/absctl/cmd/backup/readme.md) and [restore](cmd/absctl/cmd/restore/readme.md) CLI tools,
 built using [backup-go](https://github.com/aerospike/backup-go) library.
 Refer to their respective README files for usage instructions.
 Binaries for various platforms are released alongside the library and can be found under
@@ -36,13 +36,13 @@ Binaries for various platforms are released alongside the library and can be fou
 ### Basic Backup
 ```bash
 # Simple namespace backup
-abs-backup-cli -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+absctl backup -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 ```
 
 ### Basic Restore
 ```bash
 # Restore from backup directory
-abs-restore-cli -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 ```
 
 ## Installation
@@ -52,15 +52,13 @@ Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/
 
 ```bash
 # Linux x64
-wget https://github.com/aerospike/aerospike-backup-cli/releases/download/<version>/abs-restore-cli-<version>-<arch>.tar.gz
-wget https://github.com/aerospike/aerospike-backup-cli/releases/download/<version>/abs-backup-cli-<version>-<arch>.tar.gz
+wget https://github.com/aerospike/aerospike-backup-cli/releases/download/<version>/absctl-<version>-<arch>.tar.gz
 
 # Extract
-tar -xzvf abs-restore-cli-<version>-<arch>.tar.gz
-tar -xzvf abs-backup-cli-<version>-<arch>.tar.gz
+tar -xzvf absctl-<version>-<arch>.tar.gz
 
 # Make executable
-chmod +x abs-backup-cli abs-restore-cli
+chmod +x absctl
 ```
 
 ### Build from Source
@@ -91,8 +89,7 @@ A single docker image, including both tools, will be created.
 Usage example:
 
 ```bash
-docker run --rm aerospike-backup-tools:<tag> abs-restore-cli --help
-docker run --rm aerospike-backup-tools:<tag> abs-backup-cli --help
+docker run --rm aerospike-backup-tools:<tag> absctl --help
 ```
 
 ### Linux Packages
@@ -104,7 +101,7 @@ The generated packages and their `sha256` checksum files will be located in the 
 
 ## Configuration Reference
 
-Please look at [abs-backup-cli](cmd/backup/readme.md) and [abs-restore-cli](cmd/restore/readme.md) readme files for details.
+Please look at [backup](cmd/absctl/cmd/backup/readme.md) and [restore](cmd/absctl/cmd/restore/readme.md) readme files for details.
 
 ## License
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package restore
 
 import (
 	"fmt"
@@ -30,8 +30,10 @@ import (
 )
 
 const (
-	VersionDev     = "dev"
-	welcomeMessage = "Welcome to the Aerospike restore CLI tool!"
+	VersionDev          = "dev"
+	welcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
+	welcomeMessageShort = "Aerospike restore CLI tool"
+	useCommand          = "restore"
 )
 
 // Cmd represents the base command when called without any subcommands
@@ -42,6 +44,7 @@ type Cmd struct {
 	buildTime  string
 
 	// Root flags
+	flagsRoot         *flags.Root
 	flagsApp          *flags.App
 	flagsAerospike    *asFlags.AerospikeFlags
 	flagsClientPolicy *flags.ClientPolicy
@@ -59,12 +62,12 @@ type Cmd struct {
 	Logger *slog.Logger
 }
 
-func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
+func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	c := &Cmd{
-		appVersion: appVersion,
-		commitHash: commitHash,
-		buildTime:  buildTime,
-
+		appVersion:        appVersion,
+		commitHash:        commitHash,
+		buildTime:         buildTime,
+		flagsRoot:         flagsRoot,
 		flagsApp:          flags.NewApp(),
 		flagsAerospike:    asFlags.NewDefaultAerospikeFlags(),
 		flagsClientPolicy: flags.NewClientPolicy(),
@@ -81,16 +84,16 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 
 	c.flagsCommon = flags.NewCommon(&c.flagsRestore.Common, flags.OperationRestore)
 
-	rootCmd := &cobra.Command{
-		Use:   "abs-restore-cli",
-		Short: "Aerospike restore CLI tool",
+	restoreCmd := &cobra.Command{
+		Use:   useCommand,
+		Short: welcomeMessageShort,
 		Long:  welcomeMessage,
 		RunE:  c.run,
 	}
 
 	// Disable sorting
-	rootCmd.PersistentFlags().SortFlags = false
-	rootCmd.SilenceUsage = true
+	restoreCmd.PersistentFlags().SortFlags = false
+	restoreCmd.SilenceUsage = true
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
@@ -105,26 +108,26 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	azureFlagSet := c.flagsAzure.NewFlagSet()
 
 	// App flags.
-	rootCmd.PersistentFlags().AddFlagSet(appFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(appFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
 
-	rootCmd.Flags().AddFlagSet(commonFlagSet)
-	rootCmd.Flags().AddFlagSet(restoreFlagSet)
+	restoreCmd.Flags().AddFlagSet(commonFlagSet)
+	restoreCmd.Flags().AddFlagSet(restoreFlagSet)
 
-	rootCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(azureFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(awsFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
+	restoreCmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	// Deprecated fields.
-	if err := rootCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
+	if err := restoreCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
 
-	rootCmd.Flags().Lookup("nice").Hidden = false
+	restoreCmd.Flags().Lookup("nice").Hidden = false
 
 	// Beautify help and usage.
 	helpFunc := newHelpFunction(
@@ -141,25 +144,19 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 		azureFlagSet,
 	)
 
-	rootCmd.SetUsageFunc(func(_ *cobra.Command) error {
+	restoreCmd.SetUsageFunc(func(_ *cobra.Command) error {
 		helpFunc()
 		return nil
 	})
-	rootCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+	restoreCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		helpFunc()
 	})
 
-	// Set cobra output to logger.
-	logWriter := logging.NewCobraLogger(c.Logger)
-	rootCmd.SetOut(logWriter)
-	rootCmd.SetErr(logWriter)
-
-	return rootCmd, c
+	return restoreCmd
 }
 
 func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
-	// Show version.
-	if c.flagsApp.Version {
+	if c.flagsRoot.Version {
 		c.printVersion()
 
 		return nil
@@ -266,7 +263,7 @@ func newHelpFunction(
 		// fmt.Println("are also incompatible in automatic mode (when mode is not set).")
 
 		fmt.Println("\nUsage:")
-		fmt.Println("  abs-restore-cli [flags]")
+		fmt.Println("  absctl restore [flags]")
 
 		// Print section: App Flags
 		fmt.Println("\nGeneral Flags:")
@@ -294,10 +291,10 @@ func newHelpFunction(
 		fmt.Println("\nSecret Agent Flags:\n" +
 			"Options pertaining to the Aerospike Secret Agent.\n" +
 			"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
-			"Both abs-backup-cli and abs-restore-cli support getting all the cloud configuration parameters\n" +
+			"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 			"from the Aerospike Secret Agent.\n" +
 			"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-			"Example: abs-backup-cli --azure-account-name secret:resource1:azaccount")
+			"Example: absctl restore --azure-account-name secret:resource1:azaccount")
 		secretAgentFlagSet.PrintDefaults()
 
 		// Print section: AWS Flags

@@ -124,7 +124,7 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init app.
-	asbParams, err := config.NewBackupServiceConfig(
+	serviceConfig, err := config.NewBackupServiceConfig(
 		c.flagsApp.GetApp(),
 		c.flagsAerospike.NewAerospikeConfig(),
 		c.flagsClientPolicy.GetClientPolicy(),
@@ -142,7 +142,7 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to initialize app: %w", err)
 	}
 
-	asb, err := backup.NewService(cmd.Context(), asbParams, logger)
+	asb, err := backup.NewService(cmd.Context(), serviceConfig, logger)
 	if err != nil {
 		logger.Error("backup initialization failed", slog.Any("error", err))
 
@@ -163,7 +163,7 @@ func newHelpFunction(backupXDRFlagSet *pflag.FlagSet) func() {
 		fmt.Println(welcomeMessage)
 		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
 		fmt.Println("\nUsage:")
-		fmt.Println("  abs-backup-cli xdr [flags]")
+		fmt.Println("  backup xdr [flags]")
 		// Print section: XDR Flags
 		fmt.Println("\nXDR Backup Flags:")
 		fmt.Println("This sections replace Backup Flags section in main documentation." +
