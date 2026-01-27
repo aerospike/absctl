@@ -92,6 +92,7 @@ target absctl {
   args = {
     GO_VERSION = "${GO_VERSION}"
     REGISTRY   = "${REGISTRY}"
+    VERSION    = "${VERSION}"
   }
 
   secret     = ["id=GOPROXY,env=GOPROXY"]
