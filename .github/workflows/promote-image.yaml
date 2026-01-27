@@ -68,8 +68,8 @@ jobs:
           echo "BUNDLE_NAME=$BUNDLE_NAME" >> $GITHUB_ENV
           echo "Setting BUNDLE_VERSION=$LATEST_TAG"
           echo "BUNDLE_VERSION=$LATEST_TAG" >> $GITHUB_ENV
-          echo "Setting IMAGE_TAG=${LATEST_TAG#v}"
-          echo "IMAGE_TAG=${LATEST_TAG#v}" >> $GITHUB_ENV
+          echo "Setting IMAGE_TAG=$LATEST_TAG"
+          echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
       - name: Check Bundle was successfully created in JFrog
         id: check-bundle
