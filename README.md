@@ -1,4 +1,4 @@
-# Aerospike Backup CLI
+# Aerospike Backup Service Control
 [![Tests](https://github.com/aerospike/aerospike-backup-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/aerospike/aerospike-backup-cli/actions/workflows/tests.yml/badge.svg)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/aerospike-backup-cli)](https://pkg.go.dev/github.com/aerospike/aerospike-backup-cli)
 [![codecov](https://codecov.io/gh/aerospike/aerospike-backup-cli/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/aerospike-backup-cli)
@@ -7,7 +7,7 @@ The repository includes the [backup](cmd/absctl/cmd/backup/readme.md) and [resto
 built using [backup-go](https://github.com/aerospike/backup-go) library.
 Refer to their respective README files for usage instructions.
 Binaries for various platforms are released alongside the library and can be found under
-[releases](https://github.com/aerospike/aerospike-backup-cli/releases).
+[releases](https://github.com/aerospike/absctl/releases).
 
 ## Core Features
 
@@ -48,7 +48,7 @@ absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 ## Installation
 
 ### From Releases
-Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/aerospike-backup-cli/releases):
+Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/absctl/releases):
 
 ```bash
 # Linux x64
@@ -110,5 +110,5 @@ Apache License, Version 2.0. See [LICENSE](LICENSE) file for details.
 ## Support
 
 - **Documentation**: [Aerospike Documentation](https://aerospike.com/docs/tools/backup/)
-- **Issues**: [GitHub Issues](https://github.com/aerospike/aerospike-backup-cli/issues)
+- **Issues**: [GitHub Issues](https://github.com/aerospike/absctl/issues)
 - **Community**: [Aerospike Community Forum](https://discuss.aerospike.com/)
