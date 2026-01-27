@@ -1,7 +1,7 @@
 # Aerospike Backup Service Control
-[![Tests](https://github.com/aerospike/aerospike-backup-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/aerospike/aerospike-backup-cli/actions/workflows/tests.yml/badge.svg)
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/aerospike-backup-cli)](https://pkg.go.dev/github.com/aerospike/aerospike-backup-cli)
-[![codecov](https://codecov.io/gh/aerospike/aerospike-backup-cli/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/aerospike-backup-cli)
+[![Tests](https://github.com/aerospike/absctl/actions/workflows/tests.yml/badge.svg)](https://github.com/aerospike/absctl/actions/workflows/tests.yml/badge.svg)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/absctl)](https://pkg.go.dev/github.com/aerospike/absctl)
+[![codecov](https://codecov.io/gh/aerospike/absctl/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/absctl)
 
 The repository includes the [backup](cmd/absctl/cmd/backup/readme.md) and [restore](cmd/absctl/cmd/restore/readme.md) CLI tools,
 built using [backup-go](https://github.com/aerospike/backup-go) library.
@@ -52,7 +52,7 @@ Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/
 
 ```bash
 # Linux x64
-wget https://github.com/aerospike/aerospike-backup-cli/releases/download/<version>/absctl-<version>-<arch>.tar.gz
+wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.tar.gz
 
 # Extract
 tar -xzvf absctl-<version>-<arch>.tar.gz

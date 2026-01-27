@@ -17,7 +17,7 @@ package dto
 import (
 	"strings"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 )
 
 // Backup is used to map yaml config.

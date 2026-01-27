@@ -1,6 +1,6 @@
 group default {
   targets = [
-    "aerospike-backup-cli"
+    "absctl"
   ]
 }
 
@@ -33,7 +33,7 @@ variable ISO8601 {
 }
 
 variable REPO {
-  default = "aerospike/aerospike-backup-cli"
+  default = "aerospike/absctl"
 }
 
 variable PLATFORMS {
@@ -74,16 +74,16 @@ function tags {
   ] : ["${REPO}/${service}:${TAG}"]
 }
 
-target aerospike-backup-cli {
+target absctl {
   labels = {
     "org.opencontainers.image.title"         = "Aerospike Backup CLI"
-    "org.opencontainers.image.description"   = "Command-line tools for backing up and restoring Aerospike data"
-    "org.opencontainers.image.documentation" = "https://github.com/aerospike/aerospike-backup-cli?tab=readme-ov-file#aerospike-backup-cli"
+    "org.opencontainers.image.description"   = "Command-line tool for backing up and restoring Aerospike data"
+    "org.opencontainers.image.documentation" = "https://github.com/aerospike/absctl?tab=readme-ov-file#absctl"
     "org.opencontainers.image.base.name"     = "docker.io/alpine:3.23"
-    "org.opencontainers.image.source"        = "https://github.com/aerospike/aerospike-backup-cli/tree/${GIT_BRANCH}"
+    "org.opencontainers.image.source"        = "https://github.com/aerospike/absctl/tree/${GIT_BRANCH}"
     "org.opencontainers.image.vendor"        = "Aerospike"
     "org.opencontainers.image.version"       = "${VERSION}"
-    "org.opencontainers.image.url"           = "https://github.com/aerospike/aerospike-backup-cli"
+    "org.opencontainers.image.url"           = "https://github.com/aerospike/absctl"
     "org.opencontainers.image.licenses"      = "Apache-2.0"
     "org.opencontainers.image.revision"      = "${GIT_COMMIT_SHA}"
     "org.opencontainers.image.created"       = "${ISO8601}"
@@ -101,6 +101,6 @@ target aerospike-backup-cli {
   cache-to   = norm("${CACHE_TO}")
   cache-from = norm("${CACHE_FROM}")
 
-  tags   = tags("aerospike-backup-cli")
+  tags   = tags("absctl")
   output = norm("${OUTPUT}")
 }

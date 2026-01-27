@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
-	"github.com/aerospike/aerospike-backup-cli/internal/storage"
+	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"

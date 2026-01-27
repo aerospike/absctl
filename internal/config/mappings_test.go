@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/logging"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/stretchr/testify/assert"

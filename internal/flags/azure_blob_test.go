@@ -17,7 +17,7 @@ package flags
 import (
 	"testing"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 

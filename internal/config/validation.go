@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 )
 

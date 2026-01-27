@@ -15,7 +15,7 @@
 package flags
 
 import (
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/spf13/pflag"
 )
 

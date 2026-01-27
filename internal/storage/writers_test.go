@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -30,19 +30,19 @@ jobs:
         with:
           cond: ${{ inputs.submodule != '' }}
           if_true: aerospike-tools # In this case we are expecting to checkout the tools package.
-          if_false: aerospike-backup-cli
-      - name: Get aerospike-backup-cli working directory
+          if_false: absctl
+      - name: Get absctl working directory
         uses: step-security/action-cond@45aa5a709bd075f11c74285d8b0ca4d527e5fbcf # v1.2.4
         id: working-dir
         with:
           cond: ${{ inputs.submodule != '' }}
           if_true: aerospike-tools/${{ inputs.submodule }} # In this case we are expecting to checkout the tools package.
-          if_false: aerospike-backup-cli
+          if_false: absctl
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           path: ${{ steps.checkout-dir.outputs.value }}
           fetch-depth: 0
-      - name: Checkout aerospike-backup-cli submodule
+      - name: Checkout absctl submodule
         run: |
           # Workaround to replace ssh with http in .gitmodules and add auth
           # If the .gitmodules was http then we would just need to add the "token:"

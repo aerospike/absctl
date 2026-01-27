@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	bModels "github.com/aerospike/backup-go/models"

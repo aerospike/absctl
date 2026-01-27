@@ -19,10 +19,10 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/aerospike/aerospike-backup-cli/cmd/absctl/cmd/backup"
-	"github.com/aerospike/aerospike-backup-cli/cmd/absctl/cmd/restore"
-	"github.com/aerospike/aerospike-backup-cli/internal/flags"
-	"github.com/aerospike/aerospike-backup-cli/internal/logging"
+	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
+	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
+	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

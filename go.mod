@@ -1,4 +1,4 @@
-module github.com/aerospike/aerospike-backup-cli
+module github.com/aerospike/absctl
 
 go 1.25
 

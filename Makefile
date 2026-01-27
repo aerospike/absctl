@@ -21,7 +21,7 @@ NPROC := $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)
 ARCHS ?= linux/amd64 linux/arm64
 PACKAGERS ?= deb rpm
 IMAGE_TAG ?= test
-IMAGE_REPO ?= aerospike/aerospike-backup-cli
+IMAGE_REPO ?= aerospike/absctl
 IMAGE_CACHE_FROM ?=
 IMAGE_CACHE_TO ?=
 IMAGE_OUTPUT ?= type=image,push=true

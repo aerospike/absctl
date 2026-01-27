@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/aerospike/tools-common-go/flags"
 )
