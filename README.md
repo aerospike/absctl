@@ -31,18 +31,16 @@ Binaries for various platforms are released alongside the library and can be fou
 - **Secret management**: Integration with Aerospike Secret Agent
 - **Rate limiting**: Bandwidth and RPS controls
 
-## Quick Start
-
-### Basic Backup
+## Build from Source
 ```bash
-# Simple namespace backup
-absctl backup -h 127.0.0.1:3000 -n test -d /backup/test-namespace
-```
+# Build binaries
+make build
 
-### Basic Restore
-```bash
-# Restore from backup directory
-absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+# Install to /usr/bin (Linux only)
+make install
+
+# Uninstall (Linux only)
+make uninstall
 ```
 
 ## Installation
@@ -59,18 +57,6 @@ tar -xzvf absctl-<version>-<arch>.tar.gz
 
 # Make executable
 chmod +x absctl
-```
-
-### Build from Source
-```bash
-# Build binaries
-make build
-
-# Install to /usr/bin
-make install
-
-# Uninstall
-make uninstall
 ```
 
 ### Docker
@@ -98,6 +84,21 @@ To generate `.rpm` and `.deb` packages for supported Linux architectures (`linux
 make packages
 ```
 The generated packages and their `sha256` checksum files will be located in the `/target` directory.
+
+## Quick Start
+
+### Basic Backup
+```bash
+# Simple namespace backup
+absctl backup -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+```
+
+### Basic Restore
+```bash
+# Restore from backup directory
+absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+```
+
 
 ## Configuration Reference
 
