@@ -15,7 +15,7 @@
 package flags
 
 import (
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/spf13/pflag"
 )
 
@@ -31,9 +31,6 @@ func (f *App) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.BoolP("help", "Z", models.DefaultAppHelp, "Display help information.")
-	flagSet.BoolVarP(&f.Version, "version", "V",
-		models.DefaultAppVersion,
-		"Display version information.")
 	flagSet.BoolVarP(&f.Verbose, "verbose", "v",
 		models.DefaultAppVerbose,
 		"Enable more detailed logging.")

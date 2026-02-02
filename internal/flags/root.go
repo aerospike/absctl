@@ -12,18 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package models
+package flags
 
-// App contains the global application flags.
-type App struct {
-	Help bool
+import (
+	"github.com/aerospike/absctl/internal/models"
+	"github.com/spf13/pflag"
+)
 
-	Verbose bool
-	// Set log level for verbose output.
-	LogLevel string
-	// Format logs as JSON, for parsing by external tools.
-	LogJSON bool
+type Root struct {
+	models.Root
+}
 
-	// ConfigFilePath is the path to the file used for tool configuration.
-	ConfigFilePath string
+func NewRoot() *Root {
+	return &Root{}
+}
+
+func (f *Root) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.BoolP("help", "Z", models.DefaultAppHelp, "Display help information.")
+	flagSet.BoolVarP(&f.Version, "version", "V",
+		models.DefaultAppVersion,
+		"Display version information.")
+
+	return flagSet
+}
+
+func (f *Root) GetRoot() *models.Root {
+	return &f.Root
 }

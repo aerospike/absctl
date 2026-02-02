@@ -22,8 +22,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/io/encoding/asb"
 	"github.com/aerospike/backup-go/io/encoding/asbx"

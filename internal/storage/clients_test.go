@@ -20,8 +20,8 @@ import (
 	"log/slog"
 	"testing"
 
-	appConfig "github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	appConfig "github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/stretchr/testify/assert"

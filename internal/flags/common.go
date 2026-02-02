@@ -15,7 +15,7 @@
 package flags
 
 import (
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/spf13/pflag"
 )
 
@@ -61,10 +61,10 @@ const (
 	descParallelRestore = "The number of restore threads. Accepts values from 1-1024 inclusive.\n" +
 		"If not set, the default value is automatically calculated and appears as the number of CPUs on your machine."
 
-	descInfoTimeoutBackup = "Set the timeout (in ms) for asinfo commands sent from abs-backup-cli to the database.\n" +
+	descInfoTimeoutBackup = "Set the timeout (in ms) for asinfo commands sent from backup tool to the database.\n" +
 		"The info commands are to check version, get indexes, get udfs, count records, and check batch write support."
 
-	descInfoTimeoutRestore = "Set the timeout (in ms) for asinfo commands sent from abs-restore-cli to the database.\n" +
+	descInfoTimeoutRestore = "Set the timeout (in ms) for asinfo commands sent from restore tool to the database.\n" +
 		"The info commands are to check version, get indexes, get udfs, count records, and check batch write support."
 )
 

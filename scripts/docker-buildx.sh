@@ -1,7 +1,7 @@
 #!/bin/bash -e
 WORKSPACE="$(git rev-parse --show-toplevel)"
 REGISTRY="docker.io"
-REPO="aerospike/aerospike-backup-cli"
+REPO="aerospike/absctl"
 TAG_LATEST=false
 TAG=""
 VERSION=""

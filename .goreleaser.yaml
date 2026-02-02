@@ -8,23 +8,9 @@ snapshot:
   version_template: "{{.Branch}}"
 
 builds:
-  - id: "abs-backup-cli"
-    main: cmd/backup/main.go
-    binary: "abs-backup-cli"
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    env:
-      - CGO_ENABLED=0
-    ldflags:
-      - -s -w -X 'main.appVersion={{.Version}}' -X 'main.commitHash={{.Commit}}' -X 'main.buildTime={{.Date}}'
-  - id: "abs-restore-cli"
-    main: cmd/restore/main.go
-    binary: "abs-restore-cli"
+  - id: "absctl"
+    main: cmd/absctl/main.go
+    binary: "absctl"
     goos:
       - linux
       - darwin
@@ -38,7 +24,7 @@ builds:
       - -s -w -X 'main.appVersion={{.Version}}' -X 'main.commitHash={{.Commit}}' -X 'main.buildTime={{.Date}}'
 
 archives:
-  - id: "abs-backup-cli"
+  - id: "absctl"
     formats:  [ 'tar.gz' ]
     name_template: >-
       {{ .Binary }}-{{ .Version }}-
@@ -53,23 +39,7 @@ archives:
     files:
       - LICENSE
     ids:
-      - "abs-backup-cli"
-  - id: "abs-restore-cli"
-    formats:  [ 'tar.gz' ]
-    name_template: >-
-      {{ .Binary }}-{{ .Version }}-
-      {{- title .Os }}-
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        formats: [ 'zip' ]
-    files:
-      - LICENSE
-    ids:
-      - "abs-restore-cli"
+      - "absctl"
 
 release:
   prerelease: true
@@ -78,8 +48,7 @@ release:
   mode: prepend
   header: |
     ## Release {{ .Version }} ({{ .Date }})
-    - abs-backup-cli (CLI tool)
-    - abs-restore-cli (CLI tool)
+    - absctl (CLI tool)
 
 changelog:
   disable: true

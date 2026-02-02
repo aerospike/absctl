@@ -19,7 +19,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
 )

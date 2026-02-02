@@ -20,15 +20,15 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/logging"
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
-	"github.com/aerospike/aerospike-backup-cli/internal/storage"
+	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/backup-go"
 	bModels "github.com/aerospike/backup-go/models"
 )
 
-const idRestore = "abs-restore-cli"
+const idRestore = "absctl-restore"
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
 type Service struct {

@@ -22,7 +22,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aerospike/aerospike-backup-cli/cmd/backup/cmd"
+	"github.com/aerospike/absctl/cmd/absctl/cmd"
 )
 
 var (

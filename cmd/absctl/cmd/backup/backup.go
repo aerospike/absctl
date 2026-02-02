@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package backup
 
 import (
 	"fmt"
@@ -20,18 +20,19 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config"
-	"github.com/aerospike/aerospike-backup-cli/internal/flags"
-	"github.com/aerospike/aerospike-backup-cli/internal/logging"
-	"github.com/aerospike/aerospike-backup-cli/internal/restore"
+	"github.com/aerospike/absctl/internal/backup"
+	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/logging"
 	asFlags "github.com/aerospike/tools-common-go/flags"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 const (
-	VersionDev     = "dev"
-	welcomeMessage = "Welcome to the Aerospike restore CLI tool!"
+	welcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
+	welcomeMessageShort = "Aerospike backup CLI tool"
+	useCommand          = "backup"
 )
 
 // Cmd represents the base command when called without any subcommands
@@ -42,6 +43,7 @@ type Cmd struct {
 	buildTime  string
 
 	// Root flags
+	flagsRoot         *flags.Root
 	flagsApp          *flags.App
 	flagsAerospike    *asFlags.AerospikeFlags
 	flagsClientPolicy *flags.ClientPolicy
@@ -51,80 +53,97 @@ type Cmd struct {
 	flagsAws          *flags.AwsS3
 	flagsGcp          *flags.GcpStorage
 	flagsAzure        *flags.AzureBlob
+	flagsLocal        *flags.Local
 
-	// Restore flags.
-	flagsRestore *flags.Restore
-	flagsCommon  *flags.Common
+	// backup flags.
+	flagsBackup *flags.Backup
+	flagsCommon *flags.Common
 
 	Logger *slog.Logger
 }
 
-func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
+func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	c := &Cmd{
-		appVersion: appVersion,
-		commitHash: commitHash,
-		buildTime:  buildTime,
-
+		appVersion:        appVersion,
+		commitHash:        commitHash,
+		buildTime:         buildTime,
+		flagsRoot:         flagsRoot,
 		flagsApp:          flags.NewApp(),
 		flagsAerospike:    asFlags.NewDefaultAerospikeFlags(),
 		flagsClientPolicy: flags.NewClientPolicy(),
-		flagsRestore:      flags.NewRestore(),
-		flagsCompression:  flags.NewCompression(flags.OperationRestore),
-		flagsEncryption:   flags.NewEncryption(flags.OperationRestore),
+		flagsBackup:       flags.NewBackup(),
+		flagsCompression:  flags.NewCompression(flags.OperationBackup),
+		flagsEncryption:   flags.NewEncryption(flags.OperationBackup),
 		flagsSecretAgent:  flags.NewSecretAgent(),
-		flagsAws:          flags.NewAwsS3(flags.OperationRestore),
-		flagsGcp:          flags.NewGcpStorage(flags.OperationRestore),
-		flagsAzure:        flags.NewAzureBlob(flags.OperationRestore),
+		flagsAws:          flags.NewAwsS3(flags.OperationBackup),
+		flagsGcp:          flags.NewGcpStorage(flags.OperationBackup),
+		flagsAzure:        flags.NewAzureBlob(flags.OperationBackup),
+		flagsLocal:        flags.NewLocal(flags.OperationBackup),
 		// First init default logger.
 		Logger: logging.NewDefaultLogger(),
 	}
+	c.flagsCommon = flags.NewCommon(&c.flagsBackup.Common, flags.OperationBackup)
 
-	c.flagsCommon = flags.NewCommon(&c.flagsRestore.Common, flags.OperationRestore)
-
-	rootCmd := &cobra.Command{
-		Use:   "abs-restore-cli",
-		Short: "Aerospike restore CLI tool",
+	backupCmd := &cobra.Command{
+		Use:   useCommand,
+		Short: welcomeMessageShort,
 		Long:  welcomeMessage,
 		RunE:  c.run,
 	}
 
 	// Disable sorting
-	rootCmd.PersistentFlags().SortFlags = false
-	rootCmd.SilenceUsage = true
+	backupCmd.PersistentFlags().SortFlags = false
+	backupCmd.SilenceUsage = true
+
+	// Add sub command
+	// xdrCmd := xdr.NewCmd(
+	// 	c.flagsApp,
+	// 	c.flagsAerospike,
+	// 	c.flagsClientPolicy,
+	// 	c.flagsCompression,
+	// 	c.flagsEncryption,
+	// 	c.flagsSecretAgent,
+	// 	c.flagsAws,
+	// 	c.flagsGcp,
+	// 	c.flagsAzure,
+	// )
+	// backupCmd.AddCommand(xdrCmd)
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
 	clientPolicyFlagSet := c.flagsClientPolicy.NewFlagSet()
 	commonFlagSet := c.flagsCommon.NewFlagSet()
-	restoreFlagSet := c.flagsRestore.NewFlagSet()
+	backupFlagSet := c.flagsBackup.NewFlagSet()
 	compressionFlagSet := c.flagsCompression.NewFlagSet()
 	encryptionFlagSet := c.flagsEncryption.NewFlagSet()
 	secretAgentFlagSet := c.flagsSecretAgent.NewFlagSet()
 	awsFlagSet := c.flagsAws.NewFlagSet()
 	gcpFlagSet := c.flagsGcp.NewFlagSet()
 	azureFlagSet := c.flagsAzure.NewFlagSet()
+	localFlagSet := c.flagsLocal.NewFlagSet()
 
 	// App flags.
-	rootCmd.PersistentFlags().AddFlagSet(appFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(appFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
 
-	rootCmd.Flags().AddFlagSet(commonFlagSet)
-	rootCmd.Flags().AddFlagSet(restoreFlagSet)
+	backupCmd.Flags().AddFlagSet(commonFlagSet)
+	backupCmd.Flags().AddFlagSet(backupFlagSet)
 
-	rootCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	rootCmd.PersistentFlags().AddFlagSet(azureFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(awsFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(azureFlagSet)
+	backupCmd.PersistentFlags().AddFlagSet(localFlagSet)
 
 	// Deprecated fields.
-	if err := rootCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
+	if err := backupCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
 
-	rootCmd.Flags().Lookup("nice").Hidden = false
+	backupCmd.Flags().Lookup("nice").Hidden = false
 
 	// Beautify help and usage.
 	helpFunc := newHelpFunction(
@@ -132,34 +151,29 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 		aerospikeFlagSet,
 		clientPolicyFlagSet,
 		commonFlagSet,
-		restoreFlagSet,
+		backupFlagSet,
 		compressionFlagSet,
 		encryptionFlagSet,
 		secretAgentFlagSet,
 		awsFlagSet,
 		gcpFlagSet,
 		azureFlagSet,
+		localFlagSet,
 	)
 
-	rootCmd.SetUsageFunc(func(_ *cobra.Command) error {
+	backupCmd.SetUsageFunc(func(_ *cobra.Command) error {
 		helpFunc()
 		return nil
 	})
-	rootCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+	backupCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		helpFunc()
 	})
 
-	// Set cobra output to logger.
-	logWriter := logging.NewCobraLogger(c.Logger)
-	rootCmd.SetOut(logWriter)
-	rootCmd.SetErr(logWriter)
-
-	return rootCmd, c
+	return backupCmd
 }
 
 func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
-	// Show version.
-	if c.flagsApp.Version {
+	if c.flagsRoot.Version {
 		c.printVersion()
 
 		return nil
@@ -188,29 +202,24 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	// After initialization replace logger.
 	c.Logger = logger
 
-	logMsg := "restore"
-	if serviceConfig.Restore.ValidateOnly {
-		logMsg = "validation"
-	}
-
-	asr, err := restore.NewService(cmd.Context(), serviceConfig, logger)
+	asb, err := backup.NewService(cmd.Context(), serviceConfig, logger)
 	if err != nil {
-		return fmt.Errorf("%s initialization failed: %w", logMsg, err)
+		return fmt.Errorf("backup initialization failed: %w", err)
 	}
 
-	if err = asr.Run(cmd.Context()); err != nil {
-		return fmt.Errorf("%s failed: %w", logMsg, err)
+	if err = asb.Run(cmd.Context()); err != nil {
+		return fmt.Errorf("backup failed: %w", err)
 	}
 
 	return nil
 }
 
-// newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig() (*config.RestoreServiceConfig, error) {
+// newServiceConfig returns a new *config.BackupServiceConfig based on the flags or config file.
+func (c *Cmd) newServiceConfig() (*config.BackupServiceConfig, error) {
 	app := c.flagsApp.GetApp()
 	// If we have a config file, load serviceConfig from it.
 	if app != nil && app.ConfigFilePath != "" {
-		serviceConfig, err := config.DecodeRestoreServiceConfig(app.ConfigFilePath)
+		serviceConfig, err := config.DecodeBackupServiceConfig(app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}
@@ -218,17 +227,19 @@ func (c *Cmd) newServiceConfig() (*config.RestoreServiceConfig, error) {
 		return serviceConfig, nil
 	}
 
-	serviceConfig, err := config.NewRestoreServiceConfig(
+	serviceConfig, err := config.NewBackupServiceConfig(
 		c.flagsApp.GetApp(),
 		c.flagsAerospike.NewAerospikeConfig(),
 		c.flagsClientPolicy.GetClientPolicy(),
-		c.flagsRestore.GetRestore(),
+		c.flagsBackup.GetBackup(),
+		nil,
 		c.flagsCompression.GetCompression(),
 		c.flagsEncryption.GetEncryption(),
 		c.flagsSecretAgent.GetSecretAgent(),
 		c.flagsAws.GetAwsS3(),
 		c.flagsGcp.GetGcpStorage(),
 		c.flagsAzure.GetAzureBlob(),
+		c.flagsLocal.GetLocal(),
 	)
 	if err != nil {
 		return nil, err
@@ -246,27 +257,20 @@ func newHelpFunction(
 	aerospikeFlagSet,
 	clientPolicyFlagSet,
 	commonFlagSet,
-	restoreFlagSet,
+	backupFlagSet,
 	compressionFlagSet,
 	encryptionFlagSet,
 	secretAgentFlagSet,
 	awsFlagSet,
 	gcpFlagSet,
-	azureFlagSet *pflag.FlagSet,
+	azureFlagSet,
+	localFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
 		fmt.Println(welcomeMessage)
 		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
-
-		// Commented until XDR will be released.
-		// fmt.Println("The restore tool automatically identifies and " +
-		// 	"restores ASB and ASBX backup files found in the specified folder.")
-		// fmt.Println("You can set restore mode manually with --mode flag. " +
-		// 	"Flags that are incompatible with restore mode,")
-		// fmt.Println("are also incompatible in automatic mode (when mode is not set).")
-
 		fmt.Println("\nUsage:")
-		fmt.Println("  abs-restore-cli [flags]")
+		fmt.Println("  absctl backup [flags]")
 
 		// Print section: App Flags
 		fmt.Println("\nGeneral Flags:")
@@ -277,10 +281,10 @@ func newHelpFunction(
 		aerospikeFlagSet.PrintDefaults()
 		clientPolicyFlagSet.PrintDefaults()
 
-		// Print section: Restore Flags
-		fmt.Println("\nRestore Flags:")
+		// Print section: Backup Flags
+		fmt.Println("\nBackup Flags:")
 		commonFlagSet.PrintDefaults()
-		restoreFlagSet.PrintDefaults()
+		backupFlagSet.PrintDefaults()
 
 		// Print section: Compression Flags
 		fmt.Println("\nCompression Flags:")
@@ -294,11 +298,15 @@ func newHelpFunction(
 		fmt.Println("\nSecret Agent Flags:\n" +
 			"Options pertaining to the Aerospike Secret Agent.\n" +
 			"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
-			"Both abs-backup-cli and abs-restore-cli support getting all the cloud configuration parameters\n" +
+			"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 			"from the Aerospike Secret Agent.\n" +
 			"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-			"Example: abs-backup-cli --azure-account-name secret:resource1:azaccount")
+			"Example: absctl backup --azure-account-name secret:resource1:azaccount")
 		secretAgentFlagSet.PrintDefaults()
+
+		// Print section: Local Flags
+		fmt.Println("\nLocal Storage Flags:")
+		localFlagSet.PrintDefaults()
 
 		// Print section: AWS Flags
 		fmt.Println("\nAWS Storage Flags:\n" +

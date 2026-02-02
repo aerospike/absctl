@@ -14,16 +14,8 @@
 
 package models
 
-// App contains the global application flags.
-type App struct {
-	Help bool
-
-	Verbose bool
-	// Set log level for verbose output.
-	LogLevel string
-	// Format logs as JSON, for parsing by external tools.
-	LogJSON bool
-
-	// ConfigFilePath is the path to the file used for tool configuration.
-	ConfigFilePath string
+// Root contains the global application flags.
+type Root struct {
+	Help    bool
+	Version bool
 }

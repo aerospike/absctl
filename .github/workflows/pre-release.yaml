@@ -518,7 +518,7 @@ jobs:
           fi
           
           echo "Setting Metadata variables"
-          IMAGE_VERSION="${GIT_TAG#v}"
+          IMAGE_VERSION="$GIT_TAG"
           RAW_VERSION=$GIT_TAG
           
           echo "Determining appropriate Go version based on go.mod."

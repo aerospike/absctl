@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/config/dto"
+	"github.com/aerospike/absctl/internal/config/dto"
 	"github.com/stretchr/testify/require"
 )
 

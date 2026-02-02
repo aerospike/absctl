@@ -17,7 +17,7 @@ package config
 import (
 	"testing"
 
-	"github.com/aerospike/aerospike-backup-cli/internal/models"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/stretchr/testify/assert"
 )
