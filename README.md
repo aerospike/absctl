@@ -42,6 +42,12 @@ make install
 # Uninstall (Linux only)
 make uninstall
 ```
+### Linux Packages
+To generate `.rpm` and `.deb` packages for supported Linux architectures (`linux/amd64`, `linux/arm64`):
+```bash
+make packages
+```
+The generated packages and their `sha256` checksum files will be located in the `/target` directory.
 
 ## Installation
 
@@ -59,31 +65,35 @@ tar -xzvf absctl-<version>-<arch>.tar.gz
 chmod +x absctl
 ```
 
-### Docker
-Build and push a multi-platform Docker image:
+Download linux pakages from [GitHub Releases](https://github.com/aerospike/absctl/releases):
+
+deb:
 ```bash
-DOCKER_USERNAME="<jfrog-username>" DOCKER_PASSWORD="<jfrog-password>" TAG="<tag>" make docker-buildx 
-```
+# Linux x64
+wget https://github.com/aerospike/absctl/releases/download/<version>/absctl_<version>_<arch>.deb
 
-Build a Docker image for local use:
+# Install
+sudo dpkg -i absctl_<version>_<arch>.deb
+```
+rpm:
 ```bash
-TAG="<tag>" make docker-build
+# Linux x64
+wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.rpm
+
+# Install
+sudo rpm -i absctl-<version>-<arch>.rpm
 ```
-
-A single docker image, including both tools, will be created.
-
-Usage example:
-
+docker:
 ```bash
-docker run --rm aerospike-backup-tools:<tag> absctl --help
-```
+# Pull
+docker pull aerospike/absctl:<version>
 
-### Linux Packages
-To generate `.rpm` and `.deb` packages for supported Linux architectures (`linux/amd64`, `linux/arm64`):
-```bash
-make packages
+# Run backup
+docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl backup -h <aerospike-address>  -n <namespace> -d <container-path> 
+
+# Run restore
+docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl restore -h <aerospike-address>  -n <namespace> -d <container-path> 
 ```
-The generated packages and their `sha256` checksum files will be located in the `/target` directory.
 
 ## Quick Start
 
