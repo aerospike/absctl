@@ -58,14 +58,14 @@ func TestClients_newAerospikeClient(t *testing.T) {
 		IdleTimeout:  1000,
 		LoginTimeout: 1000,
 	}
-	_, err := NewAerospikeClient(cfg, cp, "1", 10, slog.Default(), nil)
+	_, err := NewAerospikeClient(t.Context(), cfg, cp, "1", 10, slog.Default(), nil)
 	require.NoError(t, err)
 
 	cfg = &client.AerospikeConfig{
 		User:     testASLoginPassword,
 		Password: testASLoginPassword,
 	}
-	_, err = NewAerospikeClient(cfg, cp, "", 10, slog.Default(), nil)
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, "", 10, slog.Default(), nil)
 	require.ErrorContains(t, err, "at least one seed must be provided")
 
 	cfg = &client.AerospikeConfig{
@@ -78,7 +78,7 @@ func TestClients_newAerospikeClient(t *testing.T) {
 			Cert: []byte("error"),
 		},
 	}
-	_, err = NewAerospikeClient(cfg, cp, "", 10, slog.Default(), nil)
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, "", 10, slog.Default(), nil)
 	require.ErrorContains(t, err, "failed to create Aerospike client policy")
 
 	hostPort.Host = "255.255.255.255"
@@ -89,7 +89,7 @@ func TestClients_newAerospikeClient(t *testing.T) {
 		User:     testASLoginPassword,
 		Password: testASLoginPassword,
 	}
-	_, err = NewAerospikeClient(cfg, cp, "", 10, slog.Default(), nil)
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, "", 10, slog.Default(), nil)
 	require.ErrorContains(t, err, "failed to create Aerospike client")
 }
 

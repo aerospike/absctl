@@ -17,6 +17,7 @@ linters:
     - lll
     - misspell
     - nakedret
+    - noctx
     - nolintlint
     - prealloc
     - predeclared

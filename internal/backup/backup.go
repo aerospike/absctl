@@ -121,6 +121,7 @@ func NewService(
 	}
 
 	aerospikeClient, err := storage.NewAerospikeClient(
+		ctx,
 		params.ClientConfig,
 		params.ClientPolicy,
 		racks,

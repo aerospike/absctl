@@ -94,7 +94,7 @@ func Test_BackupWithState(t *testing.T) {
 		},
 	}
 
-	err := createRecords(asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
+	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -150,7 +150,7 @@ func Test_BackupXDR(t *testing.T) {
 		},
 	}
 
-	err := createRecords(asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSetXDR)
+	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSetXDR)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -205,7 +205,7 @@ func Test_BackupEstimates(t *testing.T) {
 		Local:       nil,
 	}
 
-	err := createRecords(asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
+	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -217,8 +217,10 @@ func Test_BackupEstimates(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func createRecords(cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
-	client, err := storage.NewAerospikeClient(cfg, cp, "", 0, slog.Default(), nil)
+func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
+	t.Helper()
+
+	client, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create aerospike client: %w", err)
 	}

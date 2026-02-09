@@ -210,7 +210,7 @@ func TestAzureBlob_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.azure.LoadSecrets(nil)
+			err := tt.azure.LoadSecrets(t.Context(), nil)
 			require.NoError(t, err)
 
 			err = tt.azure.Validate(tt.isBackup)

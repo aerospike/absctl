@@ -79,6 +79,7 @@ func NewService(
 		logger.Debug("warm up is set", slog.Int("value", warmUp))
 
 		aerospikeClient, err = storage.NewAerospikeClient(
+			ctx,
 			params.ClientConfig,
 			params.ClientPolicy,
 			"",

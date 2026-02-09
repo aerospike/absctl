@@ -15,6 +15,7 @@
 package models
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/backup-go"
@@ -42,20 +43,20 @@ type GcpStorage struct {
 }
 
 // LoadSecrets tries to load field values from secret agent.
-func (g *GcpStorage) LoadSecrets(cfg *backup.SecretAgentConfig) error {
+func (g *GcpStorage) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
 	var err error
 
-	g.KeyFile, err = backup.ParseSecret(cfg, g.KeyFile)
+	g.KeyFile, err = backup.ParseSecret(ctx, cfg, g.KeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to load key file from secret agent: %w", err)
 	}
 
-	g.BucketName, err = backup.ParseSecret(cfg, g.BucketName)
+	g.BucketName, err = backup.ParseSecret(ctx, cfg, g.BucketName)
 	if err != nil {
 		return fmt.Errorf("failed to load bucket name from secret agent: %w", err)
 	}
 
-	g.Endpoint, err = backup.ParseSecret(cfg, g.Endpoint)
+	g.Endpoint, err = backup.ParseSecret(ctx, cfg, g.Endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to load endpoint from secret agent: %w", err)
 	}
