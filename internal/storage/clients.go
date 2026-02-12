@@ -48,6 +48,7 @@ import (
 // It validates input parameters, applies client policies, and optionally warms up the client for better performance.
 // Returns an Aerospike client instance or an error if initialization fails.
 func NewAerospikeClient(
+	ctx context.Context,
 	cfg *client.AerospikeConfig,
 	cp *models.ClientPolicy,
 	racks string,
@@ -66,12 +67,12 @@ func NewAerospikeClient(
 	if sa != nil {
 		var err error
 
-		cfg.User, err = backup.ParseSecret(sa, cfg.User)
+		cfg.User, err = backup.ParseSecret(ctx, sa, cfg.User)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse secret for user: %w", err)
 		}
 
-		cfg.Password, err = backup.ParseSecret(sa, cfg.Password)
+		cfg.Password, err = backup.ParseSecret(ctx, sa, cfg.Password)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse secret for password: %w", err)
 		}

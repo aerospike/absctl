@@ -164,7 +164,7 @@ func TestGcpStorage_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.gcp.LoadSecrets(nil)
+			err := tt.gcp.LoadSecrets(t.Context(), nil)
 			require.NoError(t, err)
 
 			err = tt.gcp.Validate(true)

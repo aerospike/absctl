@@ -89,7 +89,7 @@ func newWriter(
 			slog.String("endpoint", params.AwsS3.Endpoint),
 		)
 
-		if err := params.AwsS3.LoadSecrets(sa); err != nil {
+		if err := params.AwsS3.LoadSecrets(ctx, sa); err != nil {
 			return nil, fmt.Errorf("failed to load AWS secrets: %w", err)
 		}
 
@@ -101,7 +101,7 @@ func newWriter(
 			slog.String("endpoint", params.GcpStorage.Endpoint),
 		)
 
-		if err := params.GcpStorage.LoadSecrets(sa); err != nil {
+		if err := params.GcpStorage.LoadSecrets(ctx, sa); err != nil {
 			return nil, fmt.Errorf("failed to load GCP secrets: %w", err)
 		}
 
@@ -114,7 +114,7 @@ func newWriter(
 			slog.String("endpoint", params.AzureBlob.Endpoint),
 		)
 
-		if err := params.AzureBlob.LoadSecrets(sa); err != nil {
+		if err := params.AzureBlob.LoadSecrets(ctx, sa); err != nil {
 			return nil, fmt.Errorf("failed to load azure secrets: %w", err)
 		}
 

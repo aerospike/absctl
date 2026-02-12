@@ -189,7 +189,7 @@ func TestAwsS3_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.aws.LoadSecrets(nil)
+			err := tt.aws.LoadSecrets(t.Context(), nil)
 			require.NoError(t, err)
 
 			err = tt.aws.Validate(tt.isBackup)

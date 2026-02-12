@@ -16,6 +16,7 @@
 package models
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/backup-go"
@@ -48,45 +49,45 @@ type AzureBlob struct {
 }
 
 // LoadSecrets tries to load field values from secret agent.
-func (a *AzureBlob) LoadSecrets(cfg *backup.SecretAgentConfig) error {
+func (a *AzureBlob) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
 	var err error
 
-	a.AccountName, err = backup.ParseSecret(cfg, a.AccountName)
+	a.AccountName, err = backup.ParseSecret(ctx, cfg, a.AccountName)
 	if err != nil {
 		return fmt.Errorf("failed to load account name from secret agent: %w", err)
 	}
 
-	a.AccountKey, err = backup.ParseSecret(cfg, a.AccountKey)
+	a.AccountKey, err = backup.ParseSecret(ctx, cfg, a.AccountKey)
 	if err != nil {
 		return fmt.Errorf("failed to load account key from secret agent: %w", err)
 	}
 
-	a.TenantID, err = backup.ParseSecret(cfg, a.TenantID)
+	a.TenantID, err = backup.ParseSecret(ctx, cfg, a.TenantID)
 	if err != nil {
 		return fmt.Errorf("failed to load tenant id from secret agent: %w", err)
 	}
 
-	a.ClientID, err = backup.ParseSecret(cfg, a.ClientID)
+	a.ClientID, err = backup.ParseSecret(ctx, cfg, a.ClientID)
 	if err != nil {
 		return fmt.Errorf("failed to load client id from secret agent: %w", err)
 	}
 
-	a.ClientSecret, err = backup.ParseSecret(cfg, a.ClientSecret)
+	a.ClientSecret, err = backup.ParseSecret(ctx, cfg, a.ClientSecret)
 	if err != nil {
 		return fmt.Errorf("failed to load client secret from secret agent: %w", err)
 	}
 
-	a.Endpoint, err = backup.ParseSecret(cfg, a.Endpoint)
+	a.Endpoint, err = backup.ParseSecret(ctx, cfg, a.Endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to load endpoint from secret agent: %w", err)
 	}
 
-	a.ContainerName, err = backup.ParseSecret(cfg, a.ContainerName)
+	a.ContainerName, err = backup.ParseSecret(ctx, cfg, a.ContainerName)
 	if err != nil {
 		return fmt.Errorf("failed to load container name from secret agent: %w", err)
 	}
 
-	a.AccessTier, err = backup.ParseSecret(cfg, a.AccessTier)
+	a.AccessTier, err = backup.ParseSecret(ctx, cfg, a.AccessTier)
 	if err != nil {
 		return fmt.Errorf("failed to load access tier key from secret agent: %w", err)
 	}
