@@ -89,6 +89,10 @@ func (b *Backup) Validate() error {
 		return fmt.Errorf("continue and state-file-dst are mutually exclusive")
 	}
 
+	if b.Continue != "" && b.RemoveFiles {
+		return fmt.Errorf("continue and remove-files are mutually exclusive, as remove-files will delete the backup files")
+	}
+
 	if b.Estimate {
 		// Estimate with filter not allowed.
 		if b.PartitionList != "" ||
