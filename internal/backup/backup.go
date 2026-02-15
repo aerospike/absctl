@@ -179,50 +179,51 @@ func initXdr(
 	infoPolicy *aerospike.InfoPolicy,
 	retryInfoPolicy *bModels.RetryPolicy,
 	logger *slog.Logger) (bool, error) {
-	if params.BackupXDR != nil {
-		// To pass version check and stop XDR and unblock MRT we need asinfo client without backup client.
-		// So we init it separately in old fashion way.
-		infoClient, err := asinfo.NewClient(
-			aerospikeClient.Cluster(),
-			infoPolicy,
-			retryInfoPolicy,
-		)
-		if err != nil {
-			return false, fmt.Errorf("failed to create info client: %w", err)
+	if params.BackupXDR == nil {
+		return false, nil
+	}
+	// To pass version check and stop XDR and unblock MRT we need asinfo client without backup client.
+	// So we init it separately in old fashion way.
+	infoClient, err := asinfo.NewClient(
+		aerospikeClient.Cluster(),
+		infoPolicy,
+		retryInfoPolicy,
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to create info client: %w", err)
+	}
+
+	version, err := infoClient.GetVersion(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get version: %w", err)
+	}
+
+	// TODO: move this logic to XDR handler.
+	if xdrSupportedVersion.IsGreater(version) {
+		return false, fmt.Errorf("version %s is unsupported, only databse version %d+ is supported",
+			version.String(), xdrSupportedVersion)
+	}
+
+	// Stop xdr.
+	if params.IsStopXDR() {
+		logger.Info("stopping XDR on the database")
+
+		if err = stopXDR(ctx, infoClient, backupXDRConfig.DC, backupXDRConfig.Namespace); err != nil {
+			return false, fmt.Errorf("failed to stop XDR: %w", err)
 		}
 
-		version, err := infoClient.GetVersion(ctx)
-		if err != nil {
-			return false, fmt.Errorf("failed to get version: %w", err)
+		return true, nil
+	}
+
+	// Unblock mRT.
+	if params.IsUnblockMRT() {
+		logger.Info("enabling MRT writes on the database")
+
+		if err = unblockMrt(ctx, infoClient, backupXDRConfig.Namespace); err != nil {
+			return false, fmt.Errorf("failed to enable MRT writes: %w", err)
 		}
 
-		// TODO: move this logic to XDR handler.
-		if xdrSupportedVersion.IsGreater(version) {
-			return false, fmt.Errorf("version %s is unsupported, only databse version %d+ is supported",
-				version.String(), xdrSupportedVersion)
-		}
-
-		// Stop xdr.
-		if params.IsStopXDR() {
-			logger.Info("stopping XDR on the database")
-
-			if err = stopXDR(ctx, infoClient, backupXDRConfig.DC, backupXDRConfig.Namespace); err != nil {
-				return false, fmt.Errorf("failed to stop XDR: %w", err)
-			}
-
-			return true, nil
-		}
-
-		// Unblock mRT.
-		if params.IsUnblockMRT() {
-			logger.Info("enabling MRT writes on the database")
-
-			if err = unblockMrt(ctx, infoClient, backupXDRConfig.Namespace); err != nil {
-				return false, fmt.Errorf("failed to enable MRT writes: %w", err)
-			}
-
-			return true, nil
-		}
+		return true, nil
 	}
 
 	return false, nil

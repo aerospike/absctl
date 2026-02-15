@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncryption_NewFlagSet(t *testing.T) {
@@ -36,7 +37,7 @@ func TestEncryption_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := encryption.GetEncryption()
 
@@ -54,12 +55,12 @@ func TestEncryption_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := encryption.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := encryption.GetEncryption()
 
 	assert.Equal(t, models.DefaultEncryptionMode, result.Mode, "The default value for encrypt should be an empty string")
-	assert.Equal(t, "", result.KeyFile, "The default value for encryption-key-file should be an empty string")
-	assert.Equal(t, "", result.KeyEnv, "The default value for encryption-key-env should be an empty string")
-	assert.Equal(t, "", result.KeySecret, "The default value for encryption-key-secret should be an empty string")
+	assert.Empty(t, result.KeyFile, "The default value for encryption-key-file should be an empty string")
+	assert.Empty(t, result.KeyEnv, "The default value for encryption-key-env should be an empty string")
+	assert.Empty(t, result.KeySecret, "The default value for encryption-key-secret should be an empty string")
 }

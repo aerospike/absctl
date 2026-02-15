@@ -166,13 +166,10 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 	// Run async printing files stats.
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		logging.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-	}()
+	})
+
 	go logging.PrintRestoreEstimate(ctx, h.GetStats(), h.GetMetrics, r.reader.GetSize, r.logger)
 
 	// Wait for restore / validation to finish.
@@ -200,11 +197,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 	errChan := make(chan error, 2)
 
 	if r.reader != nil {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			restoreCfg := *r.restoreConfig
 			restoreCfg.EncoderType = backup.EncoderTypeASB
 
@@ -229,15 +222,11 @@ func (r *Service) runAuto(ctx context.Context) error {
 			}
 
 			stats = h.GetStats()
-		}()
+		})
 	}
 
 	if r.xdrReader != nil {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			restoreXdrCfg := *r.restoreConfig
 			restoreXdrCfg.EncoderType = backup.EncoderTypeASBX
 
@@ -262,7 +251,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 			}
 
 			xdrStats = hXdr.GetStats()
-		}()
+		})
 	}
 
 	wg.Wait()

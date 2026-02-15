@@ -34,8 +34,8 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 	app := &models.App{ConfigFilePath: ""}
 	clientConfig := &client.AerospikeConfig{}
 	clientPolicy := &models.ClientPolicy{}
-	backup := &models.Backup{}
-	backupXDR := &models.BackupXDR{}
+	backupModel := &models.Backup{}
+	backupXDRModel := &models.BackupXDR{}
 	compression := &models.Compression{}
 	encryption := &models.Encryption{}
 	secretAgent := &models.SecretAgent{}
@@ -48,8 +48,8 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 		app,
 		clientConfig,
 		clientPolicy,
-		backup,
-		backupXDR,
+		backupModel,
+		backupXDRModel,
 		compression,
 		encryption,
 		secretAgent,
@@ -64,8 +64,8 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 	assert.Equal(t, app, config.App)
 	assert.Equal(t, clientConfig, config.ClientConfig)
 	assert.Equal(t, clientPolicy, config.ClientPolicy)
-	assert.Equal(t, backup, config.Backup)
-	assert.Equal(t, backupXDR, config.BackupXDR)
+	assert.Equal(t, backupModel, config.Backup)
+	assert.Equal(t, backupXDRModel, config.BackupXDR)
 	assert.Equal(t, compression, config.Compression)
 	assert.Equal(t, encryption, config.Encryption)
 	assert.Equal(t, secretAgent, config.SecretAgent)
@@ -701,7 +701,7 @@ func TestNewBackupConfigs_InvalidModifiedBefore(t *testing.T) {
 
 	_, _, err := NewBackupConfigs(serviceConfig, logger)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified before date")
 }
 
@@ -720,7 +720,7 @@ func TestNewBackupConfigs_InvalidModifiedAfter(t *testing.T) {
 
 	_, _, err := NewBackupConfigs(serviceConfig, logger)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified after date")
 }
 

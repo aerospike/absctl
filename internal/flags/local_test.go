@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLocal_NewFlagSet(t *testing.T) {
@@ -32,7 +33,7 @@ func TestLocal_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := local.GetLocal()
 
@@ -46,7 +47,7 @@ func TestLocal_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := local.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := local.GetLocal()
 

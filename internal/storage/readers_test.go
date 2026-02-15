@@ -44,7 +44,7 @@ const (
 func TestNewLocalReader(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	dir := t.TempDir()
 
@@ -65,7 +65,7 @@ func TestNewLocalReader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	reader, err := newReader(ctx, params, nil, true, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testLocalType, reader.GetType())
 
@@ -79,7 +79,7 @@ func TestNewLocalReader(t *testing.T) {
 	}
 
 	reader, err = newReader(ctx, params, nil, false, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testLocalType, reader.GetType())
 
@@ -90,7 +90,7 @@ func TestNewLocalReader(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 	}
 	reader, err = newReader(ctx, params, nil, false, logger)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, reader)
 }
 
@@ -111,7 +111,7 @@ func TestNewS3Reader(t *testing.T) {
 	t.Parallel()
 
 	err := createAwsCredentials()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
@@ -134,7 +134,7 @@ func TestNewS3Reader(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	client, err := newS3Client(ctx, params.AwsS3)
 	require.NoError(t, err)
 	err = createTmpFileS3(ctx, client, dir, testFileNameASBX)
@@ -143,7 +143,7 @@ func TestNewS3Reader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	reader, err := newReader(ctx, params, nil, true, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testS3Type, reader.GetType())
 
@@ -162,7 +162,7 @@ func TestNewS3Reader(t *testing.T) {
 	}
 
 	reader, err = newReader(ctx, params, nil, false, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testS3Type, reader.GetType())
 }
@@ -184,7 +184,7 @@ func TestNewGcpReader(t *testing.T) {
 	t.Parallel()
 
 	err := createGcpBucket()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
@@ -203,7 +203,7 @@ func TestNewGcpReader(t *testing.T) {
 		AzureBlob: &models.AzureBlob{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	client, err := newGcpClient(ctx, params.GcpStorage)
 	require.NoError(t, err)
 	err = createTmpFileGcp(ctx, client, dir, testFileNameASBX)
@@ -212,7 +212,7 @@ func TestNewGcpReader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	reader, err := newReader(ctx, params, nil, true, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testGcpType, reader.GetType())
 
@@ -229,7 +229,7 @@ func TestNewGcpReader(t *testing.T) {
 	}
 
 	reader, err = newReader(ctx, params, nil, false, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testGcpType, reader.GetType())
 }
@@ -253,7 +253,7 @@ func TestNewAzureReader(t *testing.T) {
 	t.Parallel()
 
 	err := createAzureContainer()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
@@ -276,7 +276,7 @@ func TestNewAzureReader(t *testing.T) {
 		GcpStorage: &models.GcpStorage{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	client, err := newAzureClient(params.AzureBlob)
 	require.NoError(t, err)
 	err = createTmpFileAzure(ctx, client, dir, testFileNameASBX)
@@ -285,7 +285,7 @@ func TestNewAzureReader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	reader, err := newReader(ctx, params, nil, true, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testAzureType, reader.GetType())
 
@@ -304,7 +304,7 @@ func TestNewAzureReader(t *testing.T) {
 	}
 
 	reader, err = newReader(ctx, params, nil, false, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testAzureType, reader.GetType())
 }
@@ -416,7 +416,7 @@ func TestPrepareDirectoryList(t *testing.T) {
 func TestNewStdReader(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	params := &config.RestoreServiceConfig{
 		Restore: &models.Restore{
@@ -430,7 +430,7 @@ func TestNewStdReader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	reader, err := newReader(ctx, params, nil, true, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testStdinType, reader.GetType())
 }

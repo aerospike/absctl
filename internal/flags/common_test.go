@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommon_NewFlagSet(t *testing.T) {
@@ -50,7 +51,7 @@ func TestCommon_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := common.GetCommon()
 
@@ -67,7 +68,7 @@ func TestCommon_NewFlagSet(t *testing.T) {
 	assert.Equal(t, int64(15000), result.SocketTimeout, "The socket-timeout flag should be parsed correctly")
 	assert.Equal(t, int64(1000), result.InfoTimeout, "The info-timeout flag should be parsed correctly")
 	assert.Equal(t, int64(1), result.InfoRetryIntervalMilliseconds, "The info-retry-interval flag should be parsed correctly")
-	assert.Equal(t, float64(1), result.InfoRetriesMultiplier, "The info-retry-multiplier flag should be parsed correctly")
+	assert.InEpsilon(t, float64(1), result.InfoRetriesMultiplier, 0.0, "The info-retry-multiplier flag should be parsed correctly")
 	assert.Equal(t, uint(1), result.InfoMaxRetries, "The info-max-retries flag should be parsed correctly")
 	assert.Equal(t, 1, result.StdBufferSize, "The std-buffer flag should be parsed correctly")
 }
@@ -82,16 +83,16 @@ func TestCommon_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := common.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := common.GetCommon()
 
 	// Verify default values
-	assert.Equal(t, "", result.Directory, "The default value for directory should be an empty string")
-	assert.Equal(t, "", result.Namespace, "The default value for namespace should be an empty string")
-	assert.Equal(t, "", result.SetList, "The default value for set-list should be nil")
+	assert.Empty(t, result.Directory, "The default value for directory should be an empty string")
+	assert.Empty(t, result.Namespace, "The default value for namespace should be an empty string")
+	assert.Empty(t, result.SetList, "The default value for set-list should be nil")
 	assert.Equal(t, 0, result.RecordsPerSecond, "The default value for records-per-second should be 0")
-	assert.Equal(t, "", result.BinList, "The default value for bin-list should be nil")
+	assert.Empty(t, result.BinList, "The default value for bin-list should be nil")
 	assert.Equal(t, 0, result.Parallel, "The default value for parallel should be 0")
 	assert.False(t, result.NoRecords, "The default value for no-records should be false")
 	assert.False(t, result.NoIndexes, "The default value for no-indexes should be false")
@@ -100,7 +101,7 @@ func TestCommon_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, int64(10000), result.SocketTimeout, "The default value for socket-timeout should be 10000")
 	assert.Equal(t, int64(10000), result.InfoTimeout, "The default value for info-timeout should be 10000")
 	assert.Equal(t, int64(1000), result.InfoRetryIntervalMilliseconds, "The default value for info-retry-interval should be 1000")
-	assert.Equal(t, float64(1), result.InfoRetriesMultiplier, "The default value for info-retry-multiplier should be 1")
+	assert.InEpsilon(t, float64(1), result.InfoRetriesMultiplier, 0.0, "The default value for info-retry-multiplier should be 1")
 	assert.Equal(t, uint(3), result.InfoMaxRetries, "The default value for info-max-retries should be 3")
 	assert.Equal(t, 4, result.StdBufferSize, "The default value for std-buffer should be 4194304")
 }

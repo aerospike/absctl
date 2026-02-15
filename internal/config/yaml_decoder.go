@@ -113,7 +113,10 @@ func decodeFromFile(filename string, params any) error {
 	if err != nil {
 		return fmt.Errorf("failed to open config file %s: %w", filename, err)
 	}
-	defer file.Close()
+
+	defer func() {
+		_ = file.Close()
+	}()
 
 	yamlDec := yaml.NewDecoder(file)
 	yamlDec.KnownFields(true)
@@ -131,7 +134,10 @@ func DumpFile(filename string, params any) error {
 	if err != nil {
 		return fmt.Errorf("failed to open config file %s: %w", filename, err)
 	}
-	defer file.Close()
+
+	defer func() {
+		_ = file.Close()
+	}()
 
 	yamlEnc := yaml.NewEncoder(file)
 	if err := yamlEnc.Encode(params); err != nil {

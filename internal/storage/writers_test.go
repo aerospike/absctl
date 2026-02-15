@@ -25,6 +25,7 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -64,9 +65,9 @@ func TestNewLocalWriter(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 		Local:      &models.Local{},
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	writer, err := newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testLocalType, writer.GetType())
 
@@ -80,7 +81,7 @@ func TestNewLocalWriter(t *testing.T) {
 		Local:      &models.Local{},
 	}
 	writer, err = newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testLocalType, writer.GetType())
 
@@ -92,7 +93,7 @@ func TestNewLocalWriter(t *testing.T) {
 		Local:      &models.Local{},
 	}
 	writer, err = newWriter(ctx, params, nil, slog.Default())
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, writer)
 }
 
@@ -100,7 +101,7 @@ func TestNewS3Writer(t *testing.T) {
 	t.Parallel()
 
 	err := createAwsCredentials()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	params := &config.BackupServiceConfig{
 		Backup: &models.Backup{
@@ -121,10 +122,10 @@ func TestNewS3Writer(t *testing.T) {
 		Local:      &models.Local{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	writer, err := newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testS3Type, writer.GetType())
 
@@ -144,7 +145,7 @@ func TestNewS3Writer(t *testing.T) {
 	}
 
 	writer, err = newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testS3Type, writer.GetType())
 }
@@ -184,7 +185,7 @@ func TestGcpWriter(t *testing.T) {
 	t.Parallel()
 
 	err := createGcpBucket()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	params := &config.BackupServiceConfig{
 		Backup: &models.Backup{
@@ -202,10 +203,10 @@ func TestGcpWriter(t *testing.T) {
 		Local:     &models.Local{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	writer, err := newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testGcpType, writer.GetType())
 
@@ -223,7 +224,7 @@ func TestGcpWriter(t *testing.T) {
 	}
 
 	writer, err = newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testGcpType, writer.GetType())
 }
@@ -250,7 +251,7 @@ func TestAzureWriter(t *testing.T) {
 	t.Parallel()
 
 	err := createAzureContainer()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	params := &config.BackupServiceConfig{
 		Backup: &models.Backup{
@@ -271,10 +272,10 @@ func TestAzureWriter(t *testing.T) {
 		Local:      &models.Local{},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	writer, err := newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testAzureType, writer.GetType())
 
@@ -294,7 +295,7 @@ func TestAzureWriter(t *testing.T) {
 	}
 
 	writer, err = newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testAzureType, writer.GetType())
 }
@@ -331,9 +332,9 @@ func TestNewStdWriter(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 		Local:      &models.Local{},
 	}
-	ctx := context.Background()
-	writer, err := newWriter(ctx, params, nil, slog.Default())
-	assert.NoError(t, err)
+
+	writer, err := newWriter(t.Context(), params, nil, slog.Default())
+	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.Equal(t, testStdoutType, writer.GetType())
 }

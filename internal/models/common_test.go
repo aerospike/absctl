@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateCommon(t *testing.T) {
@@ -107,10 +108,10 @@ func TestValidateCommon(t *testing.T) {
 
 			err := tt.common.Validate()
 			if tt.wantErr {
-				assert.Error(t, err, "Expected error but got none")
+				require.Error(t, err, "Expected error but got none")
 				assert.Equal(t, tt.expectedErr, err.Error())
 			} else {
-				assert.NoError(t, err, "Expected no error but got one")
+				require.NoError(t, err, "Expected no error but got one")
 			}
 		})
 	}

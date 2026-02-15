@@ -48,7 +48,7 @@ func TestCluster_ToAerospikeConfig(t *testing.T) {
 		cfg, err := c.ToAerospikeConfig()
 
 		assert.Nil(t, cfg)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to set auth mode")
 	})
 
@@ -63,7 +63,7 @@ func TestCluster_ToAerospikeConfig(t *testing.T) {
 		cfg, err := c.ToAerospikeConfig()
 
 		assert.Nil(t, cfg)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to set tls protocols")
 	})
 
@@ -108,7 +108,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.NotEmpty(t, f.Seeds)
 	})
@@ -126,7 +126,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, f.Seeds)
 	})
 
@@ -144,7 +144,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, f.Seeds)
 	})
 
@@ -170,7 +170,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, f.Seeds)
 	})
 
@@ -188,7 +188,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, f.Seeds)
 	})
 
@@ -205,7 +205,7 @@ func TestCluster_applySeeds(t *testing.T) {
 
 		err := c.applySeeds(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, f.Seeds)
 	})
 
@@ -245,7 +245,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 		err := c.applyAuthAndUser(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "admin", f.User)
 	})
 
@@ -258,7 +258,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 		err := c.applyAuthAndUser(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "admin", f.User)
 		assert.NotEmpty(t, f.Password)
 	})
@@ -273,7 +273,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 		err := c.applyAuthAndUser(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "admin", f.User)
 		assert.NotEmpty(t, f.Password.String())
 		assert.NotEmpty(t, f.AuthMode.String())
@@ -287,7 +287,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 		err := c.applyAuthAndUser(&f)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, f.User)
 	})
 
@@ -321,7 +321,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 		err := c.applyAuthAndUser(&f)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to set auth mode")
 	})
 

@@ -15,7 +15,6 @@
 package restore
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -35,7 +34,6 @@ import (
 const (
 	testNamespace       = "test"
 	testSet             = "test"
-	testStateFile       = "state"
 	testASLoginPassword = "admin"
 	testHost            = "127.0.0.1"
 	testPort            = 3000
@@ -52,7 +50,7 @@ func testHostPort() *client.HostTLSPort {
 func Test_BackupRestore(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 	hostPort := testHostPort()
 
@@ -144,14 +142,14 @@ func Test_BackupRestore(t *testing.T) {
 func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
 	t.Helper()
 
-	client, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
+	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create aerospike client: %w", err)
 	}
 
 	wp := aerospike.NewWritePolicy(0, 0)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key, err := aerospike.NewKey(namespace, set, fmt.Sprintf("map-key-%d", i))
 		if err != nil {
 			return fmt.Errorf("failed to create aerospike key: %w", err)
@@ -159,7 +157,7 @@ func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientP
 
 		bin := aerospike.NewBin("time", time.Now().Unix())
 
-		if err = client.PutBins(wp, key, bin); err != nil {
+		if err = aerospikeClient.PutBins(wp, key, bin); err != nil {
 			return fmt.Errorf("failed to create aerospike key: %w", err)
 		}
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testCompression() *models.Compression {
@@ -85,7 +86,7 @@ func TestMapBackupConfig_Success(t *testing.T) {
 	}
 
 	config, err := newBackupConfig(params)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Equal(t, "test-namespace", config.Namespace)
 	assert.ElementsMatch(t, []string{"set1", "set2"}, config.SetList)
@@ -94,12 +95,12 @@ func TestMapBackupConfig_Success(t *testing.T) {
 	assert.False(t, config.NoIndexes)
 	assert.Equal(t, 1000, config.RecordsPerSecond)
 	assert.Equal(t, uint64(5000*1024*1024), config.FileLimit)
-	assert.Equal(t, true, config.NoTTLOnly)
+	assert.True(t, config.NoTTLOnly)
 
 	modBefore, err := parseLocalTimeToUTC("2023-09-01_12:00:00")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	modAfter, err := parseLocalTimeToUTC("2023-09-02_12:00:00")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, modBefore, *config.ModBefore)
 	assert.Equal(t, modAfter, *config.ModAfter)
 
@@ -140,7 +141,7 @@ func TestMapBackupConfig_InvalidModifiedBefore(t *testing.T) {
 	}
 
 	config, err := newBackupConfig(params)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, config)
 	assert.Contains(t, err.Error(), "failed to parse modified before date")
 }
@@ -162,7 +163,7 @@ func TestMapBackupConfig_InvalidModifiedAfter(t *testing.T) {
 	}
 
 	config, err := newBackupConfig(params)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, config)
 	assert.Contains(t, err.Error(), "failed to parse modified after date")
 }
@@ -184,7 +185,7 @@ func TestMapBackupConfig_InvalidExpression(t *testing.T) {
 	}
 
 	config, err := newBackupConfig(params)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, config)
 	assert.Contains(t, err.Error(), "failed to parse filter expression")
 }
@@ -351,7 +352,7 @@ func TestMapRestoreNamespace_SuccessSingleNamespace(t *testing.T) {
 
 	ns := "source-ns"
 	result := newRestoreNamespace(ns)
-	assert.NotNil(t, result, "Result should not be nil")
+	require.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
 	assert.Equal(t, "source-ns", *result.Destination, "Destination should be the same as Source")
 }
@@ -361,7 +362,7 @@ func TestMapRestoreNamespace_SuccessDifferentNamespaces(t *testing.T) {
 
 	ns := "source-ns,destination-ns"
 	result := newRestoreNamespace(ns)
-	assert.NotNil(t, result, "Result should not be nil")
+	require.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
 	assert.Equal(t, "destination-ns", *result.Destination, "Destination should be 'destination-ns'")
 }
@@ -385,9 +386,9 @@ func TestMapPartitionFilter_AfterDigest(t *testing.T) {
 	}
 
 	filters, err := mapPartitionFilter(backupModel)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Equal(t, 1, len(filters))
+	assert.Len(t, filters, 1)
 	assert.IsType(t, &aerospike.PartitionFilter{}, filters[0])
 }
 
@@ -402,9 +403,9 @@ func TestMapPartitionFilter_PartitionList(t *testing.T) {
 	}
 
 	filters, err := mapPartitionFilter(backupModel)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Equal(t, 1, len(filters))
+	assert.Len(t, filters, 1)
 	assert.IsType(t, &aerospike.PartitionFilter{}, filters[0])
 }
 
@@ -418,9 +419,9 @@ func TestMapPartitionFilter_NoFilters(t *testing.T) {
 	}
 
 	filters, err := mapPartitionFilter(backupModel)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Equal(t, 1, len(filters))
+	assert.Len(t, filters, 1)
 	assert.Equal(t, backup.NewPartitionFilterAll(), filters[0])
 }
 
@@ -469,7 +470,7 @@ func TestMapScanPolicy_Success(t *testing.T) {
 		},
 	}
 	scanPolicy, err := newScanPolicy(backupModel)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, int64(500), scanPolicy.MaxRecords)
 	assert.Equal(t, 3, scanPolicy.MaxRetries)
 	assert.Equal(t, 50*time.Millisecond, scanPolicy.SleepBetweenRetries)
@@ -573,15 +574,15 @@ func TestParseLocalTimeToUTC(t *testing.T) {
 			result, err := parseLocalTimeToUTC(tt.timeString)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Equal(t, time.Time{}, result)
 				assert.Contains(t, err.Error(), tt.errorText)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				location, err := time.LoadLocation("Local")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				localTime, err := time.ParseInLocation("2006-01-02_15:04:05", tt.expectedUTC, location)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, localTime.UTC(), result)
 			}
 		})
@@ -706,7 +707,7 @@ func TestMapBackupXDRConfig(t *testing.T) {
 				t.Helper()
 				assert.Equal(t, "dc1", cfg.DC)
 				assert.Equal(t, "test", cfg.Namespace)
-				assert.Equal(t, "", cfg.LocalAddress)
+				assert.Empty(t, cfg.LocalAddress)
 				assert.Equal(t, 0, cfg.LocalPort)
 				assert.Equal(t, backup.EncoderTypeASBX, cfg.EncoderType)
 			},
@@ -743,7 +744,6 @@ func TestMapBackupXDRConfig(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -782,17 +782,16 @@ func TestMapScanPolicy_Errors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			got, err := newScanPolicy(tt.backupModel)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
 				assert.Nil(t, got)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, got)
 			}
 		})
@@ -829,7 +828,6 @@ func TestMapWritePolicy_ConfigurationCombinations(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

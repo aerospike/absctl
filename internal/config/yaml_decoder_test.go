@@ -119,7 +119,6 @@ func TestDecodeBackupServiceConfig(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer os.Remove(tempFile)
 			}
 
 			filename := tt.filename
@@ -197,7 +196,6 @@ func TestDecodeRestoreServiceConfig(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer os.Remove(tempFile)
 			}
 
 			filename := tt.filename
@@ -275,7 +273,6 @@ func TestDecodeFromFile(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer os.Remove(tempFile)
 			}
 
 			filename := tt.filename
@@ -305,7 +302,7 @@ func TestDumpFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
-		params   interface{}
+		params   any
 		wantErr  string
 	}{
 		{
@@ -327,7 +324,7 @@ func TestDumpFile(t *testing.T) {
 		{
 			name:     "complex nested struct",
 			filename: "map_dump.yaml",
-			params: map[string]interface{}{
+			params: map[string]any{
 				"key1": "value1",
 				"key2": map[string]string{
 					"nested": "value",
@@ -341,7 +338,7 @@ func TestDumpFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			defer func() {
 				if _, err := os.Stat(tt.filename); err == nil {
-					os.Remove(tt.filename)
+					_ = os.Remove(tt.filename)
 				}
 			}()
 
@@ -359,7 +356,7 @@ func TestDumpFile(t *testing.T) {
 			// Verify file was created and contains data
 			info, err := os.Stat(tt.filename)
 			require.NoError(t, err)
-			require.True(t, info.Size() > 0)
+			require.Positive(t, info.Size())
 		})
 	}
 }

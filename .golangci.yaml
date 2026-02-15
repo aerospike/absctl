@@ -1,6 +1,7 @@
 version: "2"
 run:
   issues-exit-code: 1
+
 linters:
   default: none
   enable:
@@ -8,6 +9,7 @@ linters:
     - dogsled
     - dupl
     - errcheck
+    - errorlint
     - goconst
     - gocritic
     - gocyclo
@@ -16,18 +18,25 @@ linters:
     - ineffassign
     - lll
     - misspell
+    - modernize
     - nakedret
+    - nestif
+    - nilerr
     - noctx
     - nolintlint
     - prealloc
     - predeclared
     - revive
+    - sloglint
     - staticcheck
+    - testifylint
     - thelper
     - tparallel
     - unconvert
     - unparam
     - unused
+    - usestdlibvars
+    - usetesting
     - whitespace
     - wsl_v5
   settings:
@@ -52,10 +61,19 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    sloglint:
+      attr-only: true
+      key-naming-case: camel
+      forbidden-keys:
+        - err # let's only use slog.Any("error", err)
+    usetesting:
+      context-background: true
+      context-todo: true
+      os-temp-dir: true
+      os-setenv: true
     wsl_v5:
-      allow-first-in-block: true
-      allow-whole-block: false
-      branch-max-lines: 2
+      disable:
+        - assign
   exclusions:
     generated: lax
     presets:
@@ -76,6 +94,7 @@ linters:
           - govet
           - lll
           - wsl_v5
+          - prealloc
         path: (.+)test\.go
       - path: (.+)test\.go
         text: importShadow
