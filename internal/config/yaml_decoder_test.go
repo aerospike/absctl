@@ -119,9 +119,6 @@ func TestDecodeBackupServiceConfig(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer func() {
-					_ = os.Remove(tempFile)
-				}()
 			}
 
 			filename := tt.filename
@@ -199,9 +196,6 @@ func TestDecodeRestoreServiceConfig(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer func() {
-					_ = os.Remove(tempFile)
-				}()
 			}
 
 			filename := tt.filename
@@ -279,9 +273,6 @@ func TestDecodeFromFile(t *testing.T) {
 			var tempFile string
 			if tt.setupFile {
 				tempFile = createTempFile(t, tt.filename, tt.content)
-				defer func() {
-					_ = os.Remove(tempFile)
-				}()
 			}
 
 			filename := tt.filename
