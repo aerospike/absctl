@@ -144,7 +144,7 @@ func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientP
 
 	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create aerospike aerospikeClient: %w", err)
+		return fmt.Errorf("failed to create aerospike client: %w", err)
 	}
 
 	wp := aerospike.NewWritePolicy(0, 0)
