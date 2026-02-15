@@ -165,21 +165,14 @@ func newS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 }
 
 func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client, error) {
-	opts := make([]option.ClientOption, 0)
-
-	var transport http.RoundTripper = newTransport(g.MaxConnsPerHost)
-	// GCP can't apply option.WithCredentialsFile() with custom http client option.WithHTTPClient().
-	// So we implement our own logic to load auth key and set http headers.
-	if g.KeyFile != "" {
-		creds, err := getGcpAuth(ctx, g.KeyFile)
-		if err != nil {
-			return nil, err
-		}
-		// Use client with custom auth.
-		transport = newAuthTransport(transport, creds.TokenSource)
+	transport, err := getGcpTransport(ctx, g)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GCP transport: %w", err)
 	}
 
-	opts = append(opts, option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)))
+	opts := []option.ClientOption{
+		option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)),
+	}
 
 	if g.Endpoint != "" {
 		opts = append(opts, option.WithEndpoint(g.Endpoint), option.WithoutAuthentication())
@@ -202,6 +195,32 @@ func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client
 		gcpStorage.WithMaxAttempts(g.RetryMaxAttempts))
 
 	return gcpClient, nil
+}
+
+func getGcpTransport(ctx context.Context, g *models.GcpStorage) (http.RoundTripper, error) {
+	var (
+		transport = newTransport(g.MaxConnsPerHost)
+		ts        oauth2.TokenSource
+		err       error
+	)
+	// GCP can't apply option.WithCredentialsFile() with custom http client option.WithHTTPClient().
+	// So we implement our own logic to load auth key and set http headers.
+	if g.KeyFile != "" {
+		creds, err := getGcpAuth(ctx, g.KeyFile)
+		if err != nil {
+			return nil, err
+		}
+		// Use client with custom auth.
+		ts = creds.TokenSource
+	} else {
+		// ADC: uses attached VM service account on GCE (or GOOGLE_APPLICATION_CREDENTIALS, etc.)
+		ts, err = google.DefaultTokenSource(ctx, gcpStorage.ScopeReadWrite)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ADC token source: %w", err)
+		}
+	}
+
+	return newAuthTransport(transport, ts), nil
 }
 
 // getGcpAuth read and load auth key from a file for GCP.
