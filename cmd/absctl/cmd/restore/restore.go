@@ -30,7 +30,6 @@ import (
 )
 
 const (
-	VersionDev          = "dev"
 	welcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
 	welcomeMessageShort = "Aerospike restore CLI tool"
 	useCommand          = "restore"

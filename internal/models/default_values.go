@@ -71,6 +71,7 @@ const (
 	DefaultGcpChunkSize              = 5
 )
 
+// noinspection GoCommentStart
 // Local Storage.
 const (
 	DefaultLocalBufferSize = 5

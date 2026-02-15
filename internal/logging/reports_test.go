@@ -80,7 +80,7 @@ func TestPrintMetric(t *testing.T) {
 	printMetric("FloatKey", 123.456)
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 
 	os.Stderr = oldStdout
 
@@ -127,7 +127,7 @@ func TestPrintBackupReport(t *testing.T) {
 	printBackupReport(stats, false)
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 
 	os.Stderr = oldStdout
 
@@ -185,7 +185,7 @@ func TestPrintBackupReportXdr(t *testing.T) {
 	printBackupReport(stats, true)
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 
 	os.Stderr = oldStdout
 
@@ -309,7 +309,7 @@ func TestReportBackup(t *testing.T) {
 		ReportBackup(stats, false, false, nil)
 
 		// Close writer and restore stdout
-		w.Close()
+		_ = w.Close()
 
 		os.Stderr = oldStdout
 
@@ -518,7 +518,7 @@ func TestPrintRestoreReport(t *testing.T) {
 	printRestoreReport(stats, false)
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStdout
 
 	// Read captured output
@@ -651,7 +651,7 @@ func TestReportRestore(t *testing.T) {
 		ReportRestore(stats, false, false, nil)
 
 		// Close writer and restore stdout
-		w.Close()
+		_ = w.Close()
 
 		os.Stderr = oldStdout
 
@@ -695,7 +695,7 @@ func TestPrintEstimateReport(t *testing.T) {
 	printEstimateReport(5000000)
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 
 	os.Stderr = oldStdout
 
@@ -738,7 +738,7 @@ func TestReportEstimate(t *testing.T) {
 		ReportEstimate(5000000, false, nil)
 
 		// Close writer and restore stdout
-		w.Close()
+		_ = w.Close()
 
 		os.Stderr = oldStdout
 

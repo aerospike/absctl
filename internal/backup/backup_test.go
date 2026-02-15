@@ -219,9 +219,9 @@ func Test_BackupEstimates(t *testing.T) {
 func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
 	t.Helper()
 
-	client, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
+	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg, cp, "", 0, slog.Default(), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create aerospike client: %w", err)
+		return fmt.Errorf("failed to create aerospike aerospikeClient: %w", err)
 	}
 
 	wp := aerospike.NewWritePolicy(0, 0)
@@ -234,7 +234,7 @@ func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientP
 
 		bin := aerospike.NewBin("time", time.Now().Unix())
 
-		if err = client.PutBins(wp, key, bin); err != nil {
+		if err = aerospikeClient.PutBins(wp, key, bin); err != nil {
 			return fmt.Errorf("failed to create aerospike key: %w", err)
 		}
 	}

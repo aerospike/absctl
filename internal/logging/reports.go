@@ -199,7 +199,7 @@ func logEstimateReport(estimate uint64, logger *slog.Logger) {
 }
 
 func printMetric(key string, value any) {
-	fmt.Fprintf(os.Stderr, "%s%v\n", indent(key), value)
+	_, _ = fmt.Fprintf(os.Stderr, "%s%v\n", indent(key), value)
 }
 
 func indent(key string) string {
@@ -208,5 +208,5 @@ func indent(key string) string {
 
 // printToStderr prints the string to stderr.
 func printToStderr(s string) {
-	fmt.Fprintln(os.Stderr, s)
+	_, _ = fmt.Fprintln(os.Stderr, s)
 }

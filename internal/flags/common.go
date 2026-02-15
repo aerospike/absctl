@@ -24,7 +24,9 @@ const (
 	OperationBackup = iota
 	// OperationRestore is used to generate proper documentation for restore.
 	OperationRestore
+)
 
+const (
 	descNamespaceBackup  = "The namespace to be backed up. Required."
 	descNamespaceRestore = "Used to restore to a different namespace. Example: source-ns,destination-ns"
 

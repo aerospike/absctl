@@ -50,6 +50,7 @@ type Cmd struct {
 }
 
 // NewCmd return initialized xdr command.
+// noinspection GoUnusedExportedFunction
 func NewCmd(
 	flagsApp *flags.App,
 	flagsAerospike *asFlags.AerospikeFlags,

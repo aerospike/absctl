@@ -352,7 +352,7 @@ func TestMapRestoreNamespace_SuccessSingleNamespace(t *testing.T) {
 
 	ns := "source-ns"
 	result := newRestoreNamespace(ns)
-	assert.NotNil(t, result, "Result should not be nil")
+	require.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
 	assert.Equal(t, "source-ns", *result.Destination, "Destination should be the same as Source")
 }
@@ -362,7 +362,7 @@ func TestMapRestoreNamespace_SuccessDifferentNamespaces(t *testing.T) {
 
 	ns := "source-ns,destination-ns"
 	result := newRestoreNamespace(ns)
-	assert.NotNil(t, result, "Result should not be nil")
+	require.NotNil(t, result, "Result should not be nil")
 	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
 	assert.Equal(t, "destination-ns", *result.Destination, "Destination should be 'destination-ns'")
 }
