@@ -165,17 +165,18 @@ func newS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 }
 
 func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client, error) {
-	transport, err := getGcpTransport(ctx, g)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get GCP transport: %w", err)
-	}
-
-	opts := []option.ClientOption{
-		option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)),
-	}
+	opts := make([]option.ClientOption, 0)
 
 	if g.Endpoint != "" {
+		// Used with fake-gcs for tests only.
 		opts = append(opts, option.WithEndpoint(g.Endpoint), option.WithoutAuthentication())
+	} else {
+		transport, err := getGcpTransport(ctx, g)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get GCP transport: %w", err)
+		}
+
+		opts = append(opts, option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)))
 	}
 
 	gcpClient, err := gcpStorage.NewClient(ctx, opts...)
