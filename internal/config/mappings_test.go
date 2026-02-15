@@ -388,7 +388,7 @@ func TestMapPartitionFilter_AfterDigest(t *testing.T) {
 	filters, err := mapPartitionFilter(backupModel)
 	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Len(t, len(filters), 1)
+	assert.Len(t, filters, 1)
 	assert.IsType(t, &aerospike.PartitionFilter{}, filters[0])
 }
 
@@ -405,7 +405,7 @@ func TestMapPartitionFilter_PartitionList(t *testing.T) {
 	filters, err := mapPartitionFilter(backupModel)
 	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Len(t, len(filters), 1)
+	assert.Len(t, filters, 1)
 	assert.IsType(t, &aerospike.PartitionFilter{}, filters[0])
 }
 
@@ -421,7 +421,7 @@ func TestMapPartitionFilter_NoFilters(t *testing.T) {
 	filters, err := mapPartitionFilter(backupModel)
 	require.NoError(t, err)
 	assert.NotNil(t, filters)
-	assert.Len(t, len(filters), 1)
+	assert.Len(t, filters, 1)
 	assert.Equal(t, backup.NewPartitionFilterAll(), filters[0])
 }
 
