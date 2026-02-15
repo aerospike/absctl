@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAwsS3_NewFlagSet(t *testing.T) {
@@ -43,7 +44,7 @@ func TestAwsS3_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := awsS3.GetAwsS3()
 
@@ -69,12 +70,12 @@ func TestAwsS3_NewFlagSet(t *testing.T) {
 	}
 
 	err = flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result = awsS3.GetAwsS3()
 
 	assert.Equal(t, 900, result.RetryReadBackoff, "The s3-retry-read-backoff flag should be parsed correctly")
-	assert.Equal(t, 1.5, result.RetryReadMultiplier, "The s3-retry-read-multiplier flag should be parsed correctly")
+	assert.InEpsilon(t, 1.5, result.RetryReadMultiplier, 0.0, "The s3-retry-read-multiplier flag should be parsed correctly")
 	assert.Equal(t, uint(5), result.RetryReadMaxAttempts, "The s3-retry-read-max-attempts flag should be parsed correctly")
 }
 
@@ -85,16 +86,16 @@ func TestAwsS3_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := awsS3.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := awsS3.GetAwsS3()
 
-	assert.Equal(t, "", result.Region, "The default value for s3-region should be an empty string")
-	assert.Equal(t, "", result.Profile, "The default value for s3-profile should be 'default'")
-	assert.Equal(t, "", result.Endpoint, "The default value for s3-endpoint-override should be an empty string")
-	assert.Equal(t, "", result.AccessKeyID, "The default value for s3-access-key-id should be an empty string")
-	assert.Equal(t, "", result.SecretAccessKey, "The default value for s3-secret-access-key should be an empty string")
-	assert.Equal(t, "", result.StorageClass, "The default value for s3-storage-class should be an empty string")
+	assert.Empty(t, result.Region, "The default value for s3-region should be an empty string")
+	assert.Empty(t, result.Profile, "The default value for s3-profile should be 'default'")
+	assert.Empty(t, result.Endpoint, "The default value for s3-endpoint-override should be an empty string")
+	assert.Empty(t, result.AccessKeyID, "The default value for s3-access-key-id should be an empty string")
+	assert.Empty(t, result.SecretAccessKey, "The default value for s3-secret-access-key should be an empty string")
+	assert.Empty(t, result.StorageClass, "The default value for s3-storage-class should be an empty string")
 	assert.Equal(t, models.DefaultS3ChunkSize, result.ChunkSize, "The default value for s3-chunk-size should be 5mb")
 	assert.Equal(t, models.DefaultS3RetryMaxAttempts, result.RetryMaxAttempts, "The default value for s3-retry-max-attempts should be 100")
 	assert.Equal(t, models.DefaultS3RetryMaxBackoff, result.RetryMaxBackoff, "The default value for s3-retry-max-backoff should be 90")
@@ -105,11 +106,11 @@ func TestAwsS3_NewFlagSet_DefaultValues(t *testing.T) {
 	awsS3 = NewAwsS3(OperationRestore)
 	flagSet = awsS3.NewFlagSet()
 	err = flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	result = awsS3.GetAwsS3()
 
 	assert.Equal(t, models.DefaultS3RestorePollDuration, result.RestorePollDuration, "The default value for s3-restore-poll-duration should be 6000")
 	assert.Equal(t, models.DefaultCloudRetryReadBackoff, result.RetryReadBackoff, "The default value for s3-retry-read-backoff should be 0")
-	assert.Equal(t, models.DefaultCloudRetryReadMultiplier, result.RetryReadMultiplier, "The default value for s3-retry-read-multiplier should be 0")
+	assert.InEpsilon(t, models.DefaultCloudRetryReadMultiplier, result.RetryReadMultiplier, 0.0, "The default value for s3-retry-read-multiplier should be 0")
 	assert.Equal(t, models.DefaultCloudRetryReadMaxAttempts, result.RetryReadMaxAttempts, "The default value for s3-retry-read-max-attempts should be 0")
 }

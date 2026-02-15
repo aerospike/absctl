@@ -567,19 +567,19 @@ func TestLogRestoreReport(t *testing.T) {
 	stats.RecordsSkipped.Add(20)
 	stats.RecordsIgnored.Add(30)
 
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		stats.IncrRecordsFresher()
 	}
 
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		stats.IncrRecordsExisted()
 	}
 
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		stats.IncrRecordsInserted()
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		stats.IncrErrorsInDoubt()
 	}
 
@@ -622,19 +622,19 @@ func TestReportRestore(t *testing.T) {
 	stats.RecordsSkipped.Add(20)
 	stats.RecordsIgnored.Add(30)
 
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		stats.IncrRecordsFresher()
 	}
 
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		stats.IncrRecordsExisted()
 	}
 
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		stats.IncrRecordsInserted()
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		stats.IncrErrorsInDoubt()
 	}
 

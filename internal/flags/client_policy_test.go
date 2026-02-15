@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClientPolicy_NewFlagSet(t *testing.T) {
@@ -34,7 +35,7 @@ func TestClientPolicy_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := clientPolicy.GetClientPolicy()
 
@@ -51,7 +52,7 @@ func TestClientPolicy_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := clientPolicy.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := clientPolicy.GetClientPolicy()
 

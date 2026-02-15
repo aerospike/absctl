@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBackup_NewFlagSet(t *testing.T) {
@@ -48,7 +49,7 @@ func TestBackup_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := backup.GetBackup()
 
@@ -61,10 +62,10 @@ func TestBackup_NewFlagSet(t *testing.T) {
 	assert.True(t, result.NoBins, "The no-bins flag should be parsed correctly")
 	assert.Equal(t, 10, result.SleepBetweenRetries, "The sleep-between-retries flag should be parsed correctly")
 	assert.Equal(t, "encoded-filter-exp", result.FilterExpression, "The filter-exp flag should be parsed correctly")
-	assert.Equal(t, true, result.RemoveArtifacts, "The remove-artifacts flag should be parsed correctly")
-	assert.Equal(t, true, result.Compact, "The compact flag should be parsed correctly")
+	assert.True(t, result.RemoveArtifacts, "The remove-artifacts flag should be parsed correctly")
+	assert.True(t, result.Compact, "The compact flag should be parsed correctly")
 	assert.Equal(t, "node1,node2", result.NodeList, "The node-list flag should be parsed correctly")
-	assert.Equal(t, true, result.NoTTLOnly, "The no-ttl-only flag should be parsed correctly")
+	assert.True(t, result.NoTTLOnly, "The no-ttl-only flag should be parsed correctly")
 	assert.Equal(t, "1,2,3,4", result.PreferRacks, "The prefer-racks flag should be parsed correctly")
 	assert.Equal(t, "1,2,3,4", result.RackList, "The rack-list flag should be parsed correctly")
 	assert.Equal(t, "4000,1-236,EjRWeJq83vEjRRI0VniavN7xI0U=", result.PartitionList, "The partition-list flag should be parsed correctly")
@@ -79,25 +80,25 @@ func TestBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := backup.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := backup.GetBackup()
 
-	assert.Equal(t, "", result.OutputFile, "The default value for output-file should be an empty string")
+	assert.Empty(t, result.OutputFile, "The default value for output-file should be an empty string")
 	assert.Equal(t, uint64(250), result.FileLimit, "The default value for file-limit should be 0")
-	assert.Equal(t, "", result.AfterDigest, "The default value for after-digest should be an empty string")
-	assert.Equal(t, "", result.ModifiedBefore, "The default value for modified-before should be an empty string")
-	assert.Equal(t, "", result.ModifiedAfter, "The default value for modified-after should be an empty string")
+	assert.Empty(t, result.AfterDigest, "The default value for after-digest should be an empty string")
+	assert.Empty(t, result.ModifiedBefore, "The default value for modified-before should be an empty string")
+	assert.Empty(t, result.ModifiedAfter, "The default value for modified-after should be an empty string")
 	assert.Equal(t, int64(0), result.MaxRecords, "The default value for max-records should be 0")
 	assert.False(t, result.NoBins, "The default value for no-bins should be false")
 	assert.Equal(t, 5, result.SleepBetweenRetries, "The default value for sleep-between-retries should be 5")
-	assert.Equal(t, "", result.FilterExpression, "The default value for filter-exp should be an empty string")
-	assert.Equal(t, false, result.RemoveArtifacts, "The default value for remove-artifacts should be false")
-	assert.Equal(t, false, result.Compact, "The default value for compact should be false")
-	assert.Equal(t, "", result.NodeList, "The default value for node-list should be empty string")
-	assert.Equal(t, false, result.NoTTLOnly, "The default value for no-ttl-only should be false")
-	assert.Equal(t, "", result.PreferRacks, "The default value for prefer-racks should be empty string")
-	assert.Equal(t, "", result.RackList, "The default value for rack list should be empty string")
-	assert.Equal(t, "", result.PartitionList, "The default value for partition-list should be empty string")
+	assert.Empty(t, result.FilterExpression, "The default value for filter-exp should be an empty string")
+	assert.False(t, result.RemoveArtifacts, "The default value for remove-artifacts should be false")
+	assert.False(t, result.Compact, "The default value for compact should be false")
+	assert.Empty(t, result.NodeList, "The default value for node-list should be empty string")
+	assert.False(t, result.NoTTLOnly, "The default value for no-ttl-only should be false")
+	assert.Empty(t, result.PreferRacks, "The default value for prefer-racks should be empty string")
+	assert.Empty(t, result.RackList, "The default value for rack list should be empty string")
+	assert.Empty(t, result.PartitionList, "The default value for partition-list should be empty string")
 	assert.Equal(t, 5, result.MaxRetries, "The default value for max-retries should be 5")
 }

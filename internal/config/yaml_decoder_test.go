@@ -305,7 +305,7 @@ func TestDumpFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
-		params   interface{}
+		params   any
 		wantErr  string
 	}{
 		{
@@ -327,7 +327,7 @@ func TestDumpFile(t *testing.T) {
 		{
 			name:     "complex nested struct",
 			filename: "map_dump.yaml",
-			params: map[string]interface{}{
+			params: map[string]any{
 				"key1": "value1",
 				"key2": map[string]string{
 					"nested": "value",
@@ -359,7 +359,7 @@ func TestDumpFile(t *testing.T) {
 			// Verify file was created and contains data
 			info, err := os.Stat(tt.filename)
 			require.NoError(t, err)
-			require.True(t, info.Size() > 0)
+			require.Positive(t, info.Size())
 		})
 	}
 }

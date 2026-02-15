@@ -15,7 +15,6 @@
 package storage
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -97,7 +96,7 @@ func TestClients_newS3Client(t *testing.T) {
 	t.Parallel()
 
 	err := createAwsCredentials()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	cfg := &models.AwsS3{
 		Region:   testS3Region,
@@ -105,7 +104,7 @@ func TestClients_newS3Client(t *testing.T) {
 		Endpoint: testS3Endpoint,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err = newS3Client(ctx, cfg)
 	require.NoError(t, err)
 }
@@ -117,7 +116,7 @@ func TestClients_newGcpClient(t *testing.T) {
 		Endpoint: testGcpEndpoint,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err := newGcpClient(ctx, cfg)
 	require.NoError(t, err)
 }
@@ -229,11 +228,11 @@ func TestParseRacks(t *testing.T) {
 			result, err := appConfig.ParseRacks(tt.racks)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, result)
 				assert.Contains(t, err.Error(), tt.errorText)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})

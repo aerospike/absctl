@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestApp_NewFlagSet(t *testing.T) {
@@ -35,13 +36,13 @@ func TestApp_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.False(t, app.Help, "Help flag should default to false")
 	assert.True(t, app.Verbose, "Verbose flag should be true when set")
-	assert.Equal(t, app.LogLevel, "error", "Log level flag should be error")
+	assert.Equal(t, "error", app.LogLevel, "Log level flag should be error")
 	assert.True(t, app.LogJSON, "Log JSON flag should be true when set")
-	assert.Equal(t, app.ConfigFilePath, "config.yaml", "Config flag should be config.yaml")
+	assert.Equal(t, "config.yaml", app.ConfigFilePath, "Config flag should be config.yaml")
 }
 
 func TestApp_NewFlagSet_DefaultValues(t *testing.T) {
@@ -52,11 +53,11 @@ func TestApp_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := app.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.False(t, app.Help, "Help flag should default to false")
 	assert.False(t, app.Verbose, "Verbose flag should default to false")
-	assert.Equal(t, app.LogLevel, "debug", "Log level flag should default be debug")
+	assert.Equal(t, "debug", app.LogLevel, "Log level flag should default be debug")
 	assert.False(t, app.LogJSON, "Log JSON flag should default to false")
-	assert.Equal(t, app.ConfigFilePath, "", "Config flag should default should be empty string")
+	assert.Empty(t, app.ConfigFilePath, "Config flag should default should be empty string")
 }

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBackupXDR_NewFlagSet(t *testing.T) {
@@ -48,7 +49,7 @@ func TestBackupXDR_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := backupXDR.GetBackupXDR()
 
@@ -66,7 +67,7 @@ func TestBackupXDR_NewFlagSet(t *testing.T) {
 	assert.Equal(t, 512, result.AckQueueSize, "The ack-queue-size flag should be parsed correctly")
 	assert.Equal(t, 200, result.MaxConnections, "The max-connections flag should be parsed correctly")
 	assert.Equal(t, int64(2000), result.InfoPolingPeriodMilliseconds, "The info-poling-period flag should be parsed correctly")
-	assert.Equal(t, true, result.StopXDR, "The stop flag should be parsed correctly")
+	assert.True(t, result.StopXDR, "The stop flag should be parsed correctly")
 	assert.Equal(t, 1000, result.MaxThroughput, "The max-throughput flag should be parsed correctly")
 	assert.Equal(t, int64(1000), result.InfoTimeout, "The info-timeout flag should be parsed correctly")
 }
@@ -79,12 +80,12 @@ func TestBackupXDR_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := backupXDR.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := backupXDR.GetBackupXDR()
 
-	assert.Equal(t, "", result.Namespace, "The default value for namespace should be an empty string")
-	assert.Equal(t, "", result.Directory, "The default value for directory should be an empty string")
+	assert.Empty(t, result.Namespace, "The default value for namespace should be an empty string")
+	assert.Empty(t, result.Directory, "The default value for directory should be an empty string")
 	assert.Equal(t, uint64(250), result.FileLimit, "The default value for file-limit should be 250MB")
 	assert.Equal(t, 0, result.ParallelWrite, "The default value for parallel-write should be 0")
 	assert.Equal(t, "dc", result.DC, "The default value for dc should be 'dc'")
@@ -115,7 +116,7 @@ func TestBackupXDR_NewFlagSet_ShortFlags(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := backupXDR.GetBackupXDR()
 
@@ -150,7 +151,6 @@ func TestBackupXDR_NewFlagSet_InvalidValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

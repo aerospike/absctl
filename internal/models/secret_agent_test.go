@@ -144,7 +144,7 @@ func TestSecretAgent_Validate(t *testing.T) {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

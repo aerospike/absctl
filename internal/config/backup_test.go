@@ -701,7 +701,7 @@ func TestNewBackupConfigs_InvalidModifiedBefore(t *testing.T) {
 
 	_, _, err := NewBackupConfigs(serviceConfig, logger)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified before date")
 }
 
@@ -720,7 +720,7 @@ func TestNewBackupConfigs_InvalidModifiedAfter(t *testing.T) {
 
 	_, _, err := NewBackupConfigs(serviceConfig, logger)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified after date")
 }
 

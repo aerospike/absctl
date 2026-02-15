@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSecretAgent_NewFlagSet(t *testing.T) {
@@ -41,7 +42,7 @@ func TestSecretAgent_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := secretAgent.GetSecretAgent()
 
@@ -64,7 +65,7 @@ func TestSecretAgent_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := secretAgent.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := secretAgent.GetSecretAgent()
 

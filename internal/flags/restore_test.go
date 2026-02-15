@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRestore_NewFlagSet(t *testing.T) {
@@ -42,7 +43,7 @@ func TestRestore_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := restore.GetRestore()
 
@@ -55,8 +56,8 @@ func TestRestore_NewFlagSet(t *testing.T) {
 	assert.Equal(t, "dir1,dir2", result.DirectoryList, "The directory-list flag should be parsed correctly")
 	assert.Equal(t, "parent-dir", result.ParentDirectory, "The parent-directory flag should be parsed correctly")
 	assert.Equal(t, 10, result.WarmUp, "The warm-up flag should be parsed correctly")
-	assert.Equal(t, true, result.ValidateOnly, "The validate flag should be parsed correctly")
-	assert.Equal(t, true, result.ApplyMetadataLast, "The apply-metadata-last flag should be parsed correctly")
+	assert.True(t, result.ValidateOnly, "The validate flag should be parsed correctly")
+	assert.True(t, result.ApplyMetadataLast, "The apply-metadata-last flag should be parsed correctly")
 }
 
 func TestRestore_NewFlagSet_DefaultValues(t *testing.T) {
@@ -67,20 +68,20 @@ func TestRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := restore.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := restore.GetRestore()
 
 	// Verify default values
-	assert.Equal(t, "", result.InputFile, "The default value for input-file should be an empty string")
+	assert.Empty(t, result.InputFile, "The default value for input-file should be an empty string")
 	assert.False(t, result.IgnoreRecordError, "The default value for ignore-record-error should be false")
 	assert.False(t, result.DisableBatchWrites, "The default value for disable-batch-writes should be false")
 	assert.Equal(t, 32, result.MaxAsyncBatches, "The default value for max-async-batches should be 32")
 	assert.Equal(t, 128, result.BatchSize, "The default value for batch-size should be 128")
 	assert.Equal(t, int64(0), result.ExtraTTL, "The default value for extra-ttl should be 0")
-	assert.Equal(t, "", result.DirectoryList, "The directory-list flag should be an empty string")
-	assert.Equal(t, "", result.ParentDirectory, "The parent-directory flag should be an empty string")
+	assert.Empty(t, result.DirectoryList, "The directory-list flag should be an empty string")
+	assert.Empty(t, result.ParentDirectory, "The parent-directory flag should be an empty string")
 	assert.Equal(t, 0, result.WarmUp, "The warm-up flag should be 0")
-	assert.Equal(t, false, result.ValidateOnly, "The validate flag should be false")
-	assert.Equal(t, false, result.ApplyMetadataLast, "The default value for apply-metadata-last should be false")
+	assert.False(t, result.ValidateOnly, "The validate flag should be false")
+	assert.False(t, result.ApplyMetadataLast, "The default value for apply-metadata-last should be false")
 }

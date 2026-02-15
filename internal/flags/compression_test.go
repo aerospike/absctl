@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompression_NewFlagSet(t *testing.T) {
@@ -33,7 +34,7 @@ func TestCompression_NewFlagSet(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := compression.GetCompression()
 
@@ -49,7 +50,7 @@ func TestCompression_NewFlagSet_DefaultValues(t *testing.T) {
 	flagSet := compression.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := compression.GetCompression()
 

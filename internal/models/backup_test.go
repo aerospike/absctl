@@ -295,10 +295,10 @@ func TestValidateBackup(t *testing.T) {
 
 			err := tt.backup.Validate()
 			if tt.wantErr {
-				assert.Error(t, err, "Expected error but got none")
+				require.Error(t, err, "Expected error but got none")
 				assert.Equal(t, tt.expectedErr, err.Error())
 			} else {
-				assert.NoError(t, err, "Expected no error but got one")
+				require.NoError(t, err, "Expected no error but got one")
 			}
 		})
 	}
@@ -426,12 +426,12 @@ func TestBackup_validateSingleFilter(t *testing.T) {
 			err := tt.backup.validateSingleFilter()
 
 			if tt.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

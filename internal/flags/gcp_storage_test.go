@@ -19,6 +19,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGcpStorage_NewFlagSetBackup(t *testing.T) {
@@ -42,7 +43,7 @@ func TestGcpStorage_NewFlagSetBackup(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := gcpStorage.GetGcpStorage()
 
@@ -53,7 +54,7 @@ func TestGcpStorage_NewFlagSetBackup(t *testing.T) {
 	assert.Equal(t, 10, result.RetryMaxAttempts, "The gcp-retry-max-attempts flag should be parsed correctly")
 	assert.Equal(t, 10, result.RetryBackoffMax, "The gcp-retry-max-backoff flag should be parsed correctly")
 	assert.Equal(t, 10, result.RetryBackoffInit, "The gcp-retry-init-backoff flag should be parsed correctly")
-	assert.Equal(t, float64(10), result.RetryBackoffMultiplier, "The gcp-retry-backoff-multiplier flag should be parsed correctly")
+	assert.InEpsilon(t, float64(10), result.RetryBackoffMultiplier, 0.0, "The gcp-retry-backoff-multiplier flag should be parsed correctly")
 	assert.Equal(t, 10, result.MaxConnsPerHost, "The gcp-max-conns-per-host flag should be parsed correctly")
 	assert.Equal(t, 10, result.RequestTimeout, "The gcp-request-timeout flag should be parsed correctly")
 }
@@ -72,12 +73,12 @@ func TestGcpStorage_NewFlagSetRestore(t *testing.T) {
 	}
 
 	err := flagSet.Parse(args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := gcpStorage.GetGcpStorage()
 
 	assert.Equal(t, 900, result.RetryReadBackoff, "The gcp-retry-read-backoff flag should be parsed correctly")
-	assert.Equal(t, 1.5, result.RetryReadMultiplier, "The gcp-retry-read-multiplier flag should be parsed correctly")
+	assert.InEpsilon(t, 1.5, result.RetryReadMultiplier, 0.0, "The gcp-retry-read-multiplier flag should be parsed correctly")
 	assert.Equal(t, uint(5), result.RetryReadMaxAttempts, "The gcp-retry-read-max-attempts flag should be parsed correctly")
 }
 
@@ -89,18 +90,18 @@ func TestGcpStorage_NewFlagSet_DefaultValuesBackup(t *testing.T) {
 	flagSet := gcpStorage.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := gcpStorage.GetGcpStorage()
 
-	assert.Equal(t, "", result.KeyFile, "The default value for gcp-key-path should be an empty string")
-	assert.Equal(t, "", result.BucketName, "The default value for gcp-bucket-name should be an empty string")
-	assert.Equal(t, "", result.Endpoint, "The default value for gcp-endpoint-override should be an empty string")
+	assert.Empty(t, result.KeyFile, "The default value for gcp-key-path should be an empty string")
+	assert.Empty(t, result.BucketName, "The default value for gcp-bucket-name should be an empty string")
+	assert.Empty(t, result.Endpoint, "The default value for gcp-endpoint-override should be an empty string")
 	assert.Equal(t, models.DefaultGcpChunkSize, result.ChunkSize, "The default value for gcp-chunk-size should be 5MB")
 	assert.Equal(t, models.DefaultGcpRetryMaxAttempts, result.RetryMaxAttempts, "The default value for gcp-retry-max-attempts should be 100")
 	assert.Equal(t, models.DefaultGcpRetryBackoffMax, result.RetryBackoffMax, "The default value for gcp-retry-max-backoff should be 90")
 	assert.Equal(t, models.DefaultGcpRetryBackoffInit, result.RetryBackoffInit, "The default value for gcp-retry-init-backoff should be 60")
-	assert.Equal(t, models.DefaultGcpRetryBackoffMultiplier, result.RetryBackoffMultiplier, "The default value for gcp-retry-backoff-multiplier should be 2")
+	assert.InEpsilon(t, models.DefaultGcpRetryBackoffMultiplier, result.RetryBackoffMultiplier, 0.0, "The default value for gcp-retry-backoff-multiplier should be 2")
 	assert.Equal(t, models.DefaultCloudMaxConnsPerHost, result.MaxConnsPerHost, "The default value for gcp-max-conns-per-host should be 0")
 	assert.Equal(t, models.DefaultCloudRequestTimeout, result.RequestTimeout, "The default value for gcp-request-timeout should be 0")
 }
@@ -113,11 +114,11 @@ func TestGcpStorage_NewFlagSet_DefaultValuesRestore(t *testing.T) {
 	flagSet := gcpStorage.NewFlagSet()
 
 	err := flagSet.Parse([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result := gcpStorage.GetGcpStorage()
 
 	assert.Equal(t, models.DefaultCloudRetryReadBackoff, result.RetryReadBackoff, "The default value for gcp-retry-read-backoff should be 0")
-	assert.Equal(t, models.DefaultCloudRetryReadMultiplier, result.RetryReadMultiplier, "The default value for gcp-retry-read-multiplier should be 0")
+	assert.InEpsilon(t, models.DefaultCloudRetryReadMultiplier, result.RetryReadMultiplier, 0.0, "The default value for gcp-retry-read-multiplier should be 0")
 	assert.Equal(t, models.DefaultCloudRetryReadMaxAttempts, result.RetryReadMaxAttempts, "The default value for gcp-retry-read-max-attempts should be 0")
 }

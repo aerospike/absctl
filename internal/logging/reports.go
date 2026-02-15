@@ -75,6 +75,7 @@ func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger
 	}
 
 	logger.Info(strings.ToLower(headerBackupReport),
+		//nolint:sloglint // Changing key names is a breaking change. Postponed for now, it will be renamed to camelcase.
 		slog.Time("start_time", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
 		slog.Uint64(recordsMetric, stats.GetReadRecords()),
@@ -192,6 +193,7 @@ func printEstimateReport(estimate uint64) {
 
 func logEstimateReport(estimate uint64, logger *slog.Logger) {
 	logger.Info(strings.ToLower(headerEstimateReport),
+		//nolint:sloglint // Changing key names is a breaking change. Postponed for now, it will be renamed to camelcase.
 		slog.Uint64("file_size_bytes", estimate),
 	)
 }

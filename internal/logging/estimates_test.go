@@ -17,7 +17,6 @@ package logging
 import (
 	"bytes"
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -82,7 +81,7 @@ func TestCalculateEstimatedEndTime(t *testing.T) {
 func TestPrintBackupEstimate(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	stats := models.NewBackupStats()
@@ -90,7 +89,7 @@ func TestPrintBackupEstimate(t *testing.T) {
 	stats.TotalRecords.Add(100)
 	stats.ReadRecords.Add(50)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+	logger := slog.New(slog.DiscardHandler)
 
 	gm := func() *models.Metrics {
 		return &models.Metrics{
@@ -116,7 +115,7 @@ func TestPrintBackupEstimate(t *testing.T) {
 func TestPrintRestoreEstimate(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	stats := models.NewRestoreStats()
@@ -125,7 +124,7 @@ func TestPrintRestoreEstimate(t *testing.T) {
 	stats.RecordsSkipped.Add(1)
 	stats.IncrRecordsExisted()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+	logger := slog.New(slog.DiscardHandler)
 
 	gm := func() *models.Metrics {
 		return &models.Metrics{
@@ -331,11 +330,11 @@ func TestPrintBackupEstimateExtended(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), tt.contextTimeout)
+			ctx, cancel := context.WithTimeout(t.Context(), tt.contextTimeout)
 			defer cancel()
 
 			stats := tt.setupStats()
-			logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+			logger := slog.New(slog.DiscardHandler)
 
 			done := make(chan struct{})
 
@@ -449,11 +448,11 @@ func TestPrintRestoreEstimateExtended(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), tt.contextTimeout)
+			ctx, cancel := context.WithTimeout(t.Context(), tt.contextTimeout)
 			defer cancel()
 
 			stats := tt.setupStats()
-			logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+			logger := slog.New(slog.DiscardHandler)
 
 			done := make(chan struct{})
 
@@ -479,13 +478,13 @@ func TestPrintRestoreEstimateExtended(t *testing.T) {
 func TestPrintFilesNumberContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	getNumber := func() int64 {
 		return 0 // Always return 0 to keep looping
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(slog.DiscardHandler)
 
 	done := make(chan struct{})
 
@@ -564,7 +563,7 @@ func TestPrintFilesNumber(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, cancel := context.WithTimeout(context.Background(), tt.contextTimeout)
+			ctx, cancel := context.WithTimeout(t.Context(), tt.contextTimeout)
 			defer cancel()
 
 			var buf bytes.Buffer

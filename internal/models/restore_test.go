@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateRestore(t *testing.T) {
@@ -116,13 +117,13 @@ func TestValidateRestore(t *testing.T) {
 
 			err := tt.restore.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 
 				if tt.errMsg != "" {
 					assert.Equal(t, tt.errMsg, err.Error())
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
