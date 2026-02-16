@@ -298,14 +298,22 @@ func TestValidateBackup(t *testing.T) {
 			expectedErr: "continue and remove-files are mutually exclusive, as remove-files will delete the backup files",
 		},
 		{
-			name: "Continue and remove file",
+			name: "Max-records set with parallel > 1",
 			backup: &Backup{
 				OutputFile: testFile,
 				MaxRecords: 10,
 				Common:     Common{Parallel: 10},
 			},
 			wantErr:     true,
-			expectedErr: "max-records can't be used with parallel > 1",
+			expectedErr: "max-records must be used with parallel = 1",
+		},
+		{
+			name: "Max-records valid",
+			backup: &Backup{
+				OutputFile: testFile,
+				MaxRecords: 10,
+				Common:     Common{Namespace: testNamespace, Parallel: 1},
+			},
 		},
 	}
 

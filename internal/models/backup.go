@@ -94,7 +94,7 @@ func (b *Backup) Validate() error {
 	}
 
 	if b.MaxRecords != 0 && b.Parallel != 1 {
-		return fmt.Errorf("max-records can't be used with parallel > 1")
+		return fmt.Errorf("max-records must be used with parallel = 1")
 	}
 
 	if b.Estimate {
