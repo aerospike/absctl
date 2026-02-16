@@ -15,7 +15,7 @@ As `absctl backup` identifies records for backup, it serializes the data into a 
 
 - `absctl backup` requires read privileges or higher. See [Configuring Access Control in EE and FE](https://aerospike.com/docs/database/manage/security/rbac/#privileges) for more information.
 - Direct backups are supported to S3, Azure, GCP, or you can use other services for storing the backup files after creating them locally.
-- ZSTD is the only compression algorithm available with `absctl backup`. 
+- ZSTD is the only compression algorithm available with `absctl backup`.
 - At compression levels 1–2, ZSTD may produce uncompressed (raw) blocks when the algorithm determines that compression would not reduce the data size, as per RFC 8878, which recommends sending uncompressed blocks when the compressed output would be larger than the original.
 
 ## Default backup content
@@ -56,27 +56,27 @@ Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                           The Aerospike host. (default 127.0.0.1)
   -p, --port int                                                                                    The default Aerospike port. (default 3000)
   -U, --user string                                                                                 The Aerospike user for the connection to the Aerospike cluster.
-  -P, --password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"                   The Aerospike password for the connection to the Aerospike 
+  -P, --password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"                   The Aerospike password for the connection to the Aerospike
                                                                                                     cluster.
-      --auth INTERNAL,EXTERNAL,PKI                                                                  The authentication mode used by the Aerospike server. INTERNAL 
-                                                                                                    uses standard user/pass. EXTERNAL uses external methods (like LDAP) 
-                                                                                                    which are configured on the server. EXTERNAL requires TLS. PKI allows 
-                                                                                                    TLS authentication and authorization based on a certificate. No 
+      --auth INTERNAL,EXTERNAL,PKI                                                                  The authentication mode used by the Aerospike server. INTERNAL
+                                                                                                    uses standard user/pass. EXTERNAL uses external methods (like LDAP)
+                                                                                                    which are configured on the server. EXTERNAL requires TLS. PKI allows
+                                                                                                    TLS authentication and authorization based on a certificate. No
                                                                                                     username needs to be configured. (default INTERNAL)
-      --tls-enable                                                                                  Enable TLS authentication with Aerospike. If false, other TLS 
+      --tls-enable                                                                                  Enable TLS authentication with Aerospike. If false, other TLS
                                                                                                     options are ignored.
-      --tls-name string                                                                             The server TLS context to use to authenticate the connection to 
+      --tls-name string                                                                             The server TLS context to use to authenticate the connection to
                                                                                                     Aerospike.
       --tls-cafile env-b64:<cert>,b64:<cert>,<cert-file-name>                                       The CA used when connecting to Aerospike.
       --tls-capath <cert-path-name>                                                                 A path containing CAs for connecting to Aerospike.
-      --tls-certfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                     The certificate file for mutual TLS authentication with 
+      --tls-certfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                     The certificate file for mutual TLS authentication with
                                                                                                     Aerospike.
       --tls-keyfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                      The key file used for mutual TLS authentication with Aerospike.
       --tls-keyfile-password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"       The password used to decrypt the key file if encrypted.
-      --tls-protocols "[[+][-]all] [[+][-]TLSv1] [[+][-]TLSv1.1] [[+][-]TLSv1.2] [[+][-]TLSv1.3]"   Set the TLS protocol selection criteria. This format is the same 
-                                                                                                    as Apache's SSLProtocol documented at 
+      --tls-protocols "[[+][-]all] [[+][-]TLSv1] [[+][-]TLSv1.1] [[+][-]TLSv1.2] [[+][-]TLSv1.3]"   Set the TLS protocol selection criteria. This format is the same
+                                                                                                    as Apache's SSLProtocol documented at
                                                                                                     https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol (default +TLSv1.2)
-      --services-alternate                                                                          Determines if the client should use "services-alternate" instead 
+      --services-alternate                                                                          Determines if the client should use "services-alternate" instead
                                                                                                     of "services" in info request during cluster tending.
       --client-timeout int         Initial host connection timeout duration. The timeout when opening a connection
                                    to the server host for the first time. (default 30000)
@@ -90,7 +90,7 @@ Aerospike Client Flags:
                                    Connection pools are now implemented by a LIFO stack. Connections at the tail of the
                                    stack will always be the least used. These connections are checked for IdleTimeout
                                    on every tend (usually 1 second).
-                                   
+
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Backup Flags:
@@ -112,7 +112,7 @@ Backup Flags:
                                       filter cannot be parallelized individually, so you may only achieve as much parallelism as there are
                                       partition filters. Accepts values from 1-1024 inclusive. (default 1)
   -L, --records-per-second int        Limit total returned records per second (RPS). If 0, no limit is applied.
-      --total-timeout int             Total transaction timeout (in ms). If 0, no timeout is applied. 
+      --total-timeout int             Total transaction timeout (in ms). If 0, no timeout is applied.
       --socket-timeout int            Socket timeout (in ms). If 0, the value for --total-timeout is used.
                                       If both this and --total-timeout are 0, there is no socket idle time limit. (default 10000)
       --nice int                      The limits for read/write storage bandwidth in MiB/s.
@@ -132,7 +132,7 @@ Backup Flags:
   -o, --output-file string          Backup to a single backup file. Use '-' for stdout. Required, unless -d or -e is used.
                                     --file-limit will be ignored if this parameter is used.
   -q, --output-file-prefix string   When using directory parameter, prepend a prefix to the names of the generated files.
-                                    Not applicable when --output-file is used. 
+                                    Not applicable when --output-file is used.
   -F, --file-limit uint             Rotate backup files when their size crosses the given
                                     value (in MiB). Only used when backing up to a directory.
                                      (default 250)
@@ -145,21 +145,21 @@ Backup Flags:
                                     This argument is mutually exclusive with partition-list.
                                     Format: Base64 encoded string
                                     Example: EjRWeJq83vEjRRI0VniavN7xI0U=
-                                    
+
   -a, --modified-after string       <YYYY-MM-DD_HH:MM:SS>
-                                    Perform an incremental backup; only include records 
-                                    that changed after the given date and time. The system's 
+                                    Perform an incremental backup; only include records
+                                    that changed after the given date and time. The system's
                                     local timezone applies. If only HH:MM:SS is specified, then
-                                    today's date is assumed as the date. If only YYYY-MM-DD is 
+                                    today's date is assumed as the date. If only YYYY-MM-DD is
                                     specified, then 00:00:00 (midnight) is assumed as the time.
-                                    
+
   -b, --modified-before string      <YYYY-MM-DD_HH:MM:SS>
                                     Only include records that last changed before the given
                                     date and time. May combined with --modified-after to specify a range.
   -f, --filter-exp string           Base64 encoded filter expression. Use the encoded filter expression in each scan call,
-                                    which can be used to do a partial backup. The expression to be used can be Base64 
+                                    which can be used to do a partial backup. The expression to be used can be Base64
                                     encoded through any client. This argument is mutually exclusive with multi-set backup.
-                                    
+
   -l, --node-list string            <addr 1>:<port 1>[,<addr 2>:<port 2>[,...]]
                                     <node name 1>[,<node name 2>[,...]]
                                     To get the correct node address, use the info command 'service-tls-std' if the database is configured to use TLS
@@ -179,7 +179,7 @@ Backup Flags:
                                     digest: Base64 encoded string
                                     Examples: 0-1000, 1000-1000, 2222, EjRWeJq83vEjRRI0VniavN7xI0U=
                                     Default: 0-4096 (all partitions)
-                                    
+
       --prefer-racks string         <rack id 1>[,<rack id 2>[,...]]
                                     A list of Aerospike Database rack IDs to prefer when reading records for a backup.
                                     This argument is mutually exclusive with --rack-list and --node-list.
@@ -188,11 +188,12 @@ Backup Flags:
                                     Unlike --prefer-racks, only specified racks will be backed up.
                                     This argument is mutually exclusive with --prefer-racks and --node-list.
   -M, --max-records int             The number of records approximately to back up. 0 - all records
+                                    To use this argument, --parallel must be set to 1.
       --sleep-between-retries int   The amount of milliseconds to sleep between retries after an error.
                                     This field is ignored when --max-retries is zero. (default 5)
   -C, --compact                     If true, do not apply Base64 encoding to BLOBs and instead write raw binary data,
                                     resulting in smaller backup files.
-  -e, --estimate                    Estimate the backed-up record size from a random sample of 
+  -e, --estimate                    Estimate the backed-up record size from a random sample of
                                     10,000 (default) records at 99.9999% confidence to estimate the full backup size.
                                     It ignores any filter:  --filter-exp, --node-list, --modified-after, --modified-before, --no-ttl-only,
                                     --after-digest, --partition-list.
@@ -228,7 +229,7 @@ Options pertaining to the Aerospike Secret Agent.
 See documentation here: https://aerospike.com/docs/tools/secret-agent.
 Both backup and restore commands support getting all the cloud configuration parameters
 from the Aerospike Secret Agent.
-To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' 
+To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
 Example: absctl backup --azure-account-name secret:resource1:azaccount
       --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
@@ -313,7 +314,7 @@ Azure Storage Flags:
 For Azure storage, the container name must be set with --azure-container-name flag.
 --directory path will only contain folder name.
 The flag --azure-endpoint is also mandatory, as each storage account has different service address.
-For authentication, use --azure-account-name and --azure-account-key, or 
+For authentication, use --azure-account-name and --azure-account-key, or
 --azure-tenant-id, --azure-client-id and --azure-client-secret.
 Any Azure parameter can be retrieved from Secret Agent.
       --azure-account-name string      Azure account name for account name, key authorization.
@@ -354,7 +355,7 @@ Any Azure parameter can be retrieved from Secret Agent.
 
 --instance          Section with these instance is read. e.g in case instance `a` is specified
                     sections cluster_a, asbackup_a is read.
-  
+
 --only-config-file  Read only this configuration file.
 
 --s3-max-async-downloads    The maximum number of simultaneous download requests from S3.
@@ -509,10 +510,10 @@ backup:
   # Example: EjRWeJq83vEjRRI0VniavN7xI0U=
   after-digest: ""
   # <YYYY-MM-DD_HH:MM:SS>
-  # Perform an incremental backup; only include records 
-  # that changed after the given date and time. The system's 
+  # Perform an incremental backup; only include records
+  # that changed after the given date and time. The system's
   # local timezone applies. If only HH:MM:SS is specified, then
-  # today's date is assumed as the date. If only YYYY-MM-DD is 
+  # today's date is assumed as the date. If only YYYY-MM-DD is
   # specified, then 00:00:00 (midnight) is assumed as the time.
   modified-after: ""
   # <YYYY-MM-DD_HH:MM:SS>
@@ -520,7 +521,7 @@ backup:
   # date and time. May combined with modified-after to specify a range.
   modified-before: ""
   # Base64 encoded filter expression. Use the encoded filter expression in each scan call,
-  # which can be used to do a partial backup. The expression to be used can be Base64 
+  # which can be used to do a partial backup. The expression to be used can be Base64
   # encoded through any client. This argument is mutually exclusive with multi-set backup.
   filter-exp: ""
 
@@ -561,6 +562,7 @@ backup:
   rack-list:
     - "1"
   # The number of records approximately to back up. 0 - all records
+  # To use this argument, parallel must be set to 1.
   max-records: 0
   # The amount of milliseconds to sleep between retries after an error.
   # This field is ignored when max-retries is zero.
@@ -568,7 +570,7 @@ backup:
   # If true, do not apply Base64 encoding to BLOBs and instead write raw binary data,
   # resulting in smaller backup files.
   compact: false
-  # Estimate the backed-up record size from a random sample of 
+  # Estimate the backed-up record size from a random sample of
   # 10,000 (default) records at 99.9999% confidence to estimate the full backup size.
   # It ignores any filter:  filter-exp, node-list, modified-after, modified-before, no-ttl-only,
   # after-digest, partition-list.
@@ -678,7 +680,7 @@ aws:
     # the storage in a single request. Objects smaller than the size will be sent in a single request,
     # while larger objects will be split over multiple requests.
     chunk-size: 5
-    # Defines the max number of concurrent uploads to be performed to upload the file. 
+    # Defines the max number of concurrent uploads to be performed to upload the file.
     # Each concurrent upload will create a buffer of size s3-chunk-size.
     upload-concurrency: 3
     # Calculate checksum for each uploaded object.

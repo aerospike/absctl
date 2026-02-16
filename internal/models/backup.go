@@ -93,6 +93,10 @@ func (b *Backup) Validate() error {
 		return fmt.Errorf("continue and remove-files are mutually exclusive, as remove-files will delete the backup files")
 	}
 
+	if b.MaxRecords != 0 && b.Parallel != 1 {
+		return fmt.Errorf("max-records must be used with parallel = 1")
+	}
+
 	if b.Estimate {
 		// Estimate with filter not allowed.
 		if b.PartitionList != "" ||

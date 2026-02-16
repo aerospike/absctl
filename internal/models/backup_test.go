@@ -287,6 +287,34 @@ func TestValidateBackup(t *testing.T) {
 			wantErr:     true,
 			expectedErr: "using output-file-prefix is not allowed with output-file",
 		},
+		{
+			name: "Continue and remove file",
+			backup: &Backup{
+				OutputFile:  testFile,
+				Continue:    testFile,
+				RemoveFiles: true,
+			},
+			wantErr:     true,
+			expectedErr: "continue and remove-files are mutually exclusive, as remove-files will delete the backup files",
+		},
+		{
+			name: "Max-records set with parallel > 1",
+			backup: &Backup{
+				OutputFile: testFile,
+				MaxRecords: 10,
+				Common:     Common{Parallel: 10},
+			},
+			wantErr:     true,
+			expectedErr: "max-records must be used with parallel = 1",
+		},
+		{
+			name: "Max-records valid",
+			backup: &Backup{
+				OutputFile: testFile,
+				MaxRecords: 10,
+				Common:     Common{Namespace: testNamespace, Parallel: 1},
+			},
+		},
 	}
 
 	for _, tt := range tests {

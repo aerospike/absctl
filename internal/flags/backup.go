@@ -135,7 +135,8 @@ func (f *Backup) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.Int64VarP(&f.MaxRecords, "max-records", "M",
 		models.DefaultBackupMaxRecords,
-		"The number of records approximately to back up. 0 - all records")
+		"The number of records approximately to back up. 0 - all records.\n"+
+			"To use this argument, --parallel must be set to 1.")
 
 	flagSet.IntVar(&f.SleepBetweenRetries, "sleep-between-retries",
 		models.DefaultBackupSleepBetweenRetries,
