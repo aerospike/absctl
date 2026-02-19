@@ -53,7 +53,7 @@ type Service struct {
 	isEstimate       bool
 	estimatesSamples int64
 
-	 reportToLog bool
+	reportToLog bool
 
 	logger *slog.Logger
 }
