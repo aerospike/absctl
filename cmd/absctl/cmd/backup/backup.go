@@ -195,10 +195,23 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init logger.
-	logger, err := logging.NewLogger(serviceConfig.App.LogLevel, serviceConfig.App.Verbose, serviceConfig.App.LogJSON)
+	loggerConf := logging.NewConfig(
+		serviceConfig.App.Verbose,
+		serviceConfig.App.LogJSON,
+		serviceConfig.App.LogLevel,
+		serviceConfig.App.LogFile,
+	)
+
+	logger, loggerClose, err := logging.NewLogger(loggerConf)
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
+
+	defer func() {
+		if err := loggerClose(); err != nil {
+			log.Printf("failed to close logger: %v", err)
+		}
+	}()
 	// After initialization replace logger.
 	c.Logger = logger
 

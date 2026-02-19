@@ -42,7 +42,7 @@ func TestCluster_ToAerospikeConfig(t *testing.T) {
 
 	t.Run("error in auth propagates", func(t *testing.T) {
 		c := &Cluster{
-			Auth: stringPtr("INVALID_AUTH_MODE"),
+			Auth: new("INVALID_AUTH_MODE"),
 		}
 
 		cfg, err := c.ToAerospikeConfig()
@@ -55,8 +55,8 @@ func TestCluster_ToAerospikeConfig(t *testing.T) {
 	t.Run("error in TLS propagates", func(t *testing.T) {
 		c := &Cluster{
 			TLS: &ClusterTLS{
-				Enable:    boolPtr(true),
-				Protocols: stringPtr("InvalidProtocol"),
+				Enable:    new(true),
+				Protocols: new("InvalidProtocol"),
 			},
 		}
 
@@ -69,7 +69,7 @@ func TestCluster_ToAerospikeConfig(t *testing.T) {
 
 	t.Run("service alternate is applied", func(t *testing.T) {
 		c := &Cluster{
-			ServiceAlternate: boolPtr(true),
+			ServiceAlternate: new(true),
 		}
 
 		cfg, err := c.ToAerospikeConfig()
@@ -101,7 +101,7 @@ func TestCluster_applySeeds(t *testing.T) {
 	t.Run("single seed with host only", func(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
-				{Host: stringPtr("192.168.1.1")},
+				{Host: new("192.168.1.1")},
 			},
 		}
 		var f flags.AerospikeFlags
@@ -117,8 +117,8 @@ func TestCluster_applySeeds(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
 				{
-					Host: stringPtr("192.168.1.1"),
-					Port: intPtr(3000),
+					Host: new("192.168.1.1"),
+					Port: new(3000),
 				},
 			},
 		}
@@ -134,9 +134,9 @@ func TestCluster_applySeeds(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
 				{
-					Host:    stringPtr("192.168.1.1"),
-					Port:    intPtr(3000),
-					TLSName: stringPtr("tls-name"),
+					Host:    new("192.168.1.1"),
+					Port:    new(3000),
+					TLSName: new("tls-name"),
 				},
 			},
 		}
@@ -152,17 +152,17 @@ func TestCluster_applySeeds(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
 				{
-					Host: stringPtr("192.168.1.1"),
-					Port: intPtr(3000),
+					Host: new("192.168.1.1"),
+					Port: new(3000),
 				},
 				{
-					Host: stringPtr("192.168.1.2"),
-					Port: intPtr(3001),
+					Host: new("192.168.1.2"),
+					Port: new(3001),
 				},
 				{
-					Host:    stringPtr("192.168.1.3"),
-					Port:    intPtr(3002),
-					TLSName: stringPtr("tls-name"),
+					Host:    new("192.168.1.3"),
+					Port:    new(3002),
+					TLSName: new("tls-name"),
 				},
 			},
 		}
@@ -178,9 +178,9 @@ func TestCluster_applySeeds(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
 				{
-					Host:    stringPtr("192.168.1.1"),
-					Port:    intPtr(3000),
-					TLSName: stringPtr(""),
+					Host:    new("192.168.1.1"),
+					Port:    new(3000),
+					TLSName: new(""),
 				},
 			},
 		}
@@ -196,8 +196,8 @@ func TestCluster_applySeeds(t *testing.T) {
 		c := &Cluster{
 			Seeds: []ClusterSeed{
 				{
-					Host: stringPtr("192.168.1.1"),
-					Port: intPtr(0),
+					Host: new("192.168.1.1"),
+					Port: new(0),
 				},
 			},
 		}
@@ -239,7 +239,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("user only", func(t *testing.T) {
 		c := &Cluster{
-			User: stringPtr("admin"),
+			User: new("admin"),
 		}
 		var f flags.AerospikeFlags
 
@@ -251,8 +251,8 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("user and password", func(t *testing.T) {
 		c := &Cluster{
-			User:     stringPtr("admin"),
-			Password: stringPtr("password123"),
+			User:     new("admin"),
+			Password: new("password123"),
 		}
 		var f flags.AerospikeFlags
 
@@ -265,9 +265,9 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("user, password and auth mode", func(t *testing.T) {
 		c := &Cluster{
-			User:     stringPtr("admin"),
-			Password: stringPtr("password123"),
-			Auth:     stringPtr("INTERNAL"),
+			User:     new("admin"),
+			Password: new("password123"),
+			Auth:     new("INTERNAL"),
 		}
 		var f flags.AerospikeFlags
 
@@ -281,7 +281,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("empty user is ignored", func(t *testing.T) {
 		c := &Cluster{
-			User: stringPtr(""),
+			User: new(""),
 		}
 		var f flags.AerospikeFlags
 
@@ -293,7 +293,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("empty password is ignored", func(t *testing.T) {
 		c := &Cluster{
-			Password: stringPtr(""),
+			Password: new(""),
 		}
 		var f flags.AerospikeFlags
 
@@ -304,7 +304,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("empty auth mode is ignored", func(t *testing.T) {
 		c := &Cluster{
-			Auth: stringPtr(""),
+			Auth: new(""),
 		}
 		var f flags.AerospikeFlags
 
@@ -315,7 +315,7 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 
 	t.Run("invalid auth mode returns error", func(t *testing.T) {
 		c := &Cluster{
-			Auth: stringPtr("INVALID_MODE"),
+			Auth: new("INVALID_MODE"),
 		}
 		var f flags.AerospikeFlags
 

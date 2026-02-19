@@ -20,6 +20,7 @@ const (
 	DefaultAppVersion        = false
 	DefaultAppVerbose        = false
 	DefaultAppLogLevel       = "debug"
+	DefaultAppLogFile        = ""
 	DefaultAppLogJSON        = false
 	DefaultAppConfigFilePath = ""
 )

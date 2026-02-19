@@ -52,7 +52,7 @@ func (a *App) ToModelApp() *models.App {
 type Cluster struct {
 	Seeds              []ClusterSeed `yaml:"seeds"`
 	User               *string       `yaml:"user"`
-	Password           *string       `yaml:"password"`
+	Password           *string       `yaml:"password"` // #nosec G117
 	Auth               *string       `yaml:"auth"`
 	ClientTimeout      *int64        `yaml:"client-timeout"`
 	ClientIdleTimeout  *int64        `yaml:"client-idle-timeout"`
@@ -71,7 +71,7 @@ func defaultClusterSeed() *ClusterSeed {
 	return &ClusterSeed{
 		Host:    stringPtr(flags.DefaultIPv4),
 		Port:    intPtr(flags.DefaultPort),
-		TLSName: stringPtr(""),
+		TLSName: new(""),
 	}
 }
 
@@ -89,13 +89,13 @@ func defaultClusterTLS() *ClusterTLS {
 	flag := flags.NewDefaultTLSProtocolsFlag()
 
 	return &ClusterTLS{
-		Enable:          boolPtr(false),
-		Protocols:       stringPtr(flag.String()),
-		CaFile:          stringPtr(""),
-		CaPath:          stringPtr(""),
-		CertFile:        stringPtr(""),
-		KeyFile:         stringPtr(""),
-		KeyFilePassword: stringPtr(""),
+		Enable:          new(false),
+		Protocols:       new(flag.String()),
+		CaFile:          new(""),
+		CaPath:          new(""),
+		CertFile:        new(""),
+		KeyFile:         new(""),
+		KeyFilePassword: new(""),
 	}
 }
 
@@ -103,13 +103,13 @@ func defaultCluster() Cluster {
 	return Cluster{
 		Seeds:              []ClusterSeed{*defaultClusterSeed()},
 		TLS:                defaultClusterTLS(),
-		User:               stringPtr(""),
-		Password:           stringPtr(""),
-		Auth:               stringPtr("INTERNAL"),
+		User:               new(""),
+		Password:           new(""),
+		Auth:               new("INTERNAL"),
 		ClientTimeout:      int64Ptr(models.DefaultClientPolicyTimeout),
 		ClientIdleTimeout:  int64Ptr(models.DefaultClientPolicyIdleTimeout),
 		ClientLoginTimeout: int64Ptr(models.DefaultClientPolicyLoginTimeout),
-		ServiceAlternate:   boolPtr(false),
+		ServiceAlternate:   new(false),
 	}
 }
 
@@ -507,7 +507,7 @@ type AzureBlob struct {
 	AccountKey           *string  `yaml:"account-key"`
 	TenantID             *string  `yaml:"tenant-id"`
 	ClientID             *string  `yaml:"client-id"`
-	ClientSecret         *string  `yaml:"client-secret"`
+	ClientSecret         *string  `yaml:"client-secret"` // #nosec G117
 	EndpointOverride     *string  `yaml:"endpoint"`
 	ContainerName        *string  `yaml:"container-name"`
 	AccessTier           *string  `yaml:"access-tier"`
@@ -601,19 +601,26 @@ func (l *Local) ToModelLocal() *models.Local {
 	}
 }
 
-func intPtr(i int) *int { return &i }
+//go:fix inline
+func intPtr(i int) *int { return new(i) }
 
-func uintPtr(i uint) *uint { return &i }
+//go:fix inline
+func uintPtr(i uint) *uint { return new(i) }
 
-func int64Ptr(i int64) *int64 { return &i }
+//go:fix inline
+func int64Ptr(i int64) *int64 { return new(i) }
 
-func uint64Ptr(i uint64) *uint64 { return &i }
+//go:fix inline
+func uint64Ptr(i uint64) *uint64 { return new(i) }
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
-func stringPtr(s string) *string { return &s }
+//go:fix inline
+func stringPtr(s string) *string { return new(s) }
 
-func float64Ptr(f float64) *float64 { return &f }
+//go:fix inline
+func float64Ptr(f float64) *float64 { return new(f) }
 
 func derefInt(p *int) int {
 	if p == nil {
