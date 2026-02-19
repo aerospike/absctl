@@ -49,14 +49,14 @@ func TestDefaultRestoreConfig(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(config.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(config.NoUDFs))
 	assert.Equal(t, models.DefaultCommonRecordsPerSecond, derefInt(config.RecordsPerSecond))
-	assert.Equal(t, int64(models.DefaultCommonSocketTimeout), derefInt64(config.SocketTimeout))
-	assert.Equal(t, int64(models.DefaultCommonInfoTimeout), derefInt64(config.InfoTimeout))
-	assert.Equal(t, uint(models.DefaultCommonInfoMaxRetries), derefUint(config.InfoMaxRetries))
+	assert.Equal(t, models.DefaultCommonSocketTimeout, derefInt64(config.SocketTimeout))
+	assert.Equal(t, models.DefaultCommonInfoTimeout, derefInt64(config.InfoTimeout))
+	assert.Equal(t, models.DefaultCommonInfoMaxRetries, derefUint(config.InfoMaxRetries))
 	assert.InEpsilon(t, models.DefaultCommonInfoRetriesMultiplier, derefFloat64(config.InfoRetriesMultiplier), 0.0)
-	assert.Equal(t, int64(models.DefaultCommonInfoRetryInterval), derefInt64(config.InfoRetryIntervalMilliseconds))
-	assert.Equal(t, int64(models.DefaultCommonBandwidth), derefInt64(config.Bandwidth))
+	assert.Equal(t, models.DefaultCommonInfoRetryInterval, derefInt64(config.InfoRetryIntervalMilliseconds))
+	assert.Equal(t, models.DefaultCommonBandwidth, derefInt64(config.Bandwidth))
 	assert.Equal(t, models.DefaultCommonStdBufferSize, derefInt(config.StdBufferSize))
-	assert.Equal(t, int64(models.DefaultRestoreTotalTimeout), derefInt64(config.TotalTimeout))
+	assert.Equal(t, models.DefaultRestoreTotalTimeout, derefInt64(config.TotalTimeout))
 	assert.Equal(t, models.DefaultRestoreInputFile, derefString(config.InputFile))
 	assert.Empty(t, config.DirectoryList)
 	assert.Equal(t, models.DefaultRestoreParentDirectory, derefString(config.ParentDirectory))
@@ -64,54 +64,54 @@ func TestDefaultRestoreConfig(t *testing.T) {
 	assert.Equal(t, models.DefaultRestoreBatchSize, derefInt(config.BatchSize))
 	assert.Equal(t, models.DefaultRestoreMaxAsyncBatches, derefInt(config.MaxAsyncBatches))
 	assert.Equal(t, models.DefaultRestoreWarmUp, derefInt(config.WarmUp))
-	assert.Equal(t, int64(models.DefaultRestoreExtraTTL), derefInt64(config.ExtraTTL))
+	assert.Equal(t, models.DefaultRestoreExtraTTL, derefInt64(config.ExtraTTL))
 	assert.Equal(t, models.DefaultRestoreIgnoreRecordError, derefBool(config.IgnoreRecordError))
 	assert.Equal(t, models.DefaultRestoreUniq, derefBool(config.Uniq))
 	assert.Equal(t, models.DefaultRestoreReplace, derefBool(config.Replace))
 	assert.Equal(t, models.DefaultRestoreNoGeneration, derefBool(config.NoGeneration))
-	assert.Equal(t, int64(models.DefaultRestoreRetryBaseInterval), derefInt64(config.RetryBaseInterval))
+	assert.Equal(t, models.DefaultRestoreRetryBaseInterval, derefInt64(config.RetryBaseInterval))
 	assert.InEpsilon(t, models.DefaultRestoreRetryMultiplier, derefFloat64(config.RetryMultiplier), 0.0)
-	assert.Equal(t, uint(models.DefaultRestoreRetryMaxAttempts), derefUint(config.RetryMaxAttempts))
+	assert.Equal(t, models.DefaultRestoreRetryMaxAttempts, derefUint(config.RetryMaxAttempts))
 	assert.Equal(t, models.DefaultRestoreValidateOnly, derefBool(config.ValidateOnly))
 	assert.Equal(t, models.DefaultRestoreApplyMetadataLast, derefBool(config.ApplyMetadataLast))
 }
 
 func TestRestoreConfig_ToModelRestore(t *testing.T) {
 	config := RestoreConfig{
-		Directory:                     stringPtr("/restore"),
-		Namespace:                     stringPtr("test"),
+		Directory:                     new("/restore"),
+		Namespace:                     new("test"),
 		SetList:                       []string{"set1", "set2"},
 		BinList:                       []string{"bin1", "bin2"},
-		Parallel:                      intPtr(8),
-		NoRecords:                     boolPtr(false),
-		NoIndexes:                     boolPtr(true),
-		NoUDFs:                        boolPtr(false),
-		RecordsPerSecond:              intPtr(1000),
-		TotalTimeout:                  int64Ptr(30000),
-		SocketTimeout:                 int64Ptr(10000),
-		Bandwidth:                     int64Ptr(50000000),
-		InfoTimeout:                   int64Ptr(5000),
-		InfoMaxRetries:                uintPtr(3),
-		InfoRetriesMultiplier:         float64Ptr(1.5),
-		InfoRetryIntervalMilliseconds: int64Ptr(1000),
-		StdBufferSize:                 intPtr(4096),
-		InputFile:                     stringPtr("input.asb"),
+		Parallel:                      new(8),
+		NoRecords:                     new(false),
+		NoIndexes:                     new(true),
+		NoUDFs:                        new(false),
+		RecordsPerSecond:              new(1000),
+		TotalTimeout:                  new(int64(30000)),
+		SocketTimeout:                 new(int64(10000)),
+		Bandwidth:                     new(int64(50000000)),
+		InfoTimeout:                   new(int64(5000)),
+		InfoMaxRetries:                new(uint(3)),
+		InfoRetriesMultiplier:         new(1.5),
+		InfoRetryIntervalMilliseconds: new(int64(1000)),
+		StdBufferSize:                 new(4096),
+		InputFile:                     new("input.asb"),
 		DirectoryList:                 []string{"dir1", "dir2"},
-		ParentDirectory:               stringPtr("/parent"),
-		DisableBatchWrites:            boolPtr(true),
-		BatchSize:                     intPtr(100),
-		MaxAsyncBatches:               intPtr(32),
-		WarmUp:                        intPtr(10),
-		ExtraTTL:                      int64Ptr(3600),
-		IgnoreRecordError:             boolPtr(true),
-		Uniq:                          boolPtr(true),
-		Replace:                       boolPtr(false),
-		NoGeneration:                  boolPtr(true),
-		RetryBaseInterval:             int64Ptr(500),
-		RetryMultiplier:               float64Ptr(2.0),
-		RetryMaxAttempts:              uintPtr(10),
-		ValidateOnly:                  boolPtr(false),
-		ApplyMetadataLast:             boolPtr(true),
+		ParentDirectory:               new("/parent"),
+		DisableBatchWrites:            new(true),
+		BatchSize:                     new(100),
+		MaxAsyncBatches:               new(32),
+		WarmUp:                        new(10),
+		ExtraTTL:                      new(int64(3600)),
+		IgnoreRecordError:             new(true),
+		Uniq:                          new(true),
+		Replace:                       new(false),
+		NoGeneration:                  new(true),
+		RetryBaseInterval:             new(int64(500)),
+		RetryMultiplier:               new(2.0),
+		RetryMaxAttempts:              new(uint(10)),
+		ValidateOnly:                  new(false),
+		ApplyMetadataLast:             new(true),
 	}
 
 	restore := &Restore{Restore: config}
@@ -191,13 +191,13 @@ func TestRestore_ToModelRestore_DefaultToModel(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, model.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, model.NoUDFs)
 	assert.Equal(t, models.DefaultCommonRecordsPerSecond, model.RecordsPerSecond)
-	assert.Equal(t, int64(models.DefaultRestoreTotalTimeout), model.TotalTimeout)
-	assert.Equal(t, int64(models.DefaultCommonSocketTimeout), model.SocketTimeout)
-	assert.Equal(t, int64(models.DefaultCommonBandwidth), model.Bandwidth)
-	assert.Equal(t, int64(models.DefaultCommonInfoTimeout), model.InfoTimeout)
-	assert.Equal(t, uint(models.DefaultCommonInfoMaxRetries), model.InfoMaxRetries)
+	assert.Equal(t, models.DefaultRestoreTotalTimeout, model.TotalTimeout)
+	assert.Equal(t, models.DefaultCommonSocketTimeout, model.SocketTimeout)
+	assert.Equal(t, models.DefaultCommonBandwidth, model.Bandwidth)
+	assert.Equal(t, models.DefaultCommonInfoTimeout, model.InfoTimeout)
+	assert.Equal(t, models.DefaultCommonInfoMaxRetries, model.InfoMaxRetries)
 	assert.InEpsilon(t, models.DefaultCommonInfoRetriesMultiplier, model.InfoRetriesMultiplier, 0.0)
-	assert.Equal(t, int64(models.DefaultCommonInfoRetryInterval), model.InfoRetryIntervalMilliseconds)
+	assert.Equal(t, models.DefaultCommonInfoRetryInterval, model.InfoRetryIntervalMilliseconds)
 	assert.Equal(t, models.DefaultCommonStdBufferSize, model.StdBufferSize)
 	assert.Equal(t, models.DefaultRestoreInputFile, model.InputFile)
 	assert.Equal(t, models.DefaultRestoreParentDirectory, model.ParentDirectory)
@@ -205,14 +205,14 @@ func TestRestore_ToModelRestore_DefaultToModel(t *testing.T) {
 	assert.Equal(t, models.DefaultRestoreBatchSize, model.BatchSize)
 	assert.Equal(t, models.DefaultRestoreMaxAsyncBatches, model.MaxAsyncBatches)
 	assert.Equal(t, models.DefaultRestoreWarmUp, model.WarmUp)
-	assert.Equal(t, int64(models.DefaultRestoreExtraTTL), model.ExtraTTL)
+	assert.Equal(t, models.DefaultRestoreExtraTTL, model.ExtraTTL)
 	assert.Equal(t, models.DefaultRestoreIgnoreRecordError, model.IgnoreRecordError)
 	assert.Equal(t, models.DefaultRestoreUniq, model.Uniq)
 	assert.Equal(t, models.DefaultRestoreReplace, model.Replace)
 	assert.Equal(t, models.DefaultRestoreNoGeneration, model.NoGeneration)
-	assert.Equal(t, int64(models.DefaultRestoreRetryBaseInterval), model.RetryBaseInterval)
+	assert.Equal(t, models.DefaultRestoreRetryBaseInterval, model.RetryBaseInterval)
 	assert.InEpsilon(t, models.DefaultRestoreRetryMultiplier, model.RetryMultiplier, 0.0)
-	assert.Equal(t, uint(models.DefaultRestoreRetryMaxAttempts), model.RetryMaxAttempts)
+	assert.Equal(t, models.DefaultRestoreRetryMaxAttempts, model.RetryMaxAttempts)
 	assert.Equal(t, models.DefaultRestoreValidateOnly, model.ValidateOnly)
 	assert.Equal(t, models.DefaultRestoreApplyMetadataLast, model.ApplyMetadataLast)
 }

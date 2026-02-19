@@ -53,7 +53,7 @@ type Service struct {
 	isEstimate       bool
 	estimatesSamples int64
 
-	isLogJSON bool
+	reportToLog bool
 
 	logger *slog.Logger
 }
@@ -160,7 +160,7 @@ func NewService(
 		writer:          writer,
 		reader:          reader,
 		logger:          logger,
-		isLogJSON:       params.App.LogJSON,
+		reportToLog:     params.App.LogJSON || params.App.LogFile != "",
 	}
 
 	if params.Backup != nil {
@@ -247,7 +247,7 @@ func (s *Service) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to calculate backup estimate: %w", err)
 		}
 
-		logging.ReportEstimate(estimates, s.isLogJSON, s.logger)
+		logging.ReportEstimate(estimates, s.reportToLog, s.logger)
 	case s.backupConfigXDR != nil:
 		s.logger.Info("starting xdr backup")
 		// Running xdr backup.
@@ -272,7 +272,7 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 
 		stats := bModels.SumBackupStats(h.GetStats(), hXdr.GetStats())
-		logging.ReportBackup(stats, true, s.isLogJSON, s.logger)
+		logging.ReportBackup(stats, true, s.reportToLog, s.logger)
 	default:
 		s.logger.Info("starting scan backup")
 		// Running ordinary backup.
@@ -287,7 +287,7 @@ func (s *Service) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to backup: %w", err)
 		}
 
-		logging.ReportBackup(h.GetStats(), false, s.isLogJSON, s.logger)
+		logging.ReportBackup(h.GetStats(), false, s.reportToLog, s.logger)
 	}
 
 	return nil

@@ -19,10 +19,12 @@ type App struct {
 	Help bool
 
 	Verbose bool
-	// Set log level for verbose output.
+	// LogLevel Set log level for verbose output.
 	LogLevel string
-	// Format logs as JSON, for parsing by external tools.
+	// LogJSON Format logs as JSON, for parsing by external tools.
 	LogJSON bool
+	// LogFile Path to the log file, if logging to a file.
+	LogFile string
 
 	// ConfigFilePath is the path to the file used for tool configuration.
 	ConfigFilePath string

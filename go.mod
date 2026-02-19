@@ -1,8 +1,6 @@
 module github.com/aerospike/absctl
 
-go 1.25
-
-toolchain go1.25.4
+go 1.26
 
 require (
 	cloud.google.com/go/storage v1.57.2

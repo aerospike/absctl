@@ -40,7 +40,7 @@ type Service struct {
 	// Restore Mode: auto, asb, asbx
 	mode string
 
-	isLogJSON bool
+	reportToLog bool
 
 	logger *slog.Logger
 }
@@ -123,7 +123,7 @@ func NewService(
 		xdrReader:     xdrReader,
 		mode:          params.Restore.Mode,
 		logger:        logger,
-		isLogJSON:     params.App.LogJSON,
+		reportToLog:   params.App.LogJSON || params.App.LogFile != "",
 	}, nil
 }
 
@@ -179,7 +179,7 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 
 	wg.Wait()
 	// Print report.
-	logging.ReportRestore(h.GetStats(), r.restoreConfig.ValidateOnly, r.isLogJSON, r.logger)
+	logging.ReportRestore(h.GetStats(), r.restoreConfig.ValidateOnly, r.reportToLog, r.logger)
 
 	return nil
 }
@@ -266,7 +266,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 	}
 
 	restStats := bModels.SumRestoreStats(xdrStats, stats)
-	logging.ReportRestore(restStats, r.restoreConfig.ValidateOnly, r.isLogJSON, r.logger)
+	logging.ReportRestore(restStats, r.restoreConfig.ValidateOnly, r.reportToLog, r.logger)
 
 	// To prevent context leaking.
 	cancel()

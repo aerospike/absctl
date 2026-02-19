@@ -20,6 +20,7 @@ const (
 	DefaultAppVersion        = false
 	DefaultAppVerbose        = false
 	DefaultAppLogLevel       = "debug"
+	DefaultAppLogFile        = ""
 	DefaultAppLogJSON        = false
 	DefaultAppConfigFilePath = ""
 )
@@ -89,9 +90,9 @@ const (
 
 // Client Policy.
 const (
-	DefaultClientPolicyTimeout      = 30000
-	DefaultClientPolicyIdleTimeout  = 0
-	DefaultClientPolicyLoginTimeout = 10000
+	DefaultClientPolicyTimeout      = int64(30000)
+	DefaultClientPolicyIdleTimeout  = int64(0)
+	DefaultClientPolicyLoginTimeout = int64(10000)
 )
 
 // Compression.
@@ -131,12 +132,12 @@ const (
 	DefaultCommonNoIndexes             = false
 	DefaultCommonNoUDFs                = false
 	DefaultCommonRecordsPerSecond      = 0
-	DefaultCommonSocketTimeout         = 10000
-	DefaultCommonInfoTimeout           = 10000
-	DefaultCommonInfoMaxRetries        = 3
+	DefaultCommonSocketTimeout         = int64(10000)
+	DefaultCommonInfoTimeout           = int64(10000)
+	DefaultCommonInfoMaxRetries        = uint(3)
 	DefaultCommonInfoRetriesMultiplier = 1.0
-	DefaultCommonInfoRetryInterval     = 1000
-	DefaultCommonBandwidth             = 0
+	DefaultCommonInfoRetryInterval     = int64(1000)
+	DefaultCommonBandwidth             = int64(0)
 	DefaultCommonStdBufferSize         = 4
 )
 
@@ -146,9 +147,9 @@ const (
 	DefaultBackupRemoveFiles         = false
 	DefaultBackupModifiedBefore      = ""
 	DefaultBackupModifiedAfter       = ""
-	DefaultBackupFileLimit           = 250
+	DefaultBackupFileLimit           = uint64(250)
 	DefaultBackupAfterDigest         = ""
-	DefaultBackupMaxRecords          = 0
+	DefaultBackupMaxRecords          = int64(0)
 	DefaultBackupNoBins              = false
 	DefaultBackupSleepBetweenRetries = 5
 	DefaultBackupFilterExpression    = ""
@@ -159,20 +160,20 @@ const (
 	DefaultBackupPreferRacks         = ""
 	DefaultBackupPartitionList       = ""
 	DefaultBackupEstimate            = false
-	DefaultBackupEstimateSamples     = 10000
+	DefaultBackupEstimateSamples     = int64(10000)
 	DefaultBackupStateFileDst        = ""
 	DefaultBackupContinue            = ""
-	DefaultBackupScanPageSize        = 10000
+	DefaultBackupScanPageSize        = int64(10000)
 	DefaultBackupOutputFilePrefix    = ""
 	DefaultBackupRackList            = ""
-	DefaultBackupTotalTimeout        = 0
+	DefaultBackupTotalTimeout        = int64(0)
 	DefaultBackupParallel            = 1
 	DefaultBackupMaxRetries          = 5
 )
 
 // Restore.
 const (
-	DefaultRestoreTotalTimeout       = 10000
+	DefaultRestoreTotalTimeout       = int64(10000)
 	DefaultRestoreParallel           = 0
 	DefaultRestoreInputFile          = ""
 	DefaultRestoreDirectoryList      = ""
@@ -181,14 +182,14 @@ const (
 	DefaultRestoreBatchSize          = 128
 	DefaultRestoreMaxAsyncBatches    = 32
 	DefaultRestoreWarmUp             = 0
-	DefaultRestoreExtraTTL           = 0
+	DefaultRestoreExtraTTL           = int64(0)
 	DefaultRestoreIgnoreRecordError  = false
 	DefaultRestoreUniq               = false
 	DefaultRestoreReplace            = false
 	DefaultRestoreNoGeneration       = false
-	DefaultRestoreRetryBaseInterval  = 1000
+	DefaultRestoreRetryBaseInterval  = int64(1000)
 	DefaultRestoreRetryMultiplier    = 1.0
-	DefaultRestoreRetryMaxAttempts   = 0
+	DefaultRestoreRetryMaxAttempts   = uint(0)
 
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false

@@ -40,6 +40,9 @@ func (f *App) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVar(&f.LogJSON, "log-json",
 		models.DefaultAppLogJSON,
 		"Set output in JSON format for parsing by external tools.")
+	flagSet.StringVar(&f.LogFile, "log-file",
+		models.DefaultAppLogFile,
+		"Path to log file. If empty logs will be printed to stdout.")
 	flagSet.StringVar(&f.ConfigFilePath, "config",
 		models.DefaultAppConfigFilePath,
 		"Path to YAML configuration file.")
