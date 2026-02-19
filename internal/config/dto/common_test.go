@@ -361,9 +361,9 @@ func TestCluster_ToModelClientPolicy(t *testing.T) {
 
 	t.Run("cluster with timeouts", func(t *testing.T) {
 		c := &Cluster{
-			ClientTimeout:      int64Ptr(5000),
-			ClientIdleTimeout:  int64Ptr(10000),
-			ClientLoginTimeout: int64Ptr(3000),
+			ClientTimeout:      new(int64(5000)),
+			ClientIdleTimeout:  new(int64(10000)),
+			ClientLoginTimeout: new(int64(3000)),
 		}
 
 		policy := c.ToModelClientPolicy()

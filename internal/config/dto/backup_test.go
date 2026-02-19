@@ -51,20 +51,20 @@ func TestDefaultBackupConfig(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(config.NoUDFs))
 	assert.Equal(t, models.DefaultCommonRecordsPerSecond, derefInt(config.RecordsPerSecond))
 	assert.Equal(t, models.DefaultBackupMaxRetries, derefInt(config.MaxRetries))
-	assert.Equal(t, int64(models.DefaultCommonSocketTimeout), derefInt64(config.SocketTimeout))
-	assert.Equal(t, int64(models.DefaultCommonInfoTimeout), derefInt64(config.InfoTimeout))
-	assert.Equal(t, uint(models.DefaultCommonInfoMaxRetries), derefUint(config.InfoMaxRetries))
+	assert.Equal(t, models.DefaultCommonSocketTimeout, derefInt64(config.SocketTimeout))
+	assert.Equal(t, models.DefaultCommonInfoTimeout, derefInt64(config.InfoTimeout))
+	assert.Equal(t, models.DefaultCommonInfoMaxRetries, derefUint(config.InfoMaxRetries))
 	assert.InEpsilon(t, models.DefaultCommonInfoRetriesMultiplier, derefFloat64(config.InfoRetriesMultiplier), 0.0)
-	assert.Equal(t, int64(models.DefaultCommonInfoRetryInterval), derefInt64(config.InfoRetryIntervalMilliseconds))
-	assert.Equal(t, int64(models.DefaultCommonBandwidth), derefInt64(config.Bandwidth))
+	assert.Equal(t, models.DefaultCommonInfoRetryInterval, derefInt64(config.InfoRetryIntervalMilliseconds))
+	assert.Equal(t, models.DefaultCommonBandwidth, derefInt64(config.Bandwidth))
 	assert.Equal(t, models.DefaultCommonStdBufferSize, derefInt(config.StdBufferSize))
 	assert.Equal(t, models.DefaultBackupOutputFile, derefString(config.OutputFile))
 	assert.Equal(t, models.DefaultBackupRemoveFiles, derefBool(config.RemoveFiles))
 	assert.Equal(t, models.DefaultBackupModifiedBefore, derefString(config.ModifiedBefore))
 	assert.Equal(t, models.DefaultBackupModifiedAfter, derefString(config.ModifiedAfter))
-	assert.Equal(t, uint64(models.DefaultBackupFileLimit), derefUint64(config.FileLimit))
+	assert.Equal(t, models.DefaultBackupFileLimit, derefUint64(config.FileLimit))
 	assert.Equal(t, models.DefaultBackupAfterDigest, derefString(config.AfterDigest))
-	assert.Equal(t, int64(models.DefaultBackupMaxRecords), derefInt64(config.MaxRecords))
+	assert.Equal(t, models.DefaultBackupMaxRecords, derefInt64(config.MaxRecords))
 	assert.Equal(t, models.DefaultBackupNoBins, derefBool(config.NoBins))
 	assert.Equal(t, models.DefaultBackupSleepBetweenRetries, derefInt(config.SleepBetweenRetries))
 	assert.Equal(t, models.DefaultBackupFilterExpression, derefString(config.FilterExpression))
@@ -75,13 +75,13 @@ func TestDefaultBackupConfig(t *testing.T) {
 	assert.Empty(t, config.PreferRacks)
 	assert.Empty(t, config.PartitionList)
 	assert.Equal(t, models.DefaultBackupEstimate, derefBool(config.Estimate))
-	assert.Equal(t, int64(models.DefaultBackupEstimateSamples), derefInt64(config.EstimateSamples))
+	assert.Equal(t, models.DefaultBackupEstimateSamples, derefInt64(config.EstimateSamples))
 	assert.Equal(t, models.DefaultBackupStateFileDst, derefString(config.StateFileDst))
 	assert.Equal(t, models.DefaultBackupContinue, derefString(config.Continue))
-	assert.Equal(t, int64(models.DefaultBackupScanPageSize), derefInt64(config.ScanPageSize))
+	assert.Equal(t, models.DefaultBackupScanPageSize, derefInt64(config.ScanPageSize))
 	assert.Equal(t, models.DefaultBackupOutputFilePrefix, derefString(config.OutputFilePrefix))
 	assert.Empty(t, config.RackList)
-	assert.Equal(t, int64(models.DefaultBackupTotalTimeout), derefInt64(config.TotalTimeout))
+	assert.Equal(t, models.DefaultBackupTotalTimeout, derefInt64(config.TotalTimeout))
 }
 
 func TestBackupConfig_ToModelBackup(t *testing.T) {
@@ -96,21 +96,21 @@ func TestBackupConfig_ToModelBackup(t *testing.T) {
 		NoUDFs:                        new(false),
 		RecordsPerSecond:              new(1000),
 		MaxRetries:                    new(5),
-		TotalTimeout:                  int64Ptr(30000),
-		SocketTimeout:                 int64Ptr(10000),
-		Bandwidth:                     int64Ptr(50000000),
-		InfoTimeout:                   int64Ptr(5000),
-		InfoMaxRetries:                uintPtr(3),
+		TotalTimeout:                  new(int64(30000)),
+		SocketTimeout:                 new(int64(10000)),
+		Bandwidth:                     new(int64(50000000)),
+		InfoTimeout:                   new(int64(5000)),
+		InfoMaxRetries:                new(uint(3)),
 		InfoRetriesMultiplier:         new(1.5),
-		InfoRetryIntervalMilliseconds: int64Ptr(1000),
+		InfoRetryIntervalMilliseconds: new(int64(1000)),
 		StdBufferSize:                 new(4096),
 		OutputFile:                    new("output.asb"),
 		RemoveFiles:                   new(true),
 		ModifiedBefore:                new("2024-01-01"),
 		ModifiedAfter:                 new("2023-01-01"),
-		FileLimit:                     uint64Ptr(100),
+		FileLimit:                     new(uint64(100)),
 		AfterDigest:                   new("digest123"),
-		MaxRecords:                    int64Ptr(1000000),
+		MaxRecords:                    new(int64(1000000)),
 		NoBins:                        new(false),
 		SleepBetweenRetries:           new(2000),
 		FilterExpression:              new("exp > 100"),
@@ -121,10 +121,10 @@ func TestBackupConfig_ToModelBackup(t *testing.T) {
 		PreferRacks:                   []string{"rack1"},
 		PartitionList:                 []string{"0", "1", "2"},
 		Estimate:                      new(false),
-		EstimateSamples:               int64Ptr(5000),
+		EstimateSamples:               new(int64(5000)),
 		StateFileDst:                  new("/state"),
 		Continue:                      new("/cont"),
-		ScanPageSize:                  int64Ptr(2500),
+		ScanPageSize:                  new(int64(2500)),
 		OutputFilePrefix:              new("prefix-"),
 		RackList:                      []string{"rack-a"},
 	}
@@ -220,21 +220,21 @@ func TestBackup_ToModelBackup_DefaultToModel(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoUDFs, model.NoUDFs)
 	assert.Equal(t, models.DefaultCommonRecordsPerSecond, model.RecordsPerSecond)
 	assert.Equal(t, models.DefaultBackupMaxRetries, model.MaxRetries)
-	assert.Equal(t, int64(models.DefaultBackupTotalTimeout), model.TotalTimeout)
-	assert.Equal(t, int64(models.DefaultCommonSocketTimeout), model.SocketTimeout)
-	assert.Equal(t, int64(models.DefaultCommonBandwidth), model.Bandwidth)
-	assert.Equal(t, int64(models.DefaultCommonInfoTimeout), model.InfoTimeout)
-	assert.Equal(t, uint(models.DefaultCommonInfoMaxRetries), model.InfoMaxRetries)
+	assert.Equal(t, models.DefaultBackupTotalTimeout, model.TotalTimeout)
+	assert.Equal(t, models.DefaultCommonSocketTimeout, model.SocketTimeout)
+	assert.Equal(t, models.DefaultCommonBandwidth, model.Bandwidth)
+	assert.Equal(t, models.DefaultCommonInfoTimeout, model.InfoTimeout)
+	assert.Equal(t, models.DefaultCommonInfoMaxRetries, model.InfoMaxRetries)
 	assert.InEpsilon(t, models.DefaultCommonInfoRetriesMultiplier, model.InfoRetriesMultiplier, 0.0)
-	assert.Equal(t, int64(models.DefaultCommonInfoRetryInterval), model.InfoRetryIntervalMilliseconds)
+	assert.Equal(t, models.DefaultCommonInfoRetryInterval, model.InfoRetryIntervalMilliseconds)
 	assert.Equal(t, models.DefaultCommonStdBufferSize, model.StdBufferSize)
 	assert.Equal(t, models.DefaultBackupOutputFile, model.OutputFile)
 	assert.Equal(t, models.DefaultBackupRemoveFiles, model.RemoveFiles)
 	assert.Equal(t, models.DefaultBackupModifiedBefore, model.ModifiedBefore)
 	assert.Equal(t, models.DefaultBackupModifiedAfter, model.ModifiedAfter)
-	assert.Equal(t, uint64(models.DefaultBackupFileLimit), model.FileLimit)
+	assert.Equal(t, models.DefaultBackupFileLimit, model.FileLimit)
 	assert.Equal(t, models.DefaultBackupAfterDigest, model.AfterDigest)
-	assert.Equal(t, int64(models.DefaultBackupMaxRecords), model.MaxRecords)
+	assert.Equal(t, models.DefaultBackupMaxRecords, model.MaxRecords)
 	assert.Equal(t, models.DefaultBackupNoBins, model.NoBins)
 	assert.Equal(t, models.DefaultBackupSleepBetweenRetries, model.SleepBetweenRetries)
 	assert.Equal(t, models.DefaultBackupFilterExpression, model.FilterExpression)
@@ -242,9 +242,9 @@ func TestBackup_ToModelBackup_DefaultToModel(t *testing.T) {
 	assert.Equal(t, models.DefaultBackupCompact, model.Compact)
 	assert.Equal(t, models.DefaultBackupNoTTLOnly, model.NoTTLOnly)
 	assert.Equal(t, models.DefaultBackupEstimate, model.Estimate)
-	assert.Equal(t, int64(models.DefaultBackupEstimateSamples), model.EstimateSamples)
+	assert.Equal(t, models.DefaultBackupEstimateSamples, model.EstimateSamples)
 	assert.Equal(t, models.DefaultBackupStateFileDst, model.StateFileDst)
 	assert.Equal(t, models.DefaultBackupContinue, model.Continue)
-	assert.Equal(t, int64(models.DefaultBackupScanPageSize), model.ScanPageSize)
+	assert.Equal(t, models.DefaultBackupScanPageSize, model.ScanPageSize)
 	assert.Equal(t, models.DefaultBackupOutputFilePrefix, model.OutputFilePrefix)
 }
