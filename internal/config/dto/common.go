@@ -28,6 +28,7 @@ type App struct {
 	Verbose  *bool   `yaml:"verbose"`
 	LogLevel *string `yaml:"log-level"`
 	LogJSON  *bool   `yaml:"log-json"`
+	LogFile  *string `yaml:"log-file"`
 }
 
 // defaultApp creates a new App with default values.
@@ -36,6 +37,7 @@ func defaultApp() App {
 		Verbose:  new(models.DefaultAppVerbose),
 		LogLevel: new(models.DefaultAppLogLevel),
 		LogJSON:  new(models.DefaultAppLogJSON),
+		LogFile:  new(models.DefaultAppLogFile),
 	}
 }
 
@@ -44,6 +46,7 @@ func (a *App) ToModelApp() *models.App {
 		Verbose:  derefBool(a.Verbose),
 		LogLevel: derefString(a.LogLevel),
 		LogJSON:  derefBool(a.LogJSON),
+		LogFile:  derefString(a.LogFile),
 	}
 }
 
