@@ -14,8 +14,28 @@
 
 package models
 
+import (
+	"strings"
+
+	"github.com/aerospike/backup-go"
+)
+
+const noneVal = "NONE"
+
 // Compression contains flags that will be mapped to CompressionPolicy for backup and restore operations.
 type Compression struct {
 	Mode  string
 	Level int
+}
+
+func (c *Compression) ToPolicy() *backup.CompressionPolicy {
+	if c == nil {
+		return nil
+	}
+
+	if c.Mode == "" || strings.EqualFold(c.Mode, noneVal) {
+		return nil
+	}
+
+	return backup.NewCompressionPolicy(strings.ToUpper(c.Mode), c.Level)
 }

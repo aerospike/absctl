@@ -79,46 +79,46 @@ func (r *RestoreServiceConfig) IsStdin() bool {
 }
 
 // NewRestoreConfig creates and returns a new ConfigRestore object, initialized with given restore parameters.
-func NewRestoreConfig(serviceConfig *RestoreServiceConfig, logger *slog.Logger) *backup.ConfigRestore {
+func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup.ConfigRestore {
 	logger.Info("initializing restore config")
 
 	parallel := runtime.NumCPU()
-	if serviceConfig.Restore.Parallel > 0 {
-		parallel = serviceConfig.Restore.Parallel
+	if config.Restore.Parallel > 0 {
+		parallel = config.Restore.Parallel
 	}
 
 	c := backup.NewDefaultRestoreConfig()
-	c.Namespace = newRestoreNamespace(serviceConfig.Restore.Namespace)
-	c.SetList = SplitByComma(serviceConfig.Restore.SetList)
-	c.BinList = SplitByComma(serviceConfig.Restore.BinList)
-	c.NoRecords = serviceConfig.Restore.NoRecords
-	c.NoIndexes = serviceConfig.Restore.NoIndexes
-	c.NoUDFs = serviceConfig.Restore.NoUDFs
-	c.RecordsPerSecond = serviceConfig.Restore.RecordsPerSecond
+	c.Namespace = newRestoreNamespace(config.Restore.Namespace)
+	c.SetList = SplitByComma(config.Restore.SetList)
+	c.BinList = SplitByComma(config.Restore.BinList)
+	c.NoRecords = config.Restore.NoRecords
+	c.NoIndexes = config.Restore.NoIndexes
+	c.NoUDFs = config.Restore.NoUDFs
+	c.RecordsPerSecond = config.Restore.RecordsPerSecond
 	c.Parallel = parallel
-	c.WritePolicy = newWritePolicy(serviceConfig.Restore)
+	c.WritePolicy = newWritePolicy(config.Restore)
 	// As we set --bandwidth in MiB we must convert it to bytes
-	c.Bandwidth = serviceConfig.Restore.Bandwidth * 1024 * 1024
-	c.ExtraTTL = serviceConfig.Restore.ExtraTTL
-	c.IgnoreRecordError = serviceConfig.Restore.IgnoreRecordError
-	c.DisableBatchWrites = serviceConfig.Restore.DisableBatchWrites
-	c.BatchSize = serviceConfig.Restore.BatchSize
-	c.MaxAsyncBatches = serviceConfig.Restore.MaxAsyncBatches
+	c.Bandwidth = config.Restore.Bandwidth * 1024 * 1024
+	c.ExtraTTL = config.Restore.ExtraTTL
+	c.IgnoreRecordError = config.Restore.IgnoreRecordError
+	c.DisableBatchWrites = config.Restore.DisableBatchWrites
+	c.BatchSize = config.Restore.BatchSize
+	c.MaxAsyncBatches = config.Restore.MaxAsyncBatches
 	c.MetricsEnabled = true
 
-	c.CompressionPolicy = newCompressionPolicy(serviceConfig.Compression)
-	c.EncryptionPolicy = newEncryptionPolicy(serviceConfig.Encryption)
-	c.SecretAgentConfig = newSecretAgentConfig(serviceConfig.SecretAgent)
+	c.CompressionPolicy = config.Compression.ToPolicy()
+	c.EncryptionPolicy = config.Encryption.ToPolicy()
+	c.SecretAgentConfig = config.SecretAgent.ToConfig()
 	c.RetryPolicy = NewRetryPolicy(
-		serviceConfig.Restore.RetryBaseInterval,
-		serviceConfig.Restore.RetryMultiplier,
-		serviceConfig.Restore.RetryMaxAttempts,
+		config.Restore.RetryBaseInterval,
+		config.Restore.RetryMultiplier,
+		config.Restore.RetryMaxAttempts,
 	)
-	c.ValidateOnly = serviceConfig.Restore.ValidateOnly
-	c.ApplyMetadataLast = serviceConfig.Restore.ApplyMetadataLast
+	c.ValidateOnly = config.Restore.ValidateOnly
+	c.ApplyMetadataLast = config.Restore.ApplyMetadataLast
 
 	if !c.ValidateOnly {
-		logRestoreConfig(logger, serviceConfig, c)
+		logRestoreConfig(logger, config, c)
 	}
 
 	return c

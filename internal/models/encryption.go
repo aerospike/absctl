@@ -14,10 +14,44 @@
 
 package models
 
+import (
+	"strings"
+
+	"github.com/aerospike/backup-go"
+)
+
 // Encryption contains flags that will be mapped to EncryptionPolicy for backup and restore operations.
 type Encryption struct {
 	Mode      string
 	KeyFile   string
 	KeyEnv    string
 	KeySecret string
+}
+
+func (e *Encryption) ToPolicy() *backup.EncryptionPolicy {
+	if e == nil {
+		return nil
+	}
+
+	if e.Mode == "" || strings.EqualFold(e.Mode, noneVal) {
+		return nil
+	}
+
+	p := &backup.EncryptionPolicy{
+		Mode: strings.ToUpper(e.Mode),
+	}
+
+	if e.KeyFile != "" {
+		p.KeyFile = &e.KeyFile
+	}
+
+	if e.KeyEnv != "" {
+		p.KeyEnv = &e.KeyEnv
+	}
+
+	if e.KeySecret != "" {
+		p.KeySecret = &e.KeySecret
+	}
+
+	return p
 }

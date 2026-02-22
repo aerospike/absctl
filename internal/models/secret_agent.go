@@ -15,9 +15,11 @@
 package models
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/aerospike/backup-go"
 	sa "github.com/aerospike/backup-go/pkg/secret-agent"
 )
 
@@ -34,6 +36,10 @@ type SecretAgent struct {
 	KeyFile  string
 
 	IsBase64 bool
+
+	// Private fields with config for easy use of backup.ParseSecret
+
+	config *backup.SecretAgentConfig
 }
 
 // Validate checks if SecretAgent params are valid.
@@ -52,4 +58,66 @@ func (s *SecretAgent) Validate() error {
 	}
 
 	return nil
+}
+
+func (s *SecretAgent) GetSecret(ctx context.Context, value string) (string, error) {
+	return backup.ParseSecret(ctx, s.config, value)
+}
+
+func (s *SecretAgent) ToConfig() *backup.SecretAgentConfig {
+	if s == nil {
+		return nil
+	}
+
+	if s.Address == "" {
+		return nil
+	}
+
+	c := &backup.SecretAgentConfig{}
+	c.Address = &s.Address
+
+	if s.ConnectionType != "" {
+		ct := strings.ToLower(s.ConnectionType)
+		c.ConnectionType = &ct
+	}
+
+	if s.Port != 0 {
+		c.Port = &s.Port
+	}
+
+	if s.TimeoutMillisecond != 0 {
+		c.TimeoutMillisecond = &s.TimeoutMillisecond
+	}
+
+	if s.CaFile != "" {
+		c.CaFile = &s.CaFile
+	}
+
+	if s.TLSName != "" {
+		c.TLSName = &s.TLSName
+	}
+
+	if s.CertFile != "" {
+		c.CertFile = &s.CertFile
+	}
+
+	if s.KeyFile != "" {
+		c.KeyFile = &s.KeyFile
+	}
+
+	if s.CertFile != "" {
+		c.CertFile = &s.CertFile
+	}
+
+	if s.KeyFile != "" {
+		c.KeyFile = &s.KeyFile
+	}
+
+	if s.IsBase64 {
+		c.IsBase64 = &s.IsBase64
+	}
+
+	s.config = c
+
+	return c
 }

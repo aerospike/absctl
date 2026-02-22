@@ -238,7 +238,7 @@ func TestMapCompressionPolicy_Success(t *testing.T) {
 
 	compressionModel := testCompression()
 
-	compressionPolicy := newCompressionPolicy(compressionModel)
+	compressionPolicy := compressionModel.ToPolicy()
 	assert.NotNil(t, compressionPolicy)
 	assert.Equal(t, "ZSTD", compressionPolicy.Mode)
 	assert.Equal(t, 3, compressionPolicy.Level)
@@ -248,7 +248,7 @@ func TestMapCompressionPolicy_EmptyMode(t *testing.T) {
 	t.Parallel()
 
 	compressionModel := &models.Compression{}
-	compressionPolicy := newCompressionPolicy(compressionModel)
+	compressionPolicy := compressionModel.ToPolicy()
 	assert.Nil(t, compressionPolicy)
 }
 
@@ -260,7 +260,7 @@ func TestMapCompressionPolicy_CaseInsensitiveMode(t *testing.T) {
 		Level: 3,
 	}
 
-	compressionPolicy := newCompressionPolicy(compressionModel)
+	compressionPolicy := compressionModel.ToPolicy()
 	assert.NotNil(t, compressionPolicy)
 	assert.Equal(t, "ZSTD", compressionPolicy.Mode, "Compression mode should be converted to uppercase")
 	assert.Equal(t, 3, compressionPolicy.Level)
@@ -277,7 +277,7 @@ func TestMapEncryptionPolicy_Success(t *testing.T) {
 		KeySecret: "secret",
 	}
 
-	encryptionPolicy := newEncryptionPolicy(encryptionModel)
+	encryptionPolicy := encryptionModel.ToPolicy()
 	assert.NotNil(t, encryptionPolicy)
 	assert.Equal(t, "AES256", encryptionPolicy.Mode)
 	assert.Equal(t, "/path/to/keyfile", *encryptionPolicy.KeyFile)
@@ -289,7 +289,7 @@ func TestMapEncryptionPolicy_EmptyMode(t *testing.T) {
 	t.Parallel()
 
 	encryptionModel := &models.Encryption{}
-	encryptionPolicy := newEncryptionPolicy(encryptionModel)
+	encryptionPolicy := encryptionModel.ToPolicy()
 	assert.Nil(t, encryptionPolicy)
 }
 
@@ -300,7 +300,7 @@ func TestMapEncryptionPolicy_UpperCaseMode(t *testing.T) {
 		Mode: "aes256", // Lowercase mode
 	}
 
-	encryptionPolicy := newEncryptionPolicy(encryptionModel)
+	encryptionPolicy := encryptionModel.ToPolicy()
 	assert.NotNil(t, encryptionPolicy)
 	assert.Equal(t, "AES256", encryptionPolicy.Mode, "Encryption mode should be converted to uppercase")
 }
@@ -311,7 +311,7 @@ func TestMapSecretAgentConfig_Success(t *testing.T) {
 
 	secretAgentModel := testSecretAgent()
 
-	secretAgentConfig := newSecretAgentConfig(secretAgentModel)
+	secretAgentConfig := secretAgentModel.ToConfig()
 	assert.NotNil(t, secretAgentConfig)
 	assert.Equal(t, "localhost", *secretAgentConfig.Address)
 	assert.Equal(t, "tcp", *secretAgentConfig.ConnectionType)
@@ -328,7 +328,7 @@ func TestMapSecretAgentConfig_EmptyAddress(t *testing.T) {
 	t.Parallel()
 
 	secretAgentModel := &models.SecretAgent{}
-	secretAgentConfig := newSecretAgentConfig(secretAgentModel)
+	secretAgentConfig := secretAgentModel.ToConfig()
 	assert.Nil(t, secretAgentConfig)
 }
 
@@ -340,7 +340,7 @@ func TestMapSecretAgentConfig_PartialConfig(t *testing.T) {
 		Port:    8080,
 	}
 
-	secretAgentConfig := newSecretAgentConfig(secretAgentModel)
+	secretAgentConfig := secretAgentModel.ToConfig()
 	assert.NotNil(t, secretAgentConfig)
 	assert.Equal(t, "localhost", *secretAgentConfig.Address)
 	assert.Equal(t, 8080, *secretAgentConfig.Port)

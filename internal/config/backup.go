@@ -167,29 +167,29 @@ func NewBackupConfigs(serviceConfig *BackupServiceConfig, logger *slog.Logger,
 // newBackupConfig initializes and returns a configured instance of ConfigBackup based on the provided params.
 // This function sets various backup parameters including namespace, file limits, parallelism options, bandwidth,
 // compression, encryption, and partition filters. It returns an error if any validation or parsing fails.
-func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) {
+func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) {
 	c := backup.NewDefaultBackupConfig()
-	c.Namespace = params.Backup.Namespace
-	c.SetList = SplitByComma(params.Backup.SetList)
-	c.BinList = SplitByComma(params.Backup.BinList)
-	c.NoRecords = params.Backup.NoRecords
-	c.NoIndexes = params.Backup.NoIndexes
-	c.RecordsPerSecond = params.Backup.RecordsPerSecond
-	c.FileLimit = params.Backup.FileLimit * 1024 * 1024
-	c.NoUDFs = params.Backup.NoUDFs
+	c.Namespace = config.Backup.Namespace
+	c.SetList = SplitByComma(config.Backup.SetList)
+	c.BinList = SplitByComma(config.Backup.BinList)
+	c.NoRecords = config.Backup.NoRecords
+	c.NoIndexes = config.Backup.NoIndexes
+	c.RecordsPerSecond = config.Backup.RecordsPerSecond
+	c.FileLimit = config.Backup.FileLimit * 1024 * 1024
+	c.NoUDFs = config.Backup.NoUDFs
 	// The original backup tools have a single parallelism configuration property.
 	// We may consider splitting the configuration in the future.
-	c.ParallelWrite = params.Backup.Parallel
-	c.ParallelRead = params.Backup.Parallel
+	c.ParallelWrite = config.Backup.Parallel
+	c.ParallelRead = config.Backup.Parallel
 	// As we set --bandwidth in MiB we must convert it to bytes
-	c.Bandwidth = params.Backup.Bandwidth * 1024 * 1024
-	c.Compact = params.Backup.Compact
-	c.NoTTLOnly = params.Backup.NoTTLOnly
-	c.OutputFilePrefix = params.Backup.OutputFilePrefix
+	c.Bandwidth = config.Backup.Bandwidth * 1024 * 1024
+	c.Compact = config.Backup.Compact
+	c.NoTTLOnly = config.Backup.NoTTLOnly
+	c.OutputFilePrefix = config.Backup.OutputFilePrefix
 	c.MetricsEnabled = true
 
 	// Reconfigure params for stdout or single file backup.
-	if params.IsStdout() || params.Backup.OutputFile != "" {
+	if config.IsStdout() || config.Backup.OutputFile != "" {
 		// If we back up to stdout, file limit can break the input stream because it will file headers and close descriptors.
 		// So the file limit is disabled for stdout.
 		c.FileLimit = 0
@@ -197,8 +197,8 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.ParallelWrite = 1
 	}
 
-	if params.Backup.RackList != "" {
-		list, err := ParseRacks(params.Backup.RackList)
+	if config.Backup.RackList != "" {
+		list, err := ParseRacks(config.Backup.RackList)
 		if err != nil {
 			return nil, err
 		}
@@ -206,23 +206,23 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.RackList = list
 	}
 
-	if params.Backup.Continue != "" {
-		c.StateFile = path.Join(params.Backup.Directory, params.Backup.Continue)
+	if config.Backup.Continue != "" {
+		c.StateFile = path.Join(config.Backup.Directory, config.Backup.Continue)
 		c.Continue = true
-		c.PageSize = params.Backup.ScanPageSize
+		c.PageSize = config.Backup.ScanPageSize
 	}
 
-	if params.Backup.StateFileDst != "" {
-		c.StateFile = path.Join(params.Backup.Directory, params.Backup.StateFileDst)
-		c.PageSize = params.Backup.ScanPageSize
+	if config.Backup.StateFileDst != "" {
+		c.StateFile = path.Join(config.Backup.Directory, config.Backup.StateFileDst)
+		c.PageSize = config.Backup.ScanPageSize
 	}
 
 	// Overwrite partitions if we use nodes.
-	if params.Backup.NodeList != "" {
-		c.NodeList = SplitByComma(params.Backup.NodeList)
+	if config.Backup.NodeList != "" {
+		c.NodeList = SplitByComma(config.Backup.NodeList)
 	}
 
-	pf, err := mapPartitionFilter(params.Backup)
+	pf, err := mapPartitionFilter(config.Backup)
 	if err != nil {
 		return nil, err
 	}
@@ -233,18 +233,18 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 
 	c.PartitionFilters = pf
 
-	sp, err := newScanPolicy(params.Backup)
+	sp, err := newScanPolicy(config.Backup)
 	if err != nil {
 		return nil, err
 	}
 
 	c.ScanPolicy = sp
-	c.CompressionPolicy = newCompressionPolicy(params.Compression)
-	c.EncryptionPolicy = newEncryptionPolicy(params.Encryption)
-	c.SecretAgentConfig = newSecretAgentConfig(params.SecretAgent)
+	c.CompressionPolicy = config.Compression.ToPolicy()
+	c.EncryptionPolicy = config.Encryption.ToPolicy()
+	c.SecretAgentConfig = config.SecretAgent.ToConfig()
 
-	if params.Backup.ModifiedBefore != "" {
-		modBeforeTime, err := parseLocalTimeToUTC(params.Backup.ModifiedBefore)
+	if config.Backup.ModifiedBefore != "" {
+		modBeforeTime, err := parseLocalTimeToUTC(config.Backup.ModifiedBefore)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified before date: %w", err)
 		}
@@ -252,8 +252,8 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.ModBefore = &modBeforeTime
 	}
 
-	if params.Backup.ModifiedAfter != "" {
-		modAfterTime, err := parseLocalTimeToUTC(params.Backup.ModifiedAfter)
+	if config.Backup.ModifiedAfter != "" {
+		modAfterTime, err := parseLocalTimeToUTC(config.Backup.ModifiedAfter)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified after date: %w", err)
 		}
@@ -272,9 +272,9 @@ func newBackupXDRConfig(params *BackupServiceConfig) *backup.ConfigBackupXDR {
 	}
 
 	c := &backup.ConfigBackupXDR{
-		EncryptionPolicy:  newEncryptionPolicy(params.Encryption),
-		CompressionPolicy: newCompressionPolicy(params.Compression),
-		SecretAgentConfig: newSecretAgentConfig(params.SecretAgent),
+		EncryptionPolicy:  params.Encryption.ToPolicy(),
+		CompressionPolicy: params.Compression.ToPolicy(),
+		SecretAgentConfig: params.SecretAgent.ToConfig(),
 		EncoderType:       backup.EncoderTypeASBX,
 		FileLimit:         params.BackupXDR.FileLimit * 1024 * 1024,
 		ParallelWrite:     parallelWrite,
