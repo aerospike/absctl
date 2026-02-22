@@ -154,7 +154,7 @@ func newSecretAgentConfig(s *models.SecretAgent) *backup.SecretAgentConfig {
 
 	if s.ConnectionType != "" {
 		ct := strings.ToLower(s.ConnectionType)
-		c.ConnectionType = &ct
+		c.ConnectionType = new(ct)
 	}
 
 	if s.Port != 0 {
