@@ -65,16 +65,8 @@ func NewAerospikeClient(
 	)
 
 	if sa != nil {
-		var err error
-
-		cfg.User, err = backup.ParseSecret(ctx, sa, cfg.User)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse secret for user: %w", err)
-		}
-
-		cfg.Password, err = backup.ParseSecret(ctx, sa, cfg.Password)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse secret for password: %w", err)
+		if err := parseASClientSecrets(ctx, cfg, sa); err != nil {
+			return nil, err
 		}
 	}
 
@@ -110,6 +102,22 @@ func NewAerospikeClient(
 	}
 
 	return asClient, nil
+}
+
+func parseASClientSecrets(ctx context.Context, cfg *client.AerospikeConfig, sa *backup.SecretAgentConfig) error {
+	var err error
+
+	cfg.User, err = backup.ParseSecret(ctx, sa, cfg.User)
+	if err != nil {
+		return fmt.Errorf("failed to parse secret for user: %w", err)
+	}
+
+	cfg.Password, err = backup.ParseSecret(ctx, sa, cfg.Password)
+	if err != nil {
+		return fmt.Errorf("failed to parse secret for password: %w", err)
+	}
+
+	return nil
 }
 
 func newS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {

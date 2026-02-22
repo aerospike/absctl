@@ -85,10 +85,11 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 	c.flagsCommon = flags.NewCommon(&c.flagsBackup.Common, flags.OperationBackup)
 
 	backupCmd := &cobra.Command{
-		Use:   useCommand,
-		Short: welcomeMessageShort,
-		Long:  welcomeMessage,
-		RunE:  c.run,
+		Use:               useCommand,
+		Short:             welcomeMessageShort,
+		Long:              welcomeMessage,
+		RunE:              c.run,
+		PersistentPreRunE: c.preRun,
 	}
 
 	// Disable sorting
@@ -210,6 +211,18 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	if err = asb.Run(cmd.Context()); err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
+
+	return nil
+}
+
+func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
+	fs := cmd.Flags()
+
+	tlsCafileFlag := fs.Lookup("tls-cafile")
+
+	fmt.Println("-------", tlsCafileFlag.Value.String())
+
+	// Parse SA values here
 
 	return nil
 }
