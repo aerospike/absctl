@@ -73,7 +73,7 @@ func (c *Config) Validate() error {
 }
 
 // NewLogger creates a new logger with the given configuration.
-// Returns logger, close function and error.
+// Returns logger, close function, and error.
 func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
@@ -84,28 +84,33 @@ func NewLogger(cfg *Config) (*slog.Logger, func() error, error) {
 		return nil, nil, err
 	}
 
-	// Always log to stderr.
-	stdHandler := newHandler(cfg.JSON, os.Stderr, opts)
-	handlers := []slog.Handler{stdHandler}
-
-	// If a file or dir is set, create a handler for the file.
-	var file *os.File
-	if cfg.File != "" {
-		file, err = newFile(cfg.File)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		handlers = append(handlers, newHandler(cfg.JSON, file, opts))
+	writer, closeFun, err := newLogWriter(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	multiHandler := slog.NewMultiHandler(handlers...)
+	handler := newHandler(cfg.JSON, writer, opts)
 
-	return slog.New(multiHandler),
-		newCloseFun(file),
+	return slog.New(handler),
+		closeFun,
 		nil
 }
 
+// newLogWriter creates a new log writer based on the given configuration.
+func newLogWriter(cfg *Config) (io.Writer, func() error, error) {
+	if cfg.File != "" {
+		file, err := newFile(cfg.File)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to open new log file: %w", err)
+		}
+
+		return file, newCloseFun(file), nil
+	}
+
+	return os.Stderr, newCloseFun(nil), nil
+}
+
+// newCloseFun creates a new close function that closes the given file.
 func newCloseFun(file *os.File) func() error {
 	return func() error {
 		if file == nil {
