@@ -117,7 +117,6 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init logger.
-	// Init logger.
 	loggerConf := logging.NewConfig(
 		c.flagsApp.Verbose,
 		c.flagsApp.LogJSON,

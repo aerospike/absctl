@@ -32,7 +32,7 @@ const (
 )
 
 // ReportBackup prints the backup report.
-// if isJSON is true, it prints the report in JSON format, but logger must be passed
+// if toLog is true, it prints the report to log, but logger must be passed
 func ReportBackup(stats *bModels.BackupStats, isXdr, toLog bool, logger *slog.Logger) {
 	if toLog {
 		logBackupReport(stats, isXdr, logger)
@@ -87,7 +87,7 @@ func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger
 }
 
 // ReportRestore prints the restore report.
-// if isJSON is true, it prints the report in JSON format, but logger must be passed
+// if toLog is true, it prints the report to log, but logger must be passed
 func ReportRestore(stats *bModels.RestoreStats, isValidation, toLog bool, logger *slog.Logger) {
 	if toLog {
 		logRestoreReport(stats, logger, isValidation)
@@ -173,7 +173,7 @@ func logRestoreReport(stats *bModels.RestoreStats, logger *slog.Logger, isValida
 }
 
 // ReportEstimate prints the estimate report.
-// if isJSON is true, it prints the report in JSON format, but logger must be passed.
+// if toLog is true, it prints the report to log, but logger must be passed
 // estimate is the size of the backup file in bytes.
 func ReportEstimate(estimate uint64, toLog bool, logger *slog.Logger) {
 	if toLog {
