@@ -310,7 +310,7 @@ func TestDumpFile(t *testing.T) {
 			filename: "valid_dump.yaml",
 			params: dto.Backup{
 				App: dto.App{
-					LogLevel: &logLevel,
+					LogLevel: new(logLevel),
 				},
 			},
 			wantErr: "",

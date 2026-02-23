@@ -117,12 +117,23 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init logger.
-	logger, err := logging.NewLogger(c.flagsApp.LogLevel, c.flagsApp.Verbose, c.flagsApp.LogJSON)
-	if err != nil {
-		log.Println(err)
+	loggerConf := logging.NewConfig(
+		c.flagsApp.Verbose,
+		c.flagsApp.LogJSON,
+		c.flagsApp.LogLevel,
+		c.flagsApp.LogFile,
+	)
 
-		return err
+	logger, loggerClose, err := logging.NewLogger(loggerConf)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
+
+	defer func() {
+		if err := loggerClose(); err != nil {
+			log.Printf("failed to close logger: %v", err)
+		}
+	}()
 
 	// Init app.
 	serviceConfig, err := config.NewBackupServiceConfig(

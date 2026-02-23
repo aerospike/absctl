@@ -30,7 +30,7 @@ type AzureBlob struct {
 	// Azure Active directory
 	TenantID     string
 	ClientID     string
-	ClientSecret string
+	ClientSecret string // #nosec G117
 
 	Endpoint      string
 	ContainerName string
