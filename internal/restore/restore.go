@@ -75,13 +75,11 @@ func NewService(
 		logger.Debug("warm up is set", slog.Int("value", warmUp))
 
 		aerospikeClient, err = storage.NewAerospikeClient(
-			ctx,
 			cfg.ClientConfig,
 			cfg.ClientPolicy,
 			nil,
 			warmUp,
 			logger,
-			restoreConfig.SecretAgentConfig,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create aerospike client: %w", err)
