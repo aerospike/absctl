@@ -15,7 +15,6 @@
 package backup
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -230,22 +229,10 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 }
 
 func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
-	fs := cmd.Flags()
-
 	sa := c.flagsSecretAgent.GetSecretAgent()
 	sa.Config()
 
-	tlsCafileFlag := fs.Lookup("tls-cafile")
-
-	cafile, err := sa.GetSecret(context.TODO(), tlsCafileFlag.Value.String())
-	if err != nil {
-		return fmt.Errorf("failed to get secret: %w", err)
-	}
-
-	val, _ := sa.GetSecret(context.TODO(), cafile)
-	fmt.Println(val)
-
-	return nil
+	return c.flagsApp.PreRun(cmd, sa)
 }
 
 // newServiceConfig returns a new *config.BackupServiceConfig based on the flags or config file.

@@ -84,10 +84,11 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 	c.flagsCommon = flags.NewCommon(&c.flagsRestore.Common, flags.OperationRestore)
 
 	restoreCmd := &cobra.Command{
-		Use:   useCommand,
-		Short: welcomeMessageShort,
-		Long:  welcomeMessage,
-		RunE:  c.run,
+		Use:               useCommand,
+		Short:             welcomeMessageShort,
+		Long:              welcomeMessage,
+		RunE:              c.run,
+		PersistentPreRunE: c.preRun,
 	}
 
 	// Disable sorting
@@ -213,6 +214,13 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
+	sa := c.flagsSecretAgent.GetSecretAgent()
+	sa.Config()
+
+	return c.flagsApp.PreRun(cmd, sa)
 }
 
 // newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
