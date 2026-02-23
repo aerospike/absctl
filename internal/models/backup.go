@@ -16,7 +16,25 @@ package models
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/aerospike/aerospike-client-go/v8"
+	"github.com/aerospike/backup-go"
+	"github.com/aerospike/backup-go/models"
+)
+
+// MaxRack max number of racks that can exist.
+const MaxRack = 1000000
+
+var (
+	// Time parsing expressions.
+	expTimeOnly = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
+	expDateOnly = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	expDateTime = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2}$`)
 )
 
 // Backup flags that will be mapped to (scan) backup config.
@@ -122,6 +140,146 @@ func (b *Backup) Validate() error {
 	return b.Common.Validate()
 }
 
+// ScanPolicy map backup config to scan policy.
+func (b *Backup) ScanPolicy() (*aerospike.ScanPolicy, error) {
+	p := aerospike.NewScanPolicy()
+	p.MaxRecords = b.MaxRecords
+	p.MaxRetries = b.MaxRetries
+	p.SleepBetweenRetries = time.Duration(b.SleepBetweenRetries) * time.Millisecond
+	p.TotalTimeout = time.Duration(b.TotalTimeout) * time.Millisecond
+	p.SocketTimeout = time.Duration(b.SocketTimeout) * time.Millisecond
+	// If we selected racks we must set replica policy to aerospike.PREFER_RACK
+	if b.PreferRacks != "" {
+		p.ReplicaPolicy = aerospike.PREFER_RACK
+	}
+
+	if b.RackList != "" || b.NodeList != "" {
+		p.ReplicaPolicy = aerospike.MASTER
+	}
+
+	if b.NoBins {
+		p.IncludeBinData = false
+	}
+
+	if b.FilterExpression != "" {
+		exp, err := aerospike.ExpFromBase64(b.FilterExpression)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse filter expression: %w", err)
+		}
+
+		p.FilterExpression = exp
+	}
+
+	return p, nil
+}
+
+// PartitionFilters map backup config to partition filters.
+func (b *Backup) PartitionFilters() ([]*aerospike.PartitionFilter, error) {
+	pf, err := b.resolveFilters()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = validatePartitionFilters(pf); err != nil {
+		return nil, fmt.Errorf("failed to validate partition filters: %w", err)
+	}
+
+	return pf, nil
+}
+
+// resolveFilters encapsulates the logic for choosing the filter type.
+func (b *Backup) resolveFilters() ([]*aerospike.PartitionFilter, error) {
+	if b.AfterDigest != "" {
+		filter, err := backup.NewPartitionFilterAfterDigest(b.Namespace, b.AfterDigest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse after digest filter: %w", err)
+		}
+		return []*aerospike.PartitionFilter{filter}, nil
+	}
+
+	if b.PartitionList != "" {
+		filters, err := backup.ParsePartitionFilterListString(b.Namespace, b.PartitionList)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse partition filter list: %w", err)
+		}
+		return filters, nil
+	}
+
+	return []*aerospike.PartitionFilter{backup.NewPartitionFilterAll()}, nil
+}
+
+// Racks parses a comma-separated string of rack IDs into a slice of positive integers.
+// Returns an error if any ID is invalid or exceeds the allowed maximum limit.
+func (b *Backup) Racks() ([]int, error) {
+	racksStringSlice := splitByComma(b.RackList)
+	racksIntSlice := make([]int, 0, len(racksStringSlice))
+
+	for i := range racksStringSlice {
+		rackID, err := strconv.Atoi(racksStringSlice[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse racks: %w", err)
+		}
+
+		if rackID < 0 {
+			return nil, fmt.Errorf("rack id %d invalid, should be non-negative number", rackID)
+		}
+
+		if rackID > MaxRack {
+			return nil, fmt.Errorf("rack id %d invalid, should not exceed %d", rackID, MaxRack)
+		}
+
+		racksIntSlice = append(racksIntSlice, rackID)
+	}
+
+	return racksIntSlice, nil
+}
+
+// Nodes maps the NodeList string into a slice of node names by splitting it using commas.
+// Returns nil if empty.
+func (b *Backup) Nodes() []string {
+	return splitByComma(b.NodeList)
+}
+
+// Sets maps the Sets string into a slice of set names by splitting it using commas.
+// Returns nil if empty.
+func (b *Backup) Sets() []string {
+	return splitByComma(b.SetList)
+}
+
+// Bins maps the BinList string into a slice of bin names by splitting it using commas.
+// Returns nil if empty.
+func (b *Backup) Bins() []string {
+	return splitByComma(b.BinList)
+}
+
+// ModifiedBeforeTime maps the ModifiedBefore string into a UTC time.
+func (b *Backup) ModifiedBeforeTime() (time.Time, error) {
+	return parseLocalTimeToUTC(b.ModifiedBefore)
+}
+
+// ModifiedAfterTime maps the ModifiedAfter string into a UTC time.
+func (b *Backup) ModifiedAfterTime() (time.Time, error) {
+	return parseLocalTimeToUTC(b.ModifiedAfter)
+}
+
+// InfoPolicy maps the backup configuration into an Aerospike InfoPolicy.
+func (b *Backup) InfoPolicy() *aerospike.InfoPolicy {
+	p := aerospike.NewInfoPolicy()
+	p.Timeout = time.Duration(b.InfoTimeout) * time.Millisecond
+
+	return p
+}
+
+// RetryPolicy maps backup configuration parameters to a retry policy,
+// including interval, multiplier, and max retries.
+func (b *Backup) RetryPolicy() *models.RetryPolicy {
+	return models.NewRetryPolicy(
+		time.Duration(b.InfoRetryIntervalMilliseconds)*time.Millisecond,
+		b.InfoRetriesMultiplier,
+		b.InfoMaxRetries,
+	)
+}
+
 // validateSingleFilter ensures only one filtering option is specified.
 func (b *Backup) validateSingleFilter() error {
 	filtersSet := 0
@@ -201,4 +359,87 @@ func validateFilePrefix(prefix string) error {
 	}
 
 	return nil
+}
+
+func validatePartitionFilters(partitionFilters []*aerospike.PartitionFilter) error {
+	if len(partitionFilters) < 1 {
+		return nil
+	}
+
+	beginMap := make(map[int]bool)
+	intervals := make([][2]int, 0)
+
+	for _, filter := range partitionFilters {
+		switch {
+		case filter.Count == 1:
+			if beginMap[filter.Begin] {
+				return fmt.Errorf("duplicate begin value %d for count = 1", filter.Begin)
+			}
+
+			beginMap[filter.Begin] = true
+		case filter.Count > 1:
+			begin := filter.Begin
+			// To calculate an interval, we start from `Begin` and go till `Count`,
+			// so we should do -1 as we start counting from 0.
+			end := filter.Begin + filter.Count - 1
+			intervals = append(intervals, [2]int{begin, end})
+		default:
+			return fmt.Errorf("invalid partition filter count: %d", filter.Count)
+		}
+	}
+
+	sort.Slice(intervals, func(i, j int) bool {
+		return intervals[i][0] < intervals[j][0]
+	})
+
+	for i := 1; i < len(intervals); i++ {
+		prevEnd := intervals[i-1][1]
+		currBegin := intervals[i][0]
+
+		if currBegin <= prevEnd {
+			return fmt.Errorf("overlapping intervals: [%d, %d] and [%d, %d]",
+				intervals[i-1][0], prevEnd, currBegin, intervals[i][1])
+		}
+	}
+
+	return nil
+}
+
+// splitByComma splits a comma-separated string into a slice of strings. Returns nil if the input string is empty.
+func splitByComma(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	return strings.Split(s, ",")
+}
+
+func parseLocalTimeToUTC(timeString string) (time.Time, error) {
+	location, err := time.LoadLocation("Local")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to load timezone location: %w", err)
+	}
+
+	var validTime string
+
+	switch {
+	case expDateTime.MatchString(timeString):
+		validTime = timeString
+	case expTimeOnly.MatchString(timeString):
+		currentTime := time.Now().In(location)
+		validTime = currentTime.Format("2006-01-02") + "_" + timeString
+	case expDateOnly.MatchString(timeString):
+		validTime = timeString + "_00:00:00"
+	default:
+		return time.Time{}, fmt.Errorf("unknown time format: %s", timeString)
+	}
+
+	localTime, err := time.ParseInLocation("2006-01-02_15:04:05", validTime, location)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse time %s: %w", timeString, err)
+	}
+
+	utcTime := localTime.UTC()
+
+	return utcTime, nil
 }

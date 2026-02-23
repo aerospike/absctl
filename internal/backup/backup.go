@@ -94,7 +94,7 @@ func NewService(
 		return nil, err
 	}
 
-	secretAgent := config.NewSecretAgent(backupConfig, backupXDRConfig)
+	secretAgent := getSecretAgent(backupConfig, backupXDRConfig)
 
 	// We don't need a writer for estimates.
 	var writer backup.Writer
@@ -115,16 +115,11 @@ func NewService(
 		return nil, fmt.Errorf("failed to initialize state reader: %w", err)
 	}
 
-	var racks string
-	if params.Backup != nil {
-		racks = params.Backup.PreferRacks
-	}
-
 	aerospikeClient, err := storage.NewAerospikeClient(
 		ctx,
 		params.ClientConfig,
 		params.ClientPolicy,
-		racks,
+		backupConfig.RackList,
 		0,
 		logger,
 		secretAgent)
@@ -336,22 +331,11 @@ func unblockMrt(ctx context.Context, infoClient *asinfo.Client, namespace string
 }
 
 func getInfoPolicies(params *config.BackupServiceConfig) (*aerospike.InfoPolicy, *bModels.RetryPolicy) {
-	switch {
-	case params.BackupXDR != nil:
-		return config.NewInfoPolicy(params.BackupXDR.InfoTimeout), config.NewRetryPolicy(
-			params.BackupXDR.InfoRetryIntervalMilliseconds,
-			params.BackupXDR.InfoRetriesMultiplier,
-			params.BackupXDR.InfoMaxRetries,
-		)
-	case params.Backup != nil:
-		return config.NewInfoPolicy(params.Backup.InfoTimeout), config.NewRetryPolicy(
-			params.Backup.InfoRetryIntervalMilliseconds,
-			params.Backup.InfoRetriesMultiplier,
-			params.Backup.InfoMaxRetries,
-		)
-	default:
-		return nil, nil
+	if params.BackupXDR != nil {
+		return params.BackupXDR.InfoPolicy(), params.BackupXDR.RetryPolicy()
 	}
+
+	return params.Backup.InfoPolicy(), params.Backup.RetryPolicy()
 }
 
 // errHumanize simplifies technical error messages.
@@ -363,4 +347,17 @@ func errHumanize(err error) error {
 	}
 
 	return err
+}
+
+// getSecretAgent determines and returns the SecretAgentConfig from ConfigBackup or ConfigBackupXDR.
+// Returns nil if both are nil.
+func getSecretAgent(b *backup.ConfigBackup, bxdr *backup.ConfigBackupXDR) *backup.SecretAgentConfig {
+	switch {
+	case b != nil:
+		return b.SecretAgentConfig
+	case bxdr != nil:
+		return bxdr.SecretAgentConfig
+	default:
+		return nil
+	}
 }

@@ -220,7 +220,7 @@ func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 	fs := cmd.Flags()
 
 	sa := c.flagsSecretAgent.GetSecretAgent()
-	sa.ToConfig()
+	sa.Config()
 
 	tlsCafileFlag := fs.Lookup("tls-cafile")
 	cafile, err := sa.GetSecret(context.TODO(), tlsCafileFlag.Value.String())

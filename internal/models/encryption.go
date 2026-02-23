@@ -28,7 +28,8 @@ type Encryption struct {
 	KeySecret string
 }
 
-func (e *Encryption) ToPolicy() *backup.EncryptionPolicy {
+// Policy converts Encryption to backup.EncryptionPolicy.
+func (e *Encryption) Policy() *backup.EncryptionPolicy {
 	if e == nil {
 		return nil
 	}

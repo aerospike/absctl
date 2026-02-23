@@ -60,11 +60,13 @@ func (s *SecretAgent) Validate() error {
 	return nil
 }
 
+// GetSecret retrieves secret value from SecretAgent.
 func (s *SecretAgent) GetSecret(ctx context.Context, value string) (string, error) {
 	return backup.ParseSecret(ctx, s.config, value)
 }
 
-func (s *SecretAgent) ToConfig() *backup.SecretAgentConfig {
+// Config returns SecretAgentConfig for backup and restore operations.
+func (s *SecretAgent) Config() *backup.SecretAgentConfig {
 	if s == nil {
 		return nil
 	}

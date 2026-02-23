@@ -82,7 +82,7 @@ func NewService(
 			ctx,
 			params.ClientConfig,
 			params.ClientPolicy,
-			"",
+			nil,
 			warmUp,
 			logger,
 			restoreConfig.SecretAgentConfig,

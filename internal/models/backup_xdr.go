@@ -16,6 +16,10 @@ package models
 
 import (
 	"fmt"
+	"time"
+
+	"github.com/aerospike/aerospike-client-go/v8"
+	"github.com/aerospike/backup-go/models"
 )
 
 // BackupXDR flags that will be mapped to xdr backup config.
@@ -111,4 +115,22 @@ func (b *BackupXDR) Validate() error {
 	}
 
 	return nil
+}
+
+// InfoPolicy maps the backup configuration into an Aerospike InfoPolicy.
+func (b *BackupXDR) InfoPolicy() *aerospike.InfoPolicy {
+	p := aerospike.NewInfoPolicy()
+	p.Timeout = time.Duration(b.InfoTimeout) * time.Millisecond
+
+	return p
+}
+
+// RetryPolicy maps backup configuration parameters to a retry policy,
+// including interval, multiplier, and max retries.
+func (b *BackupXDR) RetryPolicy() *models.RetryPolicy {
+	return models.NewRetryPolicy(
+		time.Duration(b.InfoRetryIntervalMilliseconds)*time.Millisecond,
+		b.InfoRetriesMultiplier,
+		b.InfoMaxRetries,
+	)
 }

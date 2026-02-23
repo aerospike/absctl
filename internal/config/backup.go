@@ -170,8 +170,8 @@ func NewBackupConfigs(serviceConfig *BackupServiceConfig, logger *slog.Logger,
 func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) {
 	c := backup.NewDefaultBackupConfig()
 	c.Namespace = config.Backup.Namespace
-	c.SetList = SplitByComma(config.Backup.SetList)
-	c.BinList = SplitByComma(config.Backup.BinList)
+	c.SetList = config.Backup.Sets()
+	c.BinList = config.Backup.Bins()
 	c.NoRecords = config.Backup.NoRecords
 	c.NoIndexes = config.Backup.NoIndexes
 	c.RecordsPerSecond = config.Backup.RecordsPerSecond
@@ -198,7 +198,7 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 	}
 
 	if config.Backup.RackList != "" {
-		list, err := ParseRacks(config.Backup.RackList)
+		list, err := config.Backup.Racks()
 		if err != nil {
 			return nil, err
 		}
@@ -219,32 +219,28 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 
 	// Overwrite partitions if we use nodes.
 	if config.Backup.NodeList != "" {
-		c.NodeList = SplitByComma(config.Backup.NodeList)
+		c.NodeList = config.Backup.Nodes()
 	}
 
-	pf, err := mapPartitionFilter(config.Backup)
+	pf, err := config.Backup.PartitionFilters()
 	if err != nil {
-		return nil, err
-	}
-
-	if err := ValidatePartitionFilters(pf); err != nil {
 		return nil, err
 	}
 
 	c.PartitionFilters = pf
 
-	sp, err := newScanPolicy(config.Backup)
+	sp, err := config.Backup.ScanPolicy()
 	if err != nil {
 		return nil, err
 	}
 
 	c.ScanPolicy = sp
-	c.CompressionPolicy = config.Compression.ToPolicy()
-	c.EncryptionPolicy = config.Encryption.ToPolicy()
-	c.SecretAgentConfig = config.SecretAgent.ToConfig()
+	c.CompressionPolicy = config.Compression.Policy()
+	c.EncryptionPolicy = config.Encryption.Policy()
+	c.SecretAgentConfig = config.SecretAgent.Config()
 
 	if config.Backup.ModifiedBefore != "" {
-		modBeforeTime, err := parseLocalTimeToUTC(config.Backup.ModifiedBefore)
+		modBeforeTime, err := config.Backup.ModifiedBeforeTime()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified before date: %w", err)
 		}
@@ -253,7 +249,7 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 	}
 
 	if config.Backup.ModifiedAfter != "" {
-		modAfterTime, err := parseLocalTimeToUTC(config.Backup.ModifiedAfter)
+		modAfterTime, err := config.Backup.ModifiedAfterTime()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified after date: %w", err)
 		}
@@ -272,9 +268,9 @@ func newBackupXDRConfig(params *BackupServiceConfig) *backup.ConfigBackupXDR {
 	}
 
 	c := &backup.ConfigBackupXDR{
-		EncryptionPolicy:  params.Encryption.ToPolicy(),
-		CompressionPolicy: params.Compression.ToPolicy(),
-		SecretAgentConfig: params.SecretAgent.ToConfig(),
+		EncryptionPolicy:  params.Encryption.Policy(),
+		CompressionPolicy: params.Compression.Policy(),
+		SecretAgentConfig: params.SecretAgent.Config(),
 		EncoderType:       backup.EncoderTypeASBX,
 		FileLimit:         params.BackupXDR.FileLimit * 1024 * 1024,
 		ParallelWrite:     parallelWrite,

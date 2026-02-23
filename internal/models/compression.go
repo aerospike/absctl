@@ -28,7 +28,8 @@ type Compression struct {
 	Level int
 }
 
-func (c *Compression) ToPolicy() *backup.CompressionPolicy {
+// Policy converts Compression to backup.CompressionPolicy.
+func (c *Compression) Policy() *backup.CompressionPolicy {
 	if c == nil {
 		return nil
 	}

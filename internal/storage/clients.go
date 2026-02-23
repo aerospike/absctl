@@ -28,7 +28,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	appConfig "github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
@@ -51,7 +50,7 @@ func NewAerospikeClient(
 	ctx context.Context,
 	cfg *client.AerospikeConfig,
 	cp *models.ClientPolicy,
-	racks string,
+	racksIDs []int,
 	warmUp int,
 	logger *slog.Logger,
 	sa *backup.SecretAgentConfig,
@@ -79,12 +78,7 @@ func NewAerospikeClient(
 	p.IdleTimeout = time.Duration(cp.IdleTimeout) * time.Millisecond
 	p.LoginTimeout = time.Duration(cp.LoginTimeout) * time.Millisecond
 
-	if racks != "" {
-		racksIDs, err := appConfig.ParseRacks(racks)
-		if err != nil {
-			return nil, err
-		}
-
+	if len(racksIDs) > 0 {
 		p.RackIds = racksIDs
 		p.RackAware = true
 	}

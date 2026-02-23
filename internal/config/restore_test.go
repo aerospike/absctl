@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/stretchr/testify/assert"
@@ -547,4 +548,76 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMapRestoreConfig_Success(t *testing.T) {
+	t.Parallel()
+	params := &RestoreServiceConfig{
+		App: &models.App{},
+		Restore: &models.Restore{
+			Common: models.Common{
+				Namespace:        "test-namespace",
+				SetList:          "set1,set2",
+				BinList:          "bin1,bin2",
+				NoRecords:        true,
+				NoIndexes:        false,
+				RecordsPerSecond: 1000,
+				Bandwidth:        10,
+				Parallel:         5,
+			},
+		},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
+	}
+	logger := logging.NewDefaultLogger()
+	config := NewRestoreConfig(params, logger)
+	assert.Equal(t, "test-namespace", *config.Namespace.Source)
+	assert.Equal(t, "test-namespace", *config.Namespace.Destination)
+	assert.ElementsMatch(t, []string{"set1", "set2"}, config.SetList)
+	assert.ElementsMatch(t, []string{"bin1", "bin2"}, config.BinList)
+	assert.True(t, config.NoRecords)
+	assert.Equal(t, 1000, config.RecordsPerSecond)
+
+	assert.NotNil(t, config.CompressionPolicy)
+	assert.Equal(t, "ZSTD", config.CompressionPolicy.Mode)
+	assert.Equal(t, 3, config.CompressionPolicy.Level)
+
+	assert.NotNil(t, config.EncryptionPolicy)
+	assert.Equal(t, "AES256", config.EncryptionPolicy.Mode)
+	assert.Equal(t, "/path/to/keyfile", *config.EncryptionPolicy.KeyFile)
+
+	assert.NotNil(t, config.SecretAgentConfig)
+	assert.Equal(t, "localhost", *config.SecretAgentConfig.Address)
+	assert.Equal(t, "tcp", *config.SecretAgentConfig.ConnectionType)
+	assert.Equal(t, 8080, *config.SecretAgentConfig.Port)
+}
+
+func TestMapRestoreConfig_PartialConfig(t *testing.T) {
+	t.Parallel()
+
+	params := &RestoreServiceConfig{
+		App: &models.App{},
+		Restore: &models.Restore{
+			ExtraTTL:           3600,
+			IgnoreRecordError:  true,
+			DisableBatchWrites: true,
+			BatchSize:          1000,
+			MaxAsyncBatches:    5,
+			Common: models.Common{
+				Namespace: "test-namespace",
+			},
+		},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
+	}
+
+	logger := logging.NewDefaultLogger()
+	config := NewRestoreConfig(params, logger)
+	assert.Equal(t, int64(3600), config.ExtraTTL)
+	assert.True(t, config.IgnoreRecordError)
+	assert.True(t, config.DisableBatchWrites)
+	assert.Equal(t, 1000, config.BatchSize)
+	assert.Equal(t, 5, config.MaxAsyncBatches)
 }

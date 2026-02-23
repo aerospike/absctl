@@ -24,6 +24,8 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
+const noneVal = "NONE"
+
 // RestoreServiceConfig contains configuration settings for the restore service,
 // including client, restore, and storage details.
 type RestoreServiceConfig struct {
@@ -88,15 +90,15 @@ func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup
 	}
 
 	c := backup.NewDefaultRestoreConfig()
-	c.Namespace = newRestoreNamespace(config.Restore.Namespace)
-	c.SetList = SplitByComma(config.Restore.SetList)
-	c.BinList = SplitByComma(config.Restore.BinList)
+	c.Namespace = config.Restore.NamespaceConfig()
+	c.SetList = config.Restore.Sets()
+	c.BinList = config.Restore.Bins()
 	c.NoRecords = config.Restore.NoRecords
 	c.NoIndexes = config.Restore.NoIndexes
 	c.NoUDFs = config.Restore.NoUDFs
 	c.RecordsPerSecond = config.Restore.RecordsPerSecond
 	c.Parallel = parallel
-	c.WritePolicy = newWritePolicy(config.Restore)
+	c.WritePolicy = config.Restore.WritePolicy()
 	// As we set --bandwidth in MiB we must convert it to bytes
 	c.Bandwidth = config.Restore.Bandwidth * 1024 * 1024
 	c.ExtraTTL = config.Restore.ExtraTTL
@@ -106,14 +108,10 @@ func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup
 	c.MaxAsyncBatches = config.Restore.MaxAsyncBatches
 	c.MetricsEnabled = true
 
-	c.CompressionPolicy = config.Compression.ToPolicy()
-	c.EncryptionPolicy = config.Encryption.ToPolicy()
-	c.SecretAgentConfig = config.SecretAgent.ToConfig()
-	c.RetryPolicy = NewRetryPolicy(
-		config.Restore.RetryBaseInterval,
-		config.Restore.RetryMultiplier,
-		config.Restore.RetryMaxAttempts,
-	)
+	c.CompressionPolicy = config.Compression.Policy()
+	c.EncryptionPolicy = config.Encryption.Policy()
+	c.SecretAgentConfig = config.SecretAgent.Config()
+	c.RetryPolicy = config.Restore.RetryPolicy()
 	c.ValidateOnly = config.Restore.ValidateOnly
 	c.ApplyMetadataLast = config.Restore.ApplyMetadataLast
 

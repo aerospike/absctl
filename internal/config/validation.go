@@ -16,10 +16,8 @@ package config
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/aerospike-client-go/v8"
 )
 
 //nolint:gocyclo // It is a long validation function.
@@ -67,50 +65,6 @@ func ValidateStorages(
 
 	if count > 1 {
 		return fmt.Errorf("only one cloud provider can be configured")
-	}
-
-	return nil
-}
-
-func ValidatePartitionFilters(partitionFilters []*aerospike.PartitionFilter) error {
-	if len(partitionFilters) < 1 {
-		return nil
-	}
-
-	beginMap := make(map[int]bool)
-	intervals := make([][2]int, 0)
-
-	for _, filter := range partitionFilters {
-		switch {
-		case filter.Count == 1:
-			if beginMap[filter.Begin] {
-				return fmt.Errorf("duplicate begin value %d for count = 1", filter.Begin)
-			}
-
-			beginMap[filter.Begin] = true
-		case filter.Count > 1:
-			begin := filter.Begin
-			// To calculate an interval, we start from `Begin` and go till `Count`,
-			// so we should do -1 as we start counting from 0.
-			end := filter.Begin + filter.Count - 1
-			intervals = append(intervals, [2]int{begin, end})
-		default:
-			return fmt.Errorf("invalid partition filter count: %d", filter.Count)
-		}
-	}
-
-	sort.Slice(intervals, func(i, j int) bool {
-		return intervals[i][0] < intervals[j][0]
-	})
-
-	for i := 1; i < len(intervals); i++ {
-		prevEnd := intervals[i-1][1]
-		currBegin := intervals[i][0]
-
-		if currBegin <= prevEnd {
-			return fmt.Errorf("overlapping intervals: [%d, %d] and [%d, %d]",
-				intervals[i-1][0], prevEnd, currBegin, intervals[i][1])
-		}
 	}
 
 	return nil
