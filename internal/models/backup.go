@@ -256,12 +256,12 @@ func (b *Backup) Bins() []string {
 
 // ModifiedBeforeTime maps the ModifiedBefore string into a UTC time.
 func (b *Backup) ModifiedBeforeTime() (time.Time, error) {
-	return parseLocalTimeToUTC(b.ModifiedBefore)
+	return ParseLocalTimeToUTC(b.ModifiedBefore)
 }
 
 // ModifiedAfterTime maps the ModifiedAfter string into a UTC time.
 func (b *Backup) ModifiedAfterTime() (time.Time, error) {
-	return parseLocalTimeToUTC(b.ModifiedAfter)
+	return ParseLocalTimeToUTC(b.ModifiedAfter)
 }
 
 // InfoPolicy maps the backup configuration into an Aerospike InfoPolicy.
@@ -416,7 +416,8 @@ func SplitByComma(s string) []string {
 	return strings.Split(s, ",")
 }
 
-func parseLocalTimeToUTC(timeString string) (time.Time, error) {
+// ParseLocalTimeToUTC parces local time to UTC.
+func ParseLocalTimeToUTC(timeString string) (time.Time, error) {
 	location, err := time.LoadLocation("Local")
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to load timezone location: %w", err)

@@ -939,8 +939,9 @@ func TestMapBackupConfig_Success(t *testing.T) {
 	assert.Equal(t, uint64(5000*1024*1024), config.FileLimit)
 	assert.True(t, config.NoTTLOnly)
 
-	modBefore := time.Date(2023, 9, 1, 10, 0, 0, 0, time.UTC)
-	modAfter := time.Date(2023, 9, 2, 10, 0, 0, 0, time.UTC)
+	modBefore, err := models.ParseLocalTimeToUTC("2023-09-01_12:00:00")
+	require.NoError(t, err)
+	modAfter, err := models.ParseLocalTimeToUTC("2023-09-02_12:00:00")
 	require.NoError(t, err)
 	assert.Equal(t, modBefore, *config.ModBefore)
 	assert.Equal(t, modAfter, *config.ModAfter)

@@ -782,7 +782,7 @@ func TestParseLocalTimeToUTC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseLocalTimeToUTC(tt.timeString)
+			result, err := ParseLocalTimeToUTC(tt.timeString)
 
 			if tt.expectError {
 				require.Error(t, err)
