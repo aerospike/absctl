@@ -121,7 +121,7 @@ func TestRestoreConfig_ToModelRestore(t *testing.T) {
 
 	assert.Equal(t, "/restore", model.Directory)
 	assert.Equal(t, "test", model.Namespace)
-	assert.Equal(t, "set1,set2", model.Sets)
+	assert.Equal(t, "set1,set2", model.SetList)
 	assert.Equal(t, "bin1,bin2", model.BinList)
 	assert.Equal(t, 8, model.Parallel)
 	assert.False(t, model.NoRecords)
@@ -173,7 +173,7 @@ func TestRestore_ToModelRestore_EmptyLists(t *testing.T) {
 	model := restore.ToModelRestore()
 
 	require.NotNil(t, model)
-	assert.Empty(t, model.Sets)
+	assert.Empty(t, model.SetList)
 	assert.Empty(t, model.BinList)
 	assert.Empty(t, model.DirectoryList)
 }
