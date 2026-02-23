@@ -236,12 +236,14 @@ func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 	sa.Config()
 
 	tlsCafileFlag := fs.Lookup("tls-cafile")
+
 	cafile, err := sa.GetSecret(context.TODO(), tlsCafileFlag.Value.String())
 	if err != nil {
 		return fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	sa.GetSecret(context.TODO(), cafile)
+	val, _ := sa.GetSecret(context.TODO(), cafile)
+	fmt.Println(val)
 
 	return nil
 }

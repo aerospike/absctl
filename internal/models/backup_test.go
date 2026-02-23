@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	appConfig "github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/stretchr/testify/assert"
@@ -915,11 +914,11 @@ func TestParseRacks(t *testing.T) {
 		},
 		{
 			name:        "Invalid Rack - Exceeds MaxRack",
-			racks:       fmt.Sprintf("1,%d,3", appConfig.MaxRack+1),
+			racks:       fmt.Sprintf("1,%d,3", MaxRack+1),
 			expected:    nil,
 			expectError: true,
 			errorText: fmt.Sprintf("rack id %d invalid, should not exceed %d",
-				appConfig.MaxRack+1, appConfig.MaxRack),
+				MaxRack+1, MaxRack),
 		},
 		{
 			name:     "Empty Input",

@@ -194,6 +194,7 @@ func (b *Backup) resolveFilters() ([]*aerospike.PartitionFilter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse after digest filter: %w", err)
 		}
+
 		return []*aerospike.PartitionFilter{filter}, nil
 	}
 
@@ -202,6 +203,7 @@ func (b *Backup) resolveFilters() ([]*aerospike.PartitionFilter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse partition filter list: %w", err)
 		}
+
 		return filters, nil
 	}
 
