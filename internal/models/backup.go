@@ -211,7 +211,7 @@ func (b *Backup) resolveFilters() ([]*aerospike.PartitionFilter, error) {
 // Racks parses a comma-separated string of rack IDs into a slice of positive integers.
 // Returns an error if any ID is invalid or exceeds the allowed maximum limit.
 func (b *Backup) Racks() ([]int, error) {
-	racksStringSlice := splitByComma(b.RackList)
+	racksStringSlice := SplitByComma(b.RackList)
 	racksIntSlice := make([]int, 0, len(racksStringSlice))
 
 	for i := range racksStringSlice {
@@ -237,19 +237,19 @@ func (b *Backup) Racks() ([]int, error) {
 // Nodes maps the NodeList string into a slice of node names by splitting it using commas.
 // Returns nil if empty.
 func (b *Backup) Nodes() []string {
-	return splitByComma(b.NodeList)
+	return SplitByComma(b.NodeList)
 }
 
 // Sets maps the Sets string into a slice of set names by splitting it using commas.
 // Returns nil if empty.
 func (b *Backup) Sets() []string {
-	return splitByComma(b.SetList)
+	return SplitByComma(b.SetList)
 }
 
 // Bins maps the BinList string into a slice of bin names by splitting it using commas.
 // Returns nil if empty.
 func (b *Backup) Bins() []string {
-	return splitByComma(b.BinList)
+	return SplitByComma(b.BinList)
 }
 
 // ModifiedBeforeTime maps the ModifiedBefore string into a UTC time.
@@ -405,8 +405,8 @@ func validatePartitionFilters(partitionFilters []*aerospike.PartitionFilter) err
 	return nil
 }
 
-// splitByComma splits a comma-separated string into a slice of strings. Returns nil if the input string is empty.
-func splitByComma(s string) []string {
+// SplitByComma splits a comma-separated string into a slice of strings. Returns nil if the input string is empty.
+func SplitByComma(s string) []string {
 	if s == "" {
 		return nil
 	}

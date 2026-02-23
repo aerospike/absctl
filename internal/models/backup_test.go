@@ -15,9 +15,11 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	appConfig "github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/stretchr/testify/assert"
@@ -711,14 +713,14 @@ func TestMapScanPolicy_Errors(t *testing.T) {
 func TestSplitByComma_EmptyString(t *testing.T) {
 	t.Parallel()
 
-	result := splitByComma("")
+	result := SplitByComma("")
 	assert.Nil(t, result)
 }
 
 func TestSplitByComma_NonEmptyString(t *testing.T) {
 	t.Parallel()
 
-	result := splitByComma("item1,item2,item3")
+	result := SplitByComma("item1,item2,item3")
 	assert.Equal(t, []string{"item1", "item2", "item3"}, result)
 }
 
@@ -794,6 +796,153 @@ func TestParseLocalTimeToUTC(t *testing.T) {
 				localTime, err := time.ParseInLocation("2006-01-02_15:04:05", tt.expectedUTC, location)
 				require.NoError(t, err)
 				assert.Equal(t, localTime.UTC(), result)
+			}
+		})
+	}
+}
+
+func TestValidatePartitionFilters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		partitionFilters []*aerospike.PartitionFilter
+		wantErr          bool
+	}{
+		{
+			name: "Single valid partition filter",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 1},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Non-overlapping partition filters",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 5},
+				{Begin: 10, Count: 5},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Overlapping partition filters",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 10},
+				{Begin: 5, Count: 10},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Border partition filters",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 1000},
+				{Begin: 1000, Count: 3000},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Duplicate begin value",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 1},
+				{Begin: 0, Count: 1},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Mixed filters with no overlap",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 1},
+				{Begin: 5, Count: 5},
+				{Begin: 20, Count: 1},
+				{Begin: 30, Count: 10},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid count in filter",
+			partitionFilters: []*aerospike.PartitionFilter{
+				{Begin: 0, Count: 0},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validatePartitionFilters(tt.partitionFilters)
+			if tt.wantErr {
+				assert.Error(t, err, "Expected error but got none")
+			} else {
+				assert.NoError(t, err, "Expected no error but got one")
+			}
+		})
+	}
+}
+
+func TestParseRacks(t *testing.T) {
+	tests := []struct {
+		name        string
+		racks       string
+		expected    []int
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:     "Single Valid Rack",
+			racks:    "1",
+			expected: []int{1},
+		},
+		{
+			name:     "Multiple Valid Racks",
+			racks:    "1,2,3",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:        "Invalid Rack - Non-integer",
+			racks:       "1,abc,3",
+			expected:    nil,
+			expectError: true,
+			errorText:   "failed to parse racks",
+		},
+		{
+			name:        "Invalid Rack - Negative Value",
+			racks:       "1,-2,3",
+			expected:    nil,
+			expectError: true,
+			errorText:   "rack id -2 invalid, should be non-negative number",
+		},
+		{
+			name:        "Invalid Rack - Exceeds MaxRack",
+			racks:       fmt.Sprintf("1,%d,3", appConfig.MaxRack+1),
+			expected:    nil,
+			expectError: true,
+			errorText: fmt.Sprintf("rack id %d invalid, should not exceed %d",
+				appConfig.MaxRack+1, appConfig.MaxRack),
+		},
+		{
+			name:     "Empty Input",
+			racks:    "",
+			expected: []int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backup := &Backup{
+				RackList: tt.racks,
+			}
+
+			result, err := backup.Racks()
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), tt.errorText)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
 			}
 		})
 	}

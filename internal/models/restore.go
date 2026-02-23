@@ -111,7 +111,7 @@ func (r *Restore) Validate() error {
 // it sets both source and destination to the same value.
 // Returns nil if invalid input (e.g., more than two namespaces) is provided.
 func (r *Restore) NamespaceConfig() *backup.RestoreNamespaceConfig {
-	nsArr := splitByComma(r.Namespace)
+	nsArr := SplitByComma(r.Namespace)
 
 	var source, destination string
 
@@ -168,13 +168,13 @@ func (r *Restore) RetryPolicy() *models.RetryPolicy {
 // Sets converts the Sets string into a slice of set names by splitting it using commas.
 // Returns nil if empty.
 func (r *Restore) Sets() []string {
-	return splitByComma(r.SetList)
+	return SplitByComma(r.SetList)
 }
 
 // Bins converts the BinList string into a slice of bin names by splitting it using commas.
 // Returns nil if empty.
 func (r *Restore) Bins() []string {
-	return splitByComma(r.BinList)
+	return SplitByComma(r.BinList)
 }
 
 func recordExistsAction(replace, unique bool) aerospike.RecordExistsAction {

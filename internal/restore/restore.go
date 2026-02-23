@@ -99,13 +99,9 @@ func NewService(
 
 	logger.Info("initializing restore client", slog.String("id", idRestore))
 
-	infoRetryPolicy := config.NewRetryPolicy(
-		params.Restore.InfoRetryIntervalMilliseconds,
-		params.Restore.InfoRetriesMultiplier,
-		params.Restore.InfoMaxRetries,
-	)
+	infoRetryPolicy := params.Restore.RetryPolicy()
 
-	infoPolicy := config.NewInfoPolicy(params.Restore.InfoTimeout)
+	infoPolicy := params.Restore.InfoPolicy()
 
 	backupClient, err := backup.NewClient(
 		aerospikeClient,

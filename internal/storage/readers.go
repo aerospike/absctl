@@ -314,7 +314,7 @@ func newAzureReader(
 
 // prepareDirectoryList parses command line parameters and return slice of strings.
 func prepareDirectoryList(parentDir, dirList string) []string {
-	result := config.SplitByComma(dirList)
+	result := models.SplitByComma(dirList)
 	if parentDir != "" {
 		for i := range result {
 			result[i] = path.Join(parentDir, result[i])

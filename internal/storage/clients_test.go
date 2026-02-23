@@ -15,11 +15,9 @@
 package storage
 
 import (
-	"fmt"
 	"log/slog"
 	"testing"
 
-	appConfig "github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/tools-common-go/client"
@@ -172,69 +170,6 @@ func TestToHosts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := toHosts(tt.input)
 			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestParseRacks(t *testing.T) {
-	tests := []struct {
-		name        string
-		racks       string
-		expected    []int
-		expectError bool
-		errorText   string
-	}{
-		{
-			name:     "Single Valid Rack",
-			racks:    "1",
-			expected: []int{1},
-		},
-		{
-			name:     "Multiple Valid Racks",
-			racks:    "1,2,3",
-			expected: []int{1, 2, 3},
-		},
-		{
-			name:        "Invalid Rack - Non-integer",
-			racks:       "1,abc,3",
-			expected:    nil,
-			expectError: true,
-			errorText:   "failed to parse racks",
-		},
-		{
-			name:        "Invalid Rack - Negative Value",
-			racks:       "1,-2,3",
-			expected:    nil,
-			expectError: true,
-			errorText:   "rack id -2 invalid, should be non-negative number",
-		},
-		{
-			name:        "Invalid Rack - Exceeds MaxRack",
-			racks:       fmt.Sprintf("1,%d,3", appConfig.MaxRack+1),
-			expected:    nil,
-			expectError: true,
-			errorText: fmt.Sprintf("rack id %d invalid, should not exceed %d",
-				appConfig.MaxRack+1, appConfig.MaxRack),
-		},
-		{
-			name:     "Empty Input",
-			racks:    "",
-			expected: []int{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := appConfig.ParseRacks(tt.racks)
-
-			if tt.expectError {
-				require.Error(t, err)
-				assert.Nil(t, result)
-				assert.Contains(t, err.Error(), tt.errorText)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
 		})
 	}
 }
