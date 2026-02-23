@@ -80,6 +80,29 @@ func (r *RestoreServiceConfig) IsStdin() bool {
 	return false
 }
 
+// Validate validates the backup configuration and returns an error if any validation fails.
+func (r *RestoreServiceConfig) Validate() error {
+	if err := r.Restore.Validate(); err != nil {
+		return err
+	}
+
+	if err := validateStorages(
+		true,
+		r.AwsS3,
+		r.GcpStorage,
+		r.AzureBlob,
+		nil,
+	); err != nil {
+		return err
+	}
+
+	if err := r.SecretAgent.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // NewRestoreConfig creates and returns a new ConfigRestore object, initialized with given restore parameters.
 func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup.ConfigRestore {
 	logger.Info("initializing restore config")

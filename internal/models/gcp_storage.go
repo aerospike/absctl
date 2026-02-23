@@ -106,3 +106,11 @@ func (g *GcpStorage) Validate(isBackup bool) error {
 
 	return nil
 }
+
+func (g *GcpStorage) IsConfigured() bool {
+	if g == nil {
+		return false
+	}
+
+	return g.BucketName != "" || g.KeyFile != "" || g.Endpoint != ""
+}

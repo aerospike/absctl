@@ -138,3 +138,13 @@ func (a *AzureBlob) Validate(isBackup bool) error {
 
 	return nil
 }
+
+func (a *AzureBlob) IsConfigured() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.ContainerName != "" || a.AccountName != "" || a.AccountKey != "" ||
+		a.Endpoint != "" || a.TenantID != "" || a.ClientID != "" ||
+		a.ClientSecret != ""
+}

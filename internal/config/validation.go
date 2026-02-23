@@ -20,15 +20,14 @@ import (
 	"github.com/aerospike/absctl/internal/models"
 )
 
-//nolint:gocyclo // It is a long validation function.
-func ValidateStorages(
+func validateStorages(
 	isBackup bool,
 	awsS3 *models.AwsS3,
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 	local *models.Local,
 ) error {
-	// TODO: think how to rework this func. I want to get rid of it.
+	// TODO: think how to rework this func. I want to get rid of it. Maybe one day I'll introduce models.Storage
 	var count int
 
 	if local != nil {
@@ -37,7 +36,7 @@ func ValidateStorages(
 		}
 	}
 
-	if awsS3 != nil && (awsS3.BucketName != "" || awsS3.Region != "" || awsS3.Profile != "" || awsS3.Endpoint != "") {
+	if awsS3.IsConfigured() {
 		if err := awsS3.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate aws s3: %w", err)
 		}
@@ -45,7 +44,7 @@ func ValidateStorages(
 		count++
 	}
 
-	if gcpStorage != nil && (gcpStorage.BucketName != "" || gcpStorage.KeyFile != "" || gcpStorage.Endpoint != "") {
+	if gcpStorage.IsConfigured() {
 		if err := gcpStorage.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate gcp storage: %w", err)
 		}
@@ -53,9 +52,7 @@ func ValidateStorages(
 		count++
 	}
 
-	if azureBlob != nil && (azureBlob.ContainerName != "" || azureBlob.AccountName != "" || azureBlob.AccountKey != "" ||
-		azureBlob.Endpoint != "" || azureBlob.TenantID != "" || azureBlob.ClientID != "" ||
-		azureBlob.ClientSecret != "") {
+	if azureBlob.IsConfigured() {
 		if err := azureBlob.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate azure blob: %w", err)
 		}

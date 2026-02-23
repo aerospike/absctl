@@ -62,34 +62,16 @@ type Service struct {
 // configuring all necessary components for a backup process.
 func NewService(
 	ctx context.Context,
-	params *config.BackupServiceConfig,
+	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	// Validations.
-	if err := params.Backup.Validate(); err != nil {
-		return nil, err
-	}
-
-	if err := params.BackupXDR.Validate(); err != nil {
-		return nil, err
-	}
-
-	if err := config.ValidateStorages(
-		true,
-		params.AwsS3,
-		params.GcpStorage,
-		params.AzureBlob,
-		params.Local,
-	); err != nil {
-		return nil, err
-	}
-
-	if err := params.SecretAgent.Validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	// Initializations.
-	backupConfig, backupXDRConfig, err := config.NewBackupConfigs(params, logger)
+	backupConfig, backupXDRConfig, err := config.NewBackupConfigs(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +80,8 @@ func NewService(
 
 	// We don't need a writer for estimates.
 	var writer backup.Writer
-	if params.SkipWriterInit() {
-		writer, err = storage.NewBackupWriter(ctx, params, secretAgent, logger)
+	if cfg.SkipWriterInit() {
+		writer, err = storage.NewBackupWriter(ctx, cfg, secretAgent, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -110,15 +92,15 @@ func NewService(
 		}
 	}
 
-	reader, err := storage.NewStateReader(ctx, params, secretAgent, logger)
+	reader, err := storage.NewStateReader(ctx, cfg, secretAgent, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize state reader: %w", err)
 	}
 
 	aerospikeClient, err := storage.NewAerospikeClient(
 		ctx,
-		params.ClientConfig,
-		params.ClientPolicy,
+		cfg.ClientConfig,
+		cfg.ClientPolicy,
 		backupConfig.RackList,
 		0,
 		logger,
@@ -127,10 +109,10 @@ func NewService(
 		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
 	}
 
-	infoPolicy, retryInfoPolicy := getInfoPolicies(params)
+	infoPolicy, retryInfoPolicy := getInfoPolicies(cfg)
 
 	// Process XDR.
-	shouldExit, err := initXdr(ctx, params, backupXDRConfig, aerospikeClient, infoPolicy, retryInfoPolicy, logger)
+	shouldExit, err := initXdr(ctx, cfg, backupXDRConfig, aerospikeClient, infoPolicy, retryInfoPolicy, logger)
 	// If we should exit, err will be nil.
 	if shouldExit || err != nil {
 		return nil, err
@@ -155,12 +137,12 @@ func NewService(
 		writer:          writer,
 		reader:          reader,
 		logger:          logger,
-		reportToLog:     params.App.LogJSON || params.App.LogFile != "",
+		reportToLog:     cfg.App.LogJSON || cfg.App.LogFile != "",
 	}
 
-	if params.Backup != nil {
-		asb.isEstimate = params.Backup.Estimate
-		asb.estimatesSamples = params.Backup.EstimateSamples
+	if cfg.Backup != nil {
+		asb.isEstimate = cfg.Backup.Estimate
+		asb.estimatesSamples = cfg.Backup.EstimateSamples
 	}
 
 	return asb, nil

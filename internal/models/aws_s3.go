@@ -126,3 +126,11 @@ func (a *AwsS3) Validate(isBackup bool) error {
 
 	return nil
 }
+
+func (a *AwsS3) IsConfigured() bool {
+	if a == nil {
+		return false
+	}
+
+	return a.BucketName != "" || a.Region != "" || a.Profile != "" || a.Endpoint != ""
+}

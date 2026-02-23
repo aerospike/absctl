@@ -84,32 +84,32 @@ func NewBackupServiceConfig(
 }
 
 // IsXDR determines if the backup configuration is an XDR backup by checking if BackupXDR is non-nil and Backup is nil.
-func (p *BackupServiceConfig) IsXDR() bool {
-	return p.BackupXDR != nil && p.Backup == nil
+func (b *BackupServiceConfig) IsXDR() bool {
+	return b.BackupXDR != nil && b.Backup == nil
 }
 
 // IsContinue determines if the backup configuration is a continue backup
 // by checking if Backup is non-nil and Continue is non-empty.
-func (p *BackupServiceConfig) IsContinue() bool {
-	return p.Backup != nil && p.Backup.Continue != ""
+func (b *BackupServiceConfig) IsContinue() bool {
+	return b.Backup != nil && b.Backup.Continue != ""
 }
 
 // IsStopXDR checks if the backup operation should stop XDR by verifying that BackupXDR is non-nil and StopXDR is true.
-func (p *BackupServiceConfig) IsStopXDR() bool {
-	return p.BackupXDR != nil && p.BackupXDR.StopXDR
+func (b *BackupServiceConfig) IsStopXDR() bool {
+	return b.BackupXDR != nil && b.BackupXDR.StopXDR
 }
 
 // IsUnblockMRT checks if the backup operation should unblock MRT writes
 // by verifying that BackupXDR is non-nil and UnblockMRT is true.
-func (p *BackupServiceConfig) IsUnblockMRT() bool {
-	return p.BackupXDR != nil && p.BackupXDR.UnblockMRT
+func (b *BackupServiceConfig) IsUnblockMRT() bool {
+	return b.BackupXDR != nil && b.BackupXDR.UnblockMRT
 }
 
 // SkipWriterInit checks if the backup operation should skip writer initialization
 // by verifying that Backup is non-nil and Estimate is false.
-func (p *BackupServiceConfig) SkipWriterInit() bool {
-	if p.Backup != nil {
-		return !p.Backup.Estimate
+func (b *BackupServiceConfig) SkipWriterInit() bool {
+	if b.Backup != nil {
+		return !b.Backup.Estimate
 	}
 
 	return true
@@ -117,12 +117,39 @@ func (p *BackupServiceConfig) SkipWriterInit() bool {
 
 // IsStdout checks if the backup operation should write to stdout
 // by verifying that Backup is non-nil and OutputFile is StdPlaceholder.
-func (p *BackupServiceConfig) IsStdout() bool {
-	if p.Backup != nil && p.Backup.OutputFile == StdPlaceholder {
+func (b *BackupServiceConfig) IsStdout() bool {
+	if b.Backup != nil && b.Backup.OutputFile == StdPlaceholder {
 		return true
 	}
 
 	return false
+}
+
+// Validate validates the backup configuration and returns an error if any validation fails.
+func (b *BackupServiceConfig) Validate() error {
+	if err := b.Backup.Validate(); err != nil {
+		return err
+	}
+
+	if err := b.BackupXDR.Validate(); err != nil {
+		return err
+	}
+
+	if err := validateStorages(
+		true,
+		b.AwsS3,
+		b.GcpStorage,
+		b.AzureBlob,
+		b.Local,
+	); err != nil {
+		return err
+	}
+
+	if err := b.SecretAgent.Validate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // NewBackupConfigs creates and returns a new ConfigBackup and ConfigBackupXDR object,

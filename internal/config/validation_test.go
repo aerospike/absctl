@@ -218,7 +218,7 @@ func TestValidateStorages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := ValidateStorages(tt.isBackup, tt.awsS3, tt.gcpStorage, tt.azureBlob, tt.local)
+			err := validateStorages(tt.isBackup, tt.awsS3, tt.gcpStorage, tt.azureBlob, tt.local)
 			if tt.wantErr {
 				assert.Error(t, err, "Expected error but got none")
 			} else {
