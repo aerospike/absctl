@@ -112,6 +112,7 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
+	flags.WrapCertFlagsForSecrets(aerospikeFlagSet)
 	clientPolicyFlagSet := c.flagsClientPolicy.NewFlagSet()
 	commonFlagSet := c.flagsCommon.NewFlagSet()
 	backupFlagSet := c.flagsBackup.NewFlagSet()

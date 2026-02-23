@@ -17,6 +17,7 @@ package flags
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/spf13/cobra"
@@ -83,12 +84,21 @@ func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, sa *models.SecretAgent, name string) error {
 	flag := fs.Lookup(name)
 
-	val, err := sa.GetSecret(ctx, flag.Value.String())
+	curVal := strings.TrimSpace(flag.Value.String())
+	if curVal == "" {
+		return nil
+	}
+
+	if !strings.HasPrefix(curVal, secretsPrefix) {
+		return nil
+	}
+
+	val, err := sa.GetSecret(ctx, curVal)
 	if err != nil {
 		return fmt.Errorf("failed to get secret for %s: %w", name, err)
 	}
 
-	if err := flag.Value.Set(val); err != nil {
+	if err = flag.Value.Set(val); err != nil {
 		return fmt.Errorf("failed to set secret value of %s: %w", name, err)
 	}
 
