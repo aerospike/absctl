@@ -37,6 +37,7 @@ func (d *deferredCertValue) Set(val string) error {
 	if strings.HasPrefix(val, secretsPrefix) {
 		d.pendingSecret = true
 		d.raw = val
+
 		return nil
 	}
 
@@ -46,6 +47,7 @@ func (d *deferredCertValue) Set(val string) error {
 		d.pendingSecret = false
 		d.raw = ""
 		*d.original = asFlags.CertFlag(val)
+
 		return nil
 	}
 
@@ -56,6 +58,7 @@ func (d *deferredCertValue) String() string {
 	if d.raw != "" {
 		return d.raw
 	}
+
 	return d.original.String()
 }
 
