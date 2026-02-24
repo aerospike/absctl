@@ -44,6 +44,10 @@ type GcpStorage struct {
 
 // LoadSecrets tries to load field values from secret agent.
 func (g *GcpStorage) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
+	if g == nil {
+		return nil
+	}
+
 	var err error
 
 	g.KeyFile, err = backup.ParseSecret(ctx, cfg, g.KeyFile)

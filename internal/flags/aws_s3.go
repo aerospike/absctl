@@ -32,6 +32,28 @@ const (
 		"0 means no limit."
 )
 
+const (
+	flagS3BucketName           = "s3-bucket-name"
+	flagS3Region               = "s3-region"
+	flagS3Profile              = "s3-profile"
+	flagS3Endpoint             = "s3-endpoint-override"
+	flagS3AccessKeyID          = "s3-access-key-id"
+	flagS3SecretAccessKey      = "s3-secret-access-key"
+	flagS3StorageClass         = "s3-storage-class"
+	flagS3AccessTier           = "s3-tier"
+	flagS3RestorePollDuration  = "s3-restore-poll-duration"
+	flagS3RetryMaxAttempts     = "s3-retry-max-attempts"
+	flagS3RetryMaxBackoff      = "s3-retry-max-backoff"
+	flagS3ChunkSize            = "s3-chunk-size"
+	flagS3UploadConcurrency    = "s3-upload-concurrency"
+	flagS3CalculateChecksum    = "s3-calculate-checksum"
+	flagS3RetryReadBackoff     = "s3-retry-read-backoff"
+	flagS3RetryReadMultiplier  = "s3-retry-read-multiplier"
+	flagS3RetryReadMaxAttempts = "s3-retry-read-max-attempts"
+	flagS3MaxConnsPerHost      = "s3-max-conns-per-host"
+	flagS3RequestTimeout       = "s3-request-timeout"
+)
+
 type AwsS3 struct {
 	operation int
 	models.AwsS3
@@ -55,33 +77,33 @@ func (f *AwsS3) NewFlagSet() *pflag.FlagSet {
 		descMaxConnsPerHost = descS3MaxConnsPerHostRestore
 	}
 
-	flagSet.StringVar(&f.BucketName, "s3-bucket-name",
+	flagSet.StringVar(&f.BucketName, flagS3BucketName,
 		models.DefaultS3BucketName,
 		"Existing S3 bucket name")
 
-	flagSet.StringVar(&f.Region, "s3-region",
+	flagSet.StringVar(&f.Region, flagS3Region,
 		models.DefaultS3Region,
 		"The S3 region that the bucket(s) exist in.")
 
-	flagSet.StringVar(&f.Profile, "s3-profile",
+	flagSet.StringVar(&f.Profile, flagS3Profile,
 		models.DefaultS3Profile,
 		"The S3 profile to use for credentials.")
 
-	flagSet.StringVar(&f.AccessKeyID, "s3-access-key-id",
+	flagSet.StringVar(&f.AccessKeyID, flagS3AccessKeyID,
 		models.DefaultS3AccessKeyID,
 		"S3 access key ID. If not set, profile auth info will be used.")
 
-	flagSet.StringVar(&f.SecretAccessKey, "s3-secret-access-key",
+	flagSet.StringVar(&f.SecretAccessKey, flagS3SecretAccessKey,
 		models.DefaultS3SecretAccessKey,
 		"S3 secret access key. If not set, profile auth info will be used.")
 
-	flagSet.StringVar(&f.Endpoint, "s3-endpoint-override",
+	flagSet.StringVar(&f.Endpoint, flagS3Endpoint,
 		models.DefaultS3Endpoint,
 		"An alternate URL endpoint to send S3 API calls to.")
 
 	switch f.operation {
 	case OperationBackup:
-		flagSet.StringVar(&f.StorageClass, "s3-storage-class",
+		flagSet.StringVar(&f.StorageClass, flagS3StorageClass,
 			models.DefaultS3StorageClass,
 			"Apply storage class to backup files. Storage classes are:\n"+
 				"STANDARD,\n"+
@@ -96,63 +118,63 @@ func (f *AwsS3) NewFlagSet() *pflag.FlagSet {
 				"SNOW,\n"+
 				"EXPRESS_ONEZONE.")
 
-		flagSet.IntVar(&f.ChunkSize, "s3-chunk-size",
+		flagSet.IntVar(&f.ChunkSize, flagS3ChunkSize,
 			models.DefaultS3ChunkSize,
 			"Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to\n"+
 				"the storage in a single request. Objects smaller than the size will be sent in a single request,\n"+
 				"while larger objects will be split over multiple requests.")
 
-		flagSet.IntVar(&f.UploadConcurrency, "s3-upload-concurrency",
+		flagSet.IntVar(&f.UploadConcurrency, flagS3UploadConcurrency,
 			models.DefaultS3UploadConcurrency,
 			"Defines the max number of concurrent uploads to be performed to upload the file.\n"+
 				"Each concurrent upload will create a buffer of size s3-chunk-size.")
 
-		flagSet.BoolVar(&f.CalculateChecksum, "s3-calculate-checksum",
+		flagSet.BoolVar(&f.CalculateChecksum, flagS3CalculateChecksum,
 			models.DefaultCloudCalculateChecksum,
 			"Calculate checksum for each uploaded object.")
 	case OperationRestore:
-		flagSet.StringVar(&f.AccessTier, "s3-tier",
+		flagSet.StringVar(&f.AccessTier, flagS3AccessTier,
 			models.DefaultS3AccessTier,
 			"If is set, tool will try to restore archived files to the specified tier.\n"+
 				"Attention! This triggers an asynchronous process that cannot be terminated.\n"+
 				"Tiers are: Standard, Bulk, Expedited.",
 		)
 
-		flagSet.Int64Var(&f.RestorePollDuration, "s3-restore-poll-duration",
+		flagSet.Int64Var(&f.RestorePollDuration, flagS3RestorePollDuration,
 			models.DefaultS3RestorePollDuration,
 			"How often ((in ms)) a backup client checks object status when restoring an archived object.",
 		)
 
-		flagSet.IntVar(&f.RetryReadBackoff, "s3-retry-read-backoff",
+		flagSet.IntVar(&f.RetryReadBackoff, flagS3RetryReadBackoff,
 			models.DefaultCloudRetryReadBackoff,
 			"The initial delay (in ms) between retry attempts. In case of connection errors\n"+
 				"tool will retry reading the object from the last known position.")
 
-		flagSet.Float64Var(&f.RetryReadMultiplier, "s3-retry-read-multiplier",
+		flagSet.Float64Var(&f.RetryReadMultiplier, flagS3RetryReadMultiplier,
 			models.DefaultCloudRetryReadMultiplier,
 			"Multiplier is used to increase the delay between subsequent retry attempts.\n"+
 				"Used in combination with initial delay.")
 
-		flagSet.UintVar(&f.RetryReadMaxAttempts, "s3-retry-read-max-attempts",
+		flagSet.UintVar(&f.RetryReadMaxAttempts, flagS3RetryReadMaxAttempts,
 			models.DefaultCloudRetryReadMaxAttempts,
 			"The maximum number of retry attempts that will be made. If set to 0, no retries will be performed.")
 	}
 
-	flagSet.IntVar(&f.RetryMaxAttempts, "s3-retry-max-attempts",
+	flagSet.IntVar(&f.RetryMaxAttempts, flagS3RetryMaxAttempts,
 		models.DefaultS3RetryMaxAttempts,
 		"Maximum number of attempts that should be made in case of an error.")
 
-	flagSet.IntVar(&f.RetryMaxBackoff, "s3-retry-max-backoff",
+	flagSet.IntVar(&f.RetryMaxBackoff, flagS3RetryMaxBackoff,
 		models.DefaultS3RetryMaxBackoff,
 		"Max backoff duration (in ms) between retried attempts.\n"+
 			"The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.")
 
-	flagSet.IntVar(&f.MaxConnsPerHost, "s3-max-conns-per-host",
+	flagSet.IntVar(&f.MaxConnsPerHost, flagS3MaxConnsPerHost,
 		models.DefaultCloudMaxConnsPerHost,
 		descMaxConnsPerHost,
 	)
 
-	flagSet.IntVar(&f.RequestTimeout, "s3-request-timeout",
+	flagSet.IntVar(&f.RequestTimeout, flagS3RequestTimeout,
 		models.DefaultCloudRequestTimeout,
 		"Timeout (in ms) specifies a time limit for requests made by this Client.\n"+
 			"The timeout includes connection time, any redirects, and reading the response body.\n"+

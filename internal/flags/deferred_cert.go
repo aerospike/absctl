@@ -23,6 +23,22 @@ import (
 
 const secretsPrefix = "secrets:"
 
+// Flags for Aerospike connection.
+const (
+	flagTLSCaFile          = "tls-cafile"
+	flagTLSCertFile        = "tls-certfile"
+	flagTLSKeyFile         = "tls-keyfile"
+	flagTLSCapath          = "tls-capath"
+	flagTLSKeyFilePassword = "tls-keyfile-password" //nolint:gosec // It's not a hardcoded password.
+
+	flagHost         = "host"
+	flagPort         = "port"
+	flagUser         = "user"
+	flagPassword     = "password"
+	flagTLSName      = "tls-name"
+	flagTLSProtocols = "tls-protocols"
+)
+
 // deferredCertValue wraps a CertFlag to defer file reading when the value is a
 // Secret Agent reference (secrets:resource:key). Without this wrapper,
 // CertFlag.Set() attempts to read the value as a file path during flag parsing,
@@ -70,7 +86,7 @@ func (d *deferredCertValue) Type() string {
 // deferred wrapper that accepts Secret Agent references (secrets:resource:key).
 // Must be called after NewFlagSet() and before the flagset is parsed by cobra.
 func WrapCertFlagsForSecrets(fs *pflag.FlagSet) {
-	certFlagNames := []string{"tls-cafile", "tls-certfile", "tls-keyfile"}
+	certFlagNames := []string{flagTLSCaFile, flagTLSCertFile, flagTLSKeyFile, flagTLSCapath, flagTLSKeyFilePassword}
 
 	for _, name := range certFlagNames {
 		f := fs.Lookup(name)

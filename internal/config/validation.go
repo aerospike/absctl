@@ -20,6 +20,8 @@ import (
 	"github.com/aerospike/absctl/internal/models"
 )
 
+// validateStorages performs storages validation.
+// As we allow only one cloud provider to be configured, we can check it here.
 func validateStorages(
 	isBackup bool,
 	awsS3 *models.AwsS3,

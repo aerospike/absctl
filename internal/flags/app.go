@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -64,16 +65,28 @@ func (f *App) GetApp() *models.App {
 // Is used in backup/restore to preload secrets from SecretAgent for external libs.
 func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 	flagsToPreload := []string{
-		"host", "port", "user",
-		"password", "tls-name", "tls-cafile",
-		"tls-capath", "tls-certfile", "tls-keyfile",
-		"tls-keyfile-password", "tls-protocols",
+		// Aerospike connection flags.
+		flagHost, flagPort, flagUser,
+		flagPassword, flagTLSName, flagTLSCaFile,
+		flagTLSCapath, flagTLSCertFile, flagTLSKeyFile,
+		flagTLSKeyFilePassword, flagTLSProtocols,
+		// Encryption flags.
+		flagEncryptKeyFile, flagEncryptKeyEnv, flagEncryptKeySecret,
+		// AWS Flags
+		flagS3BucketName, flagS3Region, flagS3Profile,
+		flagS3Endpoint, flagS3AccessKeyID, flagS3SecretAccessKey,
+		flagS3StorageClass, flagS3AccessTier,
+		// Azure Flags
+
+		// GCP Flags
 	}
 
 	fs := cmd.Flags()
+	// Preload secret agent config, not to load it every time.
+	saCfg := sa.Config()
 
 	for _, flag := range flagsToPreload {
-		if err := parseValueWithSecretAgent(cmd.Context(), fs, sa, flag); err != nil {
+		if err := parseValueWithSecretAgent(cmd.Context(), fs, saCfg, flag); err != nil {
 			return err
 		}
 	}
@@ -81,7 +94,8 @@ func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 	return nil
 }
 
-func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, sa *models.SecretAgent, name string) error {
+func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, saCfg *backup.SecretAgentConfig, name string,
+) error {
 	flag := fs.Lookup(name)
 
 	curVal := strings.TrimSpace(flag.Value.String())
@@ -93,7 +107,7 @@ func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, sa *model
 		return nil
 	}
 
-	val, err := sa.GetSecret(ctx, curVal)
+	val, err := backup.ParseSecret(ctx, saCfg, curVal)
 	if err != nil {
 		return fmt.Errorf("failed to get secret for %s: %w", name, err)
 	}

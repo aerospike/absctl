@@ -50,6 +50,10 @@ type AzureBlob struct {
 
 // LoadSecrets tries to load field values from secret agent.
 func (a *AzureBlob) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
+	if a == nil {
+		return nil
+	}
+
 	var err error
 
 	a.AccountName, err = backup.ParseSecret(ctx, cfg, a.AccountName)

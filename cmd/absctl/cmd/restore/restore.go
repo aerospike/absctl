@@ -219,7 +219,6 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 
 func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 	sa := c.flagsSecretAgent.GetSecretAgent()
-	sa.Config()
 
 	return c.flagsApp.PreRun(cmd, sa)
 }

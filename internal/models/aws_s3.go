@@ -46,6 +46,10 @@ type AwsS3 struct {
 
 // LoadSecrets tries to load field values from secret agent.
 func (a *AwsS3) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
+	if a == nil {
+		return nil
+	}
+
 	var err error
 
 	a.BucketName, err = backup.ParseSecret(ctx, cfg, a.BucketName)
