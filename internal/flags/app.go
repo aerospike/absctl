@@ -100,12 +100,16 @@ func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, saCfg *backup.SecretAgentConfig, name string,
 ) error {
 	flag := fs.Lookup(name)
-
+	// Skip unset flags.
+	if flag == nil {
+		return nil
+	}
+	// clean.
 	curVal := strings.TrimSpace(flag.Value.String())
 	if curVal == "" {
 		return nil
 	}
-
+	// Check if we need to parse secret.
 	if !strings.HasPrefix(curVal, secretsPrefix) {
 		return nil
 	}
