@@ -16,8 +16,6 @@ package models
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -189,10 +187,7 @@ func TestAwsS3_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.aws.LoadSecrets(t.Context(), nil)
-			require.NoError(t, err)
-
-			err = tt.aws.Validate(tt.isBackup)
+			err := tt.aws.Validate(tt.isBackup)
 
 			if tt.wantErr != "" {
 				switch {

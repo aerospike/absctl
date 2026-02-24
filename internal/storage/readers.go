@@ -41,26 +41,25 @@ import (
 func NewRestoreReader(
 	ctx context.Context,
 	params *config.RestoreServiceConfig,
-	sa *backup.SecretAgentConfig,
 	logger *slog.Logger,
 ) (reader, xdrReader backup.StreamingReader, err error) {
 	switch params.Restore.Mode {
 	case models.RestoreModeASB, models.RestoreModeAuto:
-		reader, err = newReader(ctx, params, sa, false, logger)
+		reader, err = newReader(ctx, params, false, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create asb reader: %w", err)
 		}
 
 		return reader, nil, nil
 	case models.RestoreModeASBX:
-		xdrReader, err = newReader(ctx, params, sa, true, logger)
+		xdrReader, err = newReader(ctx, params, true, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create asbx reader: %w", err)
 		}
 
 		return nil, xdrReader, nil
 	default:
-		reader, err = newReader(ctx, params, sa, false, logger)
+		reader, err = newReader(ctx, params, false, logger)
 
 		switch {
 		case errors.Is(err, common.ErrEmptyStorage):
@@ -70,7 +69,7 @@ func NewRestoreReader(
 		default:
 		}
 
-		xdrReader, err = newReader(ctx, params, sa, true, logger)
+		xdrReader, err = newReader(ctx, params, true, logger)
 
 		switch {
 		case errors.Is(err, common.ErrEmptyStorage):
@@ -93,7 +92,6 @@ func NewRestoreReader(
 func NewStateReader(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
-	sa *backup.SecretAgentConfig,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
 	if params.Backup == nil ||
@@ -118,13 +116,12 @@ func NewStateReader(
 
 	logger.Info("initializing state file", slog.String("path", stateFile))
 
-	return newReader(ctx, restoreParams, sa, false, logger)
+	return newReader(ctx, restoreParams, false, logger)
 }
 
 func newReader(
 	ctx context.Context,
 	params *config.RestoreServiceConfig,
-	sa *backup.SecretAgentConfig,
 	isXdr bool,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
@@ -149,10 +146,6 @@ func newReader(
 			slog.String("endpoint", params.AwsS3.Endpoint),
 		)
 
-		if err := params.AwsS3.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load AWS secrets: %w", err)
-		}
-
 		return newS3Reader(ctx, params.AwsS3, opts, logger)
 	case params.GcpStorage != nil && params.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage reader",
@@ -160,10 +153,6 @@ func newReader(
 			slog.Int("chunk_size", params.GcpStorage.ChunkSize),
 			slog.String("endpoint", params.GcpStorage.Endpoint),
 		)
-
-		if err := params.GcpStorage.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load GCP secrets: %w", err)
-		}
 
 		return newGcpReader(ctx, params.GcpStorage, opts)
 	case params.AzureBlob != nil && params.AzureBlob.ContainerName != "":
@@ -173,10 +162,6 @@ func newReader(
 			slog.Int("block_size", params.AzureBlob.BlockSize),
 			slog.String("endpoint", params.AzureBlob.Endpoint),
 		)
-
-		if err := params.AzureBlob.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load azure secrets: %w", err)
-		}
 
 		return newAzureReader(ctx, params.AzureBlob, opts, logger)
 	case params.IsStdin():

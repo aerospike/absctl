@@ -77,8 +77,11 @@ func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 		flagS3Endpoint, flagS3AccessKeyID, flagS3SecretAccessKey,
 		flagS3StorageClass, flagS3AccessTier,
 		// Azure Flags
-
+		flagAzureAccountName, flagAzureAccountKey, flagAzureTenantID,
+		flagAzureClientID, flagAzureClientSecret, flagAzureEndpoint,
+		flagAzureContainerName, flagAzureAccessTier,
 		// GCP Flags
+		flagGcpKeyPath, flagGcpBucketName, flagGcpEndpoint,
 	}
 
 	fs := cmd.Flags()

@@ -76,12 +76,10 @@ func NewService(
 		return nil, err
 	}
 
-	secretAgent := getSecretAgent(backupConfig, backupXDRConfig)
-
 	// We don't need a writer for estimates.
 	var writer backup.Writer
 	if cfg.SkipWriterInit() {
-		writer, err = storage.NewBackupWriter(ctx, cfg, secretAgent, logger)
+		writer, err = storage.NewBackupWriter(ctx, cfg, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +90,7 @@ func NewService(
 		}
 	}
 
-	reader, err := storage.NewStateReader(ctx, cfg, secretAgent, logger)
+	reader, err := storage.NewStateReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize state reader: %w", err)
 	}
@@ -327,17 +325,4 @@ func errHumanize(err error) error {
 	}
 
 	return err
-}
-
-// getSecretAgent determines and returns the SecretAgentConfig from ConfigBackup or ConfigBackupXDR.
-// Returns nil if both are nil.
-func getSecretAgent(b *backup.ConfigBackup, bxdr *backup.ConfigBackupXDR) *backup.SecretAgentConfig {
-	switch {
-	case b != nil:
-		return b.SecretAgentConfig
-	case bxdr != nil:
-		return bxdr.SecretAgentConfig
-	default:
-		return nil
-	}
 }

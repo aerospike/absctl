@@ -86,7 +86,7 @@ func NewService(
 		}
 	}
 
-	reader, xdrReader, err := storage.NewRestoreReader(ctx, cfg, restoreConfig.SecretAgentConfig, logger)
+	reader, xdrReader, err := storage.NewRestoreReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore reader: %w", err)
 	}

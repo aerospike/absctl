@@ -12,14 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:dupl //This file is not a duplication of azure_blob.
 package models
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/aerospike/backup-go"
 )
 
 // AwsS3 represents the configuration for AWS S3 storage integration.
@@ -42,57 +38,6 @@ type AwsS3 struct {
 	UploadConcurrency int
 
 	StorageCommon
-}
-
-// LoadSecrets tries to load field values from secret agent.
-func (a *AwsS3) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
-	if a == nil {
-		return nil
-	}
-
-	var err error
-
-	a.BucketName, err = backup.ParseSecret(ctx, cfg, a.BucketName)
-	if err != nil {
-		return fmt.Errorf("failed to load bucket name from secret agent: %w", err)
-	}
-
-	a.Region, err = backup.ParseSecret(ctx, cfg, a.Region)
-	if err != nil {
-		return fmt.Errorf("failed to load region from secret agent: %w", err)
-	}
-
-	a.Profile, err = backup.ParseSecret(ctx, cfg, a.Profile)
-	if err != nil {
-		return fmt.Errorf("failed to load profile from secret agent: %w", err)
-	}
-
-	a.Endpoint, err = backup.ParseSecret(ctx, cfg, a.Endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to load endpoint from secret agent: %w", err)
-	}
-
-	a.AccessKeyID, err = backup.ParseSecret(ctx, cfg, a.AccessKeyID)
-	if err != nil {
-		return fmt.Errorf("failed to load access key id from secret agent: %w", err)
-	}
-
-	a.SecretAccessKey, err = backup.ParseSecret(ctx, cfg, a.SecretAccessKey)
-	if err != nil {
-		return fmt.Errorf("failed to load secret access key from secret agent: %w", err)
-	}
-
-	a.StorageClass, err = backup.ParseSecret(ctx, cfg, a.StorageClass)
-	if err != nil {
-		return fmt.Errorf("failed to load storage class from secret agent: %w", err)
-	}
-
-	a.AccessTier, err = backup.ParseSecret(ctx, cfg, a.AccessTier)
-	if err != nil {
-		return fmt.Errorf("failed to load access tier key from secret agent: %w", err)
-	}
-
-	return nil
 }
 
 // Validate internal validation for struct params.

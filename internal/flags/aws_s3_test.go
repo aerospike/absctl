@@ -29,18 +29,18 @@ func TestAwsS3_NewFlagSet(t *testing.T) {
 	flagSet := awsS3.NewFlagSet()
 
 	args := []string{
-		"--s3-region", "us-west-2",
-		"--s3-profile", "my-profile",
-		"--s3-endpoint-override", "https://s3.custom-endpoint.com",
-		"--s3-access-key-id", "my-access-key-id",
-		"--s3-secret-access-key", "my-secret-access-key",
-		"--s3-storage-class", "my-storage-class",
-		"--s3-chunk-size", "1",
-		"--s3-retry-max-attempts", "10",
-		"--s3-retry-max-backoff", "10",
-		"--s3-upload-concurrency", "10",
-		"--s3-max-conns-per-host", "10",
-		"--s3-request-timeout", "10",
+		"--" + flagS3Region, "us-west-2",
+		"--" + flagS3Profile, "my-profile",
+		"--" + flagS3Endpoint, "https://s3.custom-endpoint.com",
+		"--" + flagS3AccessKeyID, "my-access-key-id",
+		"--" + flagS3SecretAccessKey, "my-secret-access-key",
+		"--" + flagS3StorageClass, "my-storage-class",
+		"--" + flagS3ChunkSize, "1",
+		"--" + flagS3RetryMaxAttempts, "10",
+		"--" + flagS3RetryMaxBackoff, "10",
+		"--" + flagS3UploadConcurrency, "10",
+		"--" + flagS3MaxConnsPerHost, "10",
+		"--" + flagS3RequestTimeout, "10",
 	}
 
 	err := flagSet.Parse(args)
@@ -64,9 +64,9 @@ func TestAwsS3_NewFlagSet(t *testing.T) {
 	awsS3 = NewAwsS3(OperationRestore)
 	flagSet = awsS3.NewFlagSet()
 	args = []string{
-		"--s3-retry-read-backoff", "900",
-		"--s3-retry-read-multiplier", "1.5",
-		"--s3-retry-read-max-attempts", "5",
+		"--" + flagS3RetryReadBackoff, "900",
+		"--" + flagS3RetryReadMultiplier, "1.5",
+		"--" + flagS3RetryReadMaxAttempts, "5",
 	}
 
 	err = flagSet.Parse(args)
