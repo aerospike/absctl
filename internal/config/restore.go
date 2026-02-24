@@ -87,7 +87,7 @@ func (r *RestoreServiceConfig) Validate() error {
 	}
 
 	if err := validateStorages(
-		true,
+		false,
 		r.AwsS3,
 		r.GcpStorage,
 		r.AzureBlob,
