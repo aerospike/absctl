@@ -71,7 +71,7 @@ func (f *App) PreRun(cmd *cobra.Command, sa *models.SecretAgent) error {
 		flagTLSCapath, flagTLSCertFile, flagTLSKeyFile,
 		flagTLSKeyFilePassword, flagTLSProtocols,
 		// Encryption flags.
-		flagEncryptKeyFile, flagEncryptKeyEnv, flagEncryptKeySecret,
+		flagEncryptKeyFile, flagEncryptKeyEnv,
 		// AWS Flags
 		flagS3BucketName, flagS3Region, flagS3Profile,
 		flagS3Endpoint, flagS3AccessKeyID, flagS3SecretAccessKey,
