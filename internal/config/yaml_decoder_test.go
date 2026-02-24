@@ -126,7 +126,7 @@ func TestDecodeBackupServiceConfig(t *testing.T) {
 				filename = tempFile
 			}
 
-			config, err := DecodeBackupServiceConfig(filename)
+			config, err := DecodeBackupServiceConfig(t.Context(), filename)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -203,7 +203,7 @@ func TestDecodeRestoreServiceConfig(t *testing.T) {
 				filename = tempFile
 			}
 
-			config, err := DecodeRestoreServiceConfig(filename)
+			config, err := DecodeRestoreServiceConfig(t.Context(), filename)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)

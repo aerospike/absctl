@@ -15,6 +15,7 @@
 package restore
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -173,7 +174,7 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init app.
-	serviceConfig, err := c.newServiceConfig()
+	serviceConfig, err := c.newServiceConfig(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to initialize app: %w", err)
 	}
@@ -224,11 +225,11 @@ func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 }
 
 // newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig() (*config.RestoreServiceConfig, error) {
+func (c *Cmd) newServiceConfig(ctx context.Context) (*config.RestoreServiceConfig, error) {
 	app := c.flagsApp.GetApp()
 	// If we have a config file, load serviceConfig from it.
 	if app != nil && app.ConfigFilePath != "" {
-		serviceConfig, err := config.DecodeRestoreServiceConfig(app.ConfigFilePath)
+		serviceConfig, err := config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}

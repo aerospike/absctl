@@ -15,6 +15,7 @@
 package dto
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -117,6 +118,21 @@ func (b *Backup) ToModelBackup() *models.Backup {
 		OutputFilePrefix:    derefString(b.Backup.OutputFilePrefix),
 		RackList:            strings.Join(b.Backup.RackList, ","),
 	}
+}
+
+// LoadSecrets resolves any secrets: prefixed values in the Backup DTO
+// using the configured secret agent. Must be called before DTO-to-model conversion
+// so that CertFlag.Set() receives file paths or raw content, not secret references.
+func (b *Backup) LoadSecrets(ctx context.Context) error {
+	saCfg := b.SecretAgent.ToModelSecretAgent().Config()
+	if saCfg == nil {
+		return nil
+	}
+
+	fields := collectSecretableFields(&b.Cluster, &b.Encryption,
+		&b.Aws.S3, &b.Azure.Blob, &b.Gcp.Storage)
+
+	return resolveSecretFields(ctx, saCfg, fields...)
 }
 
 type BackupConfig struct {

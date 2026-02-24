@@ -15,6 +15,7 @@
 package dto
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -104,6 +105,21 @@ func (r *Restore) ToModelRestore() *models.Restore {
 		ValidateOnly:       derefBool(r.Restore.ValidateOnly),
 		ApplyMetadataLast:  derefBool(r.Restore.ApplyMetadataLast),
 	}
+}
+
+// LoadSecrets resolves any secrets: prefixed values in the Restore DTO
+// using the configured secret agent. Must be called before DTO-to-model conversion
+// so that CertFlag.Set() receives file paths or raw content, not secret references.
+func (r *Restore) LoadSecrets(ctx context.Context) error {
+	saCfg := r.SecretAgent.ToModelSecretAgent().Config()
+	if saCfg == nil {
+		return nil
+	}
+
+	fields := collectSecretableFields(&r.Cluster, &r.Encryption,
+		&r.Aws.S3, &r.Azure.Blob, &r.Gcp.Storage)
+
+	return resolveSecretFields(ctx, saCfg, fields...)
 }
 
 type RestoreConfig struct {

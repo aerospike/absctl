@@ -23,6 +23,8 @@ import (
 	"github.com/aerospike/tools-common-go/flags"
 )
 
+const pemHeader = "-----BEGIN"
+
 // App represents the application-level configuration parsed from a YAML file.
 type App struct {
 	Verbose  *bool   `yaml:"verbose"`
@@ -215,7 +217,7 @@ func (c *Cluster) applyTLS(f *flags.AerospikeFlags) error {
 
 	// CA file
 	if c.TLS.CaFile != nil && *c.TLS.CaFile != "" {
-		if err := f.TLSRootCAFile.Set(*c.TLS.CaFile); err != nil {
+		if err := setCertFlag(&f.TLSRootCAFile, *c.TLS.CaFile); err != nil {
 			return fmt.Errorf("failed to set tls root ca file: %w", err)
 		}
 	}
@@ -229,14 +231,14 @@ func (c *Cluster) applyTLS(f *flags.AerospikeFlags) error {
 
 	// Cert file
 	if c.TLS.CertFile != nil && *c.TLS.CertFile != "" {
-		if err := f.TLSCertFile.Set(*c.TLS.CertFile); err != nil {
+		if err := setCertFlag(&f.TLSCertFile, *c.TLS.CertFile); err != nil {
 			return fmt.Errorf("failed to set tls cert file: %w", err)
 		}
 	}
 
 	// Key file
 	if c.TLS.KeyFile != nil && *c.TLS.KeyFile != "" {
-		if err := f.TLSKeyFile.Set(*c.TLS.KeyFile); err != nil {
+		if err := setCertFlag(&f.TLSKeyFile, *c.TLS.KeyFile); err != nil {
 			return fmt.Errorf("failed to set tls key file: %w", err)
 		}
 	}
@@ -602,6 +604,18 @@ func (l *Local) ToModelLocal() *models.Local {
 	return &models.Local{
 		BufferSize: l.BufferSize,
 	}
+}
+
+// setCertFlag sets a CertFlag value. If the value contains PEM content
+// (e.g. resolved from a secret agent), it assigns the bytes directly.
+// Otherwise it delegates to CertFlag.Set() which reads from file.
+func setCertFlag(flag *flags.CertFlag, val string) error {
+	if strings.Contains(val, pemHeader) {
+		*flag = flags.CertFlag(val)
+		return nil
+	}
+
+	return flag.Set(val)
 }
 
 func derefInt(p *int) int {

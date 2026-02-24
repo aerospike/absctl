@@ -15,6 +15,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -23,11 +24,16 @@ import (
 )
 
 // DecodeBackupServiceConfig reads a backup configuration file and decodes it into BackupServiceConfig.
+// Secret agent references (secrets:resource:key) in the YAML are resolved before conversion.
 // Returns an error on failure.
-func DecodeBackupServiceConfig(filename string) (*BackupServiceConfig, error) {
+func DecodeBackupServiceConfig(ctx context.Context, filename string) (*BackupServiceConfig, error) {
 	backupDto := dto.DefaultBackup()
 	if err := decodeFromFile(filename, &backupDto); err != nil {
 		return nil, err
+	}
+
+	if err := backupDto.LoadSecrets(ctx); err != nil {
+		return nil, fmt.Errorf("failed to resolve secrets: %w", err)
 	}
 
 	serviceConfig, err := dtoToBackupServiceConfig(backupDto)
@@ -64,11 +70,16 @@ func dtoToBackupServiceConfig(dtoBackup *dto.Backup) (*BackupServiceConfig, erro
 }
 
 // DecodeRestoreServiceConfig reads a restore configuration file and decodes it into RestoreServiceConfig.
+// Secret agent references (secrets:resource:key) in the YAML are resolved before conversion.
 // Returns an error on failure.
-func DecodeRestoreServiceConfig(filename string) (*RestoreServiceConfig, error) {
+func DecodeRestoreServiceConfig(ctx context.Context, filename string) (*RestoreServiceConfig, error) {
 	restoreDto := dto.DefaultRestore()
 	if err := decodeFromFile(filename, restoreDto); err != nil {
 		return nil, err
+	}
+
+	if err := restoreDto.LoadSecrets(ctx); err != nil {
+		return nil, fmt.Errorf("failed to resolve secrets: %w", err)
 	}
 
 	serviceConfig, err := dtoToRestoreServiceConfig(restoreDto)
