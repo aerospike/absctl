@@ -16,7 +16,9 @@ package models
 
 import (
 	"testing"
+	"time"
 
+	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +127,108 @@ func TestValidateRestore(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestMapRestoreNamespace_SuccessSingleNamespace(t *testing.T) {
+	t.Parallel()
+
+	restore := &Restore{
+		Common: Common{
+			Namespace: "source-ns",
+		},
+	}
+
+	result := restore.NamespaceConfig()
+	require.NotNil(t, result, "Result should not be nil")
+	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
+	assert.Equal(t, "source-ns", *result.Destination, "Destination should be the same as Source")
+}
+
+func TestMapRestoreNamespace_SuccessDifferentNamespaces(t *testing.T) {
+	t.Parallel()
+
+	restore := &Restore{
+		Common: Common{
+			Namespace: "source-ns,destination-ns",
+		},
+	}
+
+	result := restore.NamespaceConfig()
+	require.NotNil(t, result, "Result should not be nil")
+	assert.Equal(t, "source-ns", *result.Source, "Source should be 'source-ns'")
+	assert.Equal(t, "destination-ns", *result.Destination, "Destination should be 'destination-ns'")
+}
+
+func TestMapRestoreNamespace_InvalidNamespace(t *testing.T) {
+	t.Parallel()
+
+	restore := &Restore{
+		Common: Common{
+			Namespace: "source-ns,destination-ns,extra-ns",
+		},
+	}
+
+	result := restore.NamespaceConfig()
+	assert.Nil(t, result, "Result should be nil for invalid input")
+}
+
+func TestMapWritePolicy_Success(t *testing.T) {
+	t.Parallel()
+
+	restoreModel := &Restore{
+		Replace: true,
+		Uniq:    false,
+		Common: Common{
+			TotalTimeout:  5000,
+			SocketTimeout: 1500,
+		},
+	}
+
+	writePolicy := restoreModel.WritePolicy()
+	assert.Equal(t, aerospike.REPLACE, writePolicy.RecordExistsAction)
+	assert.Equal(t, 5000*time.Millisecond, writePolicy.TotalTimeout)
+	assert.Equal(t, 1500*time.Millisecond, writePolicy.SocketTimeout)
+}
+
+func TestMapWritePolicy_ConfigurationCombinations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		restoreModel  *Restore
+		commonModel   *Common
+		wantAction    aerospike.RecordExistsAction
+		wantGenPolicy aerospike.GenerationPolicy
+	}{
+		{
+			name: "replace with generation",
+			restoreModel: &Restore{
+				Replace:      true,
+				NoGeneration: false,
+			},
+			commonModel:   &Common{},
+			wantAction:    aerospike.REPLACE,
+			wantGenPolicy: aerospike.EXPECT_GEN_GT,
+		},
+		{
+			name:          "default update with generation",
+			restoreModel:  &Restore{},
+			commonModel:   &Common{},
+			wantAction:    aerospike.UPDATE,
+			wantGenPolicy: aerospike.EXPECT_GEN_GT,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.restoreModel.WritePolicy()
+			assert.Equal(t, tt.wantAction, got.RecordExistsAction)
+			assert.Equal(t, tt.wantGenPolicy, got.GenerationPolicy)
+			assert.True(t, got.SendKey)
 		})
 	}
 }

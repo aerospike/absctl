@@ -16,21 +16,20 @@ package config
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/aerospike-client-go/v8"
 )
 
-//nolint:gocyclo // It is a long validation function.
-func ValidateStorages(
+// validateStorages performs storages validation.
+// As we allow only one cloud provider to be configured, we can check it here.
+func validateStorages(
 	isBackup bool,
 	awsS3 *models.AwsS3,
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 	local *models.Local,
 ) error {
-	// TODO: think how to rework this func. I want to get rid of it.
+	// TODO: think how to rework this func. I want to get rid of it. Maybe one day I'll introduce models.Storage
 	var count int
 
 	if local != nil {
@@ -39,7 +38,7 @@ func ValidateStorages(
 		}
 	}
 
-	if awsS3 != nil && (awsS3.BucketName != "" || awsS3.Region != "" || awsS3.Profile != "" || awsS3.Endpoint != "") {
+	if awsS3.IsConfigured() {
 		if err := awsS3.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate aws s3: %w", err)
 		}
@@ -47,7 +46,7 @@ func ValidateStorages(
 		count++
 	}
 
-	if gcpStorage != nil && (gcpStorage.BucketName != "" || gcpStorage.KeyFile != "" || gcpStorage.Endpoint != "") {
+	if gcpStorage.IsConfigured() {
 		if err := gcpStorage.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate gcp storage: %w", err)
 		}
@@ -55,9 +54,7 @@ func ValidateStorages(
 		count++
 	}
 
-	if azureBlob != nil && (azureBlob.ContainerName != "" || azureBlob.AccountName != "" || azureBlob.AccountKey != "" ||
-		azureBlob.Endpoint != "" || azureBlob.TenantID != "" || azureBlob.ClientID != "" ||
-		azureBlob.ClientSecret != "") {
+	if azureBlob.IsConfigured() {
 		if err := azureBlob.Validate(isBackup); err != nil {
 			return fmt.Errorf("failed to validate azure blob: %w", err)
 		}
@@ -67,50 +64,6 @@ func ValidateStorages(
 
 	if count > 1 {
 		return fmt.Errorf("only one cloud provider can be configured")
-	}
-
-	return nil
-}
-
-func ValidatePartitionFilters(partitionFilters []*aerospike.PartitionFilter) error {
-	if len(partitionFilters) < 1 {
-		return nil
-	}
-
-	beginMap := make(map[int]bool)
-	intervals := make([][2]int, 0)
-
-	for _, filter := range partitionFilters {
-		switch {
-		case filter.Count == 1:
-			if beginMap[filter.Begin] {
-				return fmt.Errorf("duplicate begin value %d for count = 1", filter.Begin)
-			}
-
-			beginMap[filter.Begin] = true
-		case filter.Count > 1:
-			begin := filter.Begin
-			// To calculate an interval, we start from `Begin` and go till `Count`,
-			// so we should do -1 as we start counting from 0.
-			end := filter.Begin + filter.Count - 1
-			intervals = append(intervals, [2]int{begin, end})
-		default:
-			return fmt.Errorf("invalid partition filter count: %d", filter.Count)
-		}
-	}
-
-	sort.Slice(intervals, func(i, j int) bool {
-		return intervals[i][0] < intervals[j][0]
-	})
-
-	for i := 1; i < len(intervals); i++ {
-		prevEnd := intervals[i-1][1]
-		currBegin := intervals[i][0]
-
-		if currBegin <= prevEnd {
-			return fmt.Errorf("overlapping intervals: [%d, %d] and [%d, %d]",
-				intervals[i-1][0], prevEnd, currBegin, intervals[i][1])
-		}
 	}
 
 	return nil

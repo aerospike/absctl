@@ -29,21 +29,21 @@ func TestAzureBlob_NewFlagSetRestore(t *testing.T) {
 	flagSet := azureBlob.NewFlagSet()
 
 	args := []string{
-		"--azure-account-name", "myaccount",
-		"--azure-account-key", "mykey",
-		"--azure-tenant-id", "tenant-id",
-		"--azure-client-id", "client-id",
-		"--azure-client-secret", "client-secret",
-		"--azure-endpoint", "https://custom-endpoint.com",
-		"--azure-container-name", "my-container",
-		"--azure-access-tier", "Standard",
-		"--azure-rehydrate-poll-duration", "1000",
-		"--azure-retry-max-attempts", "10",
-		"--azure-retry-max-delay", "10",
-		"--azure-retry-delay", "10",
-		"--azure-retry-read-backoff", "900",
-		"--azure-retry-read-multiplier", "1.5",
-		"--azure-retry-read-max-attempts", "5",
+		"--" + flagAzureAccountName, "myaccount",
+		"--" + flagAzureAccountKey, "mykey",
+		"--" + flagAzureTenantID, "tenant-id",
+		"--" + flagAzureClientID, "client-id",
+		"--" + flagAzureClientSecret, "client-secret",
+		"--" + flagAzureEndpoint, "https://custom-endpoint.com",
+		"--" + flagAzureContainerName, "my-container",
+		"--" + flagAzureAccessTier, "Standard",
+		"--" + flagAzureRehydratePollDur, "1000",
+		"--" + flagAzureRetryMaxAttempts, "10",
+		"--" + flagAzureRetryMaxDelay, "10",
+		"--" + flagAzureRetryDelay, "10",
+		"--" + flagAzureRetryReadBackoff, "900",
+		"--" + flagAzureRetryReadMultiplier, "1.5",
+		"--" + flagAzureRetryReadMaxAttempts, "5",
 	}
 
 	err := flagSet.Parse(args)
@@ -103,18 +103,18 @@ func TestAzureBlob_NewFlagSetBackup(t *testing.T) {
 	flagSet := azureBlob.NewFlagSet()
 
 	args := []string{
-		"--azure-account-name", "myaccount",
-		"--azure-account-key", "mykey",
-		"--azure-tenant-id", "tenant-id",
-		"--azure-client-id", "client-id",
-		"--azure-client-secret", "client-secret",
-		"--azure-endpoint", "https://custom-endpoint.com",
-		"--azure-container-name", "my-container",
-		"--azure-access-tier", "Standard",
-		"--azure-block-size", "1",
-		"--azure-upload-concurrency", "10",
-		"--azure-max-conns-per-host", "10",
-		"--azure-request-timeout", "10",
+		"--" + flagAzureAccountName, "myaccount",
+		"--" + flagAzureAccountKey, "mykey",
+		"--" + flagAzureTenantID, "tenant-id",
+		"--" + flagAzureClientID, "client-id",
+		"--" + flagAzureClientSecret, "client-secret",
+		"--" + flagAzureEndpoint, "https://custom-endpoint.com",
+		"--" + flagAzureContainerName, "my-container",
+		"--" + flagAzureAccessTier, "Standard",
+		"--" + flagAzureBlockSize, "1",
+		"--" + flagAzureUploadConcurrency, "10",
+		"--" + flagAzureMaxConnsPerHost, "10",
+		"--" + flagAzureRequestTimeout, "10",
 	}
 
 	err := flagSet.Parse(args)

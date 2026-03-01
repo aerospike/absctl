@@ -149,3 +149,55 @@ func TestSecretAgent_Validate(t *testing.T) {
 		})
 	}
 }
+
+// Secret Agent Tests
+func TestMapSecretAgentConfig_Success(t *testing.T) {
+	t.Parallel()
+
+	secretAgentModel := &SecretAgent{
+		Address:            "localhost",
+		ConnectionType:     "tcp",
+		Port:               8080,
+		TimeoutMillisecond: 1000,
+		CaFile:             "/path/to/ca.pem",
+		CertFile:           "/path/to/cert.pem",
+		KeyFile:            "/path/to/key.pem",
+		TLSName:            "example.com",
+		IsBase64:           true,
+	}
+
+	secretAgentConfig := secretAgentModel.Config()
+	assert.NotNil(t, secretAgentConfig)
+	assert.Equal(t, "localhost", *secretAgentConfig.Address)
+	assert.Equal(t, "tcp", *secretAgentConfig.ConnectionType)
+	assert.Equal(t, 8080, *secretAgentConfig.Port)
+	assert.Equal(t, 1000, *secretAgentConfig.TimeoutMillisecond)
+	assert.Equal(t, "/path/to/ca.pem", *secretAgentConfig.CaFile)
+	assert.Equal(t, "/path/to/cert.pem", *secretAgentConfig.CertFile)
+	assert.Equal(t, "/path/to/key.pem", *secretAgentConfig.KeyFile)
+	assert.Equal(t, "example.com", *secretAgentConfig.TLSName)
+	assert.True(t, *secretAgentConfig.IsBase64)
+}
+
+func TestMapSecretAgentConfig_EmptyAddress(t *testing.T) {
+	t.Parallel()
+
+	secretAgentModel := &SecretAgent{}
+	secretAgentConfig := secretAgentModel.Config()
+	assert.Nil(t, secretAgentConfig)
+}
+
+func TestMapSecretAgentConfig_PartialConfig(t *testing.T) {
+	t.Parallel()
+
+	secretAgentModel := &SecretAgent{
+		Address: "localhost",
+		Port:    8080,
+	}
+
+	secretAgentConfig := secretAgentModel.Config()
+	assert.NotNil(t, secretAgentConfig)
+	assert.Equal(t, "localhost", *secretAgentConfig.Address)
+	assert.Equal(t, 8080, *secretAgentConfig.Port)
+	assert.Nil(t, secretAgentConfig.CaFile, "CaFile should be nil if not set")
+}

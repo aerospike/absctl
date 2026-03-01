@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aerospike/backup-go"
 	sa "github.com/aerospike/backup-go/pkg/secret-agent"
 )
 
@@ -52,4 +53,61 @@ func (s *SecretAgent) Validate() error {
 	}
 
 	return nil
+}
+
+// Config returns SecretAgentConfig for backup and restore operations.
+func (s *SecretAgent) Config() *backup.SecretAgentConfig {
+	if s == nil {
+		return nil
+	}
+
+	if s.Address == "" {
+		return nil
+	}
+
+	c := &backup.SecretAgentConfig{}
+	c.Address = &s.Address
+
+	if s.ConnectionType != "" {
+		ct := strings.ToLower(s.ConnectionType)
+		c.ConnectionType = &ct
+	}
+
+	if s.Port != 0 {
+		c.Port = &s.Port
+	}
+
+	if s.TimeoutMillisecond != 0 {
+		c.TimeoutMillisecond = &s.TimeoutMillisecond
+	}
+
+	if s.CaFile != "" {
+		c.CaFile = &s.CaFile
+	}
+
+	if s.TLSName != "" {
+		c.TLSName = &s.TLSName
+	}
+
+	if s.CertFile != "" {
+		c.CertFile = &s.CertFile
+	}
+
+	if s.KeyFile != "" {
+		c.KeyFile = &s.KeyFile
+	}
+
+	if s.CertFile != "" {
+		c.CertFile = &s.CertFile
+	}
+
+	if s.KeyFile != "" {
+		c.KeyFile = &s.KeyFile
+	}
+
+	if s.IsBase64 {
+		c.IsBase64 = &s.IsBase64
+	}
+
+	return c
 }

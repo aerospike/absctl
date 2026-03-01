@@ -37,11 +37,10 @@ import (
 func NewBackupWriter(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
-	sa *backup.SecretAgentConfig,
 	logger *slog.Logger,
 ) (backup.Writer, error) {
 	// We initialize a writer only if output is configured.
-	writer, err := newWriter(ctx, params, sa, logger)
+	writer, err := newWriter(ctx, params, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup writer: %w", err)
 	}
@@ -58,7 +57,6 @@ func NewBackupWriter(
 func newWriter(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
-	sa *backup.SecretAgentConfig,
 	logger *slog.Logger,
 ) (backup.Writer, error) {
 	if params == nil {
@@ -89,10 +87,6 @@ func newWriter(
 			slog.String("endpoint", params.AwsS3.Endpoint),
 		)
 
-		if err := params.AwsS3.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load AWS secrets: %w", err)
-		}
-
 		return newS3Writer(ctx, params.AwsS3, opts)
 	case params.GcpStorage != nil && params.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage writer",
@@ -100,10 +94,6 @@ func newWriter(
 			slog.Int("chunk_size", params.GcpStorage.ChunkSize),
 			slog.String("endpoint", params.GcpStorage.Endpoint),
 		)
-
-		if err := params.GcpStorage.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load GCP secrets: %w", err)
-		}
 
 		return newGcpWriter(ctx, params.GcpStorage, opts)
 	case params.AzureBlob != nil && params.AzureBlob.ContainerName != "":
@@ -113,10 +103,6 @@ func newWriter(
 			slog.Int("block_size", params.AzureBlob.BlockSize),
 			slog.String("endpoint", params.AzureBlob.Endpoint),
 		)
-
-		if err := params.AzureBlob.LoadSecrets(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to load azure secrets: %w", err)
-		}
 
 		return newAzureWriter(ctx, params.AzureBlob, opts)
 	case params.IsStdout():

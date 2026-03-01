@@ -16,8 +16,6 @@ package models
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestGcpStorage_Validate(t *testing.T) {
@@ -164,10 +162,7 @@ func TestGcpStorage_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.gcp.LoadSecrets(t.Context(), nil)
-			require.NoError(t, err)
-
-			err = tt.gcp.Validate(true)
+			err := tt.gcp.Validate(true)
 
 			if tt.wantErr != "" {
 				switch {

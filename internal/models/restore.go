@@ -14,7 +14,14 @@
 
 package models
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+
+	"github.com/aerospike/aerospike-client-go/v8"
+	"github.com/aerospike/backup-go"
+	"github.com/aerospike/backup-go/models"
+)
 
 const (
 	RestoreModeAuto = "auto"
@@ -97,4 +104,86 @@ func (r *Restore) Validate() error {
 	}
 
 	return nil
+}
+
+// NamespaceConfig creates and returns a RestoreNamespaceConfig with source and destination namespaces
+// derived from input. Took value from r.Namespace. If one namespace is provided,
+// it sets both source and destination to the same value.
+// Returns nil if invalid input (e.g., more than two namespaces) is provided.
+func (r *Restore) NamespaceConfig() *backup.RestoreNamespaceConfig {
+	nsArr := SplitByComma(r.Namespace)
+
+	var source, destination string
+
+	switch len(nsArr) {
+	case 1:
+		source, destination = nsArr[0], nsArr[0]
+	case 2:
+		source, destination = nsArr[0], nsArr[1]
+	default:
+		return nil
+	}
+
+	return &backup.RestoreNamespaceConfig{
+		Source:      &source,
+		Destination: &destination,
+	}
+}
+
+// WritePolicy map restore config to write policy.
+func (r *Restore) WritePolicy() *aerospike.WritePolicy {
+	p := aerospike.NewWritePolicy(0, 0)
+
+	p.SendKey = true
+	p.TotalTimeout = time.Duration(r.TotalTimeout) * time.Millisecond
+	p.SocketTimeout = time.Duration(r.SocketTimeout) * time.Millisecond
+	p.RecordExistsAction = recordExistsAction(r.Replace, r.Uniq)
+	p.GenerationPolicy = aerospike.EXPECT_GEN_GT
+
+	if r.NoGeneration {
+		p.GenerationPolicy = aerospike.NONE
+	}
+
+	return p
+}
+
+// InfoPolicy maps the restore configuration into an Aerospike InfoPolicy.
+func (r *Restore) InfoPolicy() *aerospike.InfoPolicy {
+	p := aerospike.NewInfoPolicy()
+	p.Timeout = time.Duration(r.InfoTimeout) * time.Millisecond
+
+	return p
+}
+
+// RetryPolicy maps restore configuration parameters to a retry policy,
+// including interval, multiplier, and max retries.
+func (r *Restore) RetryPolicy() *models.RetryPolicy {
+	return models.NewRetryPolicy(
+		time.Duration(r.InfoRetryIntervalMilliseconds)*time.Millisecond,
+		r.InfoRetriesMultiplier,
+		r.InfoMaxRetries,
+	)
+}
+
+// Sets converts the Sets string into a slice of set names by splitting it using commas.
+// Returns nil if empty.
+func (r *Restore) Sets() []string {
+	return SplitByComma(r.SetList)
+}
+
+// Bins converts the BinList string into a slice of bin names by splitting it using commas.
+// Returns nil if empty.
+func (r *Restore) Bins() []string {
+	return SplitByComma(r.BinList)
+}
+
+func recordExistsAction(replace, unique bool) aerospike.RecordExistsAction {
+	switch {
+	case replace:
+		return aerospike.REPLACE
+	case unique:
+		return aerospike.CREATE_ONLY
+	default:
+		return aerospike.UPDATE
+	}
 }

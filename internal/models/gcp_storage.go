@@ -15,10 +15,7 @@
 package models
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/aerospike/backup-go"
 )
 
 // GcpStorage represents the configuration for GCP storage integration.
@@ -40,28 +37,6 @@ type GcpStorage struct {
 	ChunkSize int
 
 	StorageCommon
-}
-
-// LoadSecrets tries to load field values from secret agent.
-func (g *GcpStorage) LoadSecrets(ctx context.Context, cfg *backup.SecretAgentConfig) error {
-	var err error
-
-	g.KeyFile, err = backup.ParseSecret(ctx, cfg, g.KeyFile)
-	if err != nil {
-		return fmt.Errorf("failed to load key file from secret agent: %w", err)
-	}
-
-	g.BucketName, err = backup.ParseSecret(ctx, cfg, g.BucketName)
-	if err != nil {
-		return fmt.Errorf("failed to load bucket name from secret agent: %w", err)
-	}
-
-	g.Endpoint, err = backup.ParseSecret(ctx, cfg, g.Endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to load endpoint from secret agent: %w", err)
-	}
-
-	return nil
 }
 
 // Validate internal validation for struct params.
@@ -105,4 +80,12 @@ func (g *GcpStorage) Validate(isBackup bool) error {
 	}
 
 	return nil
+}
+
+func (g *GcpStorage) IsConfigured() bool {
+	if g == nil {
+		return false
+	}
+
+	return g.BucketName != "" || g.KeyFile != "" || g.Endpoint != ""
 }

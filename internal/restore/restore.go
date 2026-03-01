@@ -49,7 +49,7 @@ type Service struct {
 // configuring all necessary components for a restore process.
 func NewService(
 	ctx context.Context,
-	params *config.RestoreServiceConfig,
+	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	var (
@@ -60,52 +60,42 @@ func NewService(
 	)
 	// Set default restore mode to asb.
 	// This should be removed once asbx is released.
-	params.Restore.Mode = models.RestoreModeASB
+	cfg.Restore.Mode = models.RestoreModeASB
 	// Validations.
-	if err := params.Restore.Validate(); err != nil {
-		return nil, err
-	}
-
-	if err := config.ValidateStorages(false, params.AwsS3, params.GcpStorage, params.AzureBlob, nil); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	// Initializations.
-	restoreConfig := config.NewRestoreConfig(params, logger)
+	restoreConfig := config.NewRestoreConfig(cfg, logger)
 
 	// Skip this part on validation.
 	if !restoreConfig.ValidateOnly {
-		warmUp := GetWarmUp(params.Restore.WarmUp, params.Restore.MaxAsyncBatches)
+		warmUp := GetWarmUp(cfg.Restore.WarmUp, cfg.Restore.MaxAsyncBatches)
 		logger.Debug("warm up is set", slog.Int("value", warmUp))
 
 		aerospikeClient, err = storage.NewAerospikeClient(
-			ctx,
-			params.ClientConfig,
-			params.ClientPolicy,
-			"",
+			cfg.ClientConfig,
+			cfg.ClientPolicy,
+			nil,
 			warmUp,
 			logger,
-			restoreConfig.SecretAgentConfig,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create aerospike client: %w", err)
 		}
 	}
 
-	reader, xdrReader, err := storage.NewRestoreReader(ctx, params, restoreConfig.SecretAgentConfig, logger)
+	reader, xdrReader, err := storage.NewRestoreReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore reader: %w", err)
 	}
 
 	logger.Info("initializing restore client", slog.String("id", idRestore))
 
-	infoRetryPolicy := config.NewRetryPolicy(
-		params.Restore.InfoRetryIntervalMilliseconds,
-		params.Restore.InfoRetriesMultiplier,
-		params.Restore.InfoMaxRetries,
-	)
+	infoRetryPolicy := cfg.Restore.RetryPolicy()
 
-	infoPolicy := config.NewInfoPolicy(params.Restore.InfoTimeout)
+	infoPolicy := cfg.Restore.InfoPolicy()
 
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
@@ -121,9 +111,9 @@ func NewService(
 		restoreConfig: restoreConfig,
 		reader:        reader,
 		xdrReader:     xdrReader,
-		mode:          params.Restore.Mode,
+		mode:          cfg.Restore.Mode,
 		logger:        logger,
-		reportToLog:   params.App.LogJSON || params.App.LogFile != "",
+		reportToLog:   cfg.App.LogJSON || cfg.App.LogFile != "",
 	}, nil
 }
 

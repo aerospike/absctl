@@ -16,8 +16,6 @@ package models
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 const testEndpoint = "test-endpoint"
@@ -210,10 +208,7 @@ func TestAzureBlob_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.azure.LoadSecrets(t.Context(), nil)
-			require.NoError(t, err)
-
-			err = tt.azure.Validate(tt.isBackup)
+			err := tt.azure.Validate(tt.isBackup)
 
 			if tt.wantErr != "" {
 				switch {

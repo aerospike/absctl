@@ -26,6 +26,12 @@ const (
 	defaultNoneVal = "NONE"
 )
 
+const (
+	flagEncryptKeyFile   = "encryption-key-file"
+	flagEncryptKeyEnv    = "encryption-key-env"
+	flagEncryptKeySecret = "encryption-key-secret"
+)
+
 type Encryption struct {
 	// operation: backup or restore, to form correct documentation.
 	operation int
@@ -55,15 +61,15 @@ func (f *Encryption) NewFlagSet() *pflag.FlagSet {
 			"A private key must be given, either with the --encryption-key-file option or\n"+
 			"the --encryption-key-env option or the --encryption-key-secret.")
 
-	flagSet.StringVar(&f.KeyFile, "encryption-key-file",
+	flagSet.StringVar(&f.KeyFile, flagEncryptKeyFile,
 		models.DefaultEncryptionKeyFile,
 		"Gets the encryption key from the given file, which must be in PEM format.")
 
-	flagSet.StringVar(&f.KeyEnv, "encryption-key-env",
+	flagSet.StringVar(&f.KeyEnv, flagEncryptKeyEnv,
 		models.DefaultEncryptionKeyEnv,
 		"Gets the encryption key from the given environment variable, which must be Base64 encoded.")
 
-	flagSet.StringVar(&f.KeySecret, "encryption-key-secret",
+	flagSet.StringVar(&f.KeySecret, flagEncryptKeySecret,
 		models.DefaultEncryptionKeySecret,
 		"Gets the encryption key from secret-agent.")
 

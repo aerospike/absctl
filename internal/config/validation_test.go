@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -219,87 +218,7 @@ func TestValidateStorages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := ValidateStorages(tt.isBackup, tt.awsS3, tt.gcpStorage, tt.azureBlob, tt.local)
-			if tt.wantErr {
-				assert.Error(t, err, "Expected error but got none")
-			} else {
-				assert.NoError(t, err, "Expected no error but got one")
-			}
-		})
-	}
-}
-
-func TestValidatePartitionFilters(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name             string
-		partitionFilters []*aerospike.PartitionFilter
-		wantErr          bool
-	}{
-		{
-			name: "Single valid partition filter",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 1},
-			},
-			wantErr: false,
-		},
-		{
-			name: "Non-overlapping partition filters",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 5},
-				{Begin: 10, Count: 5},
-			},
-			wantErr: false,
-		},
-		{
-			name: "Overlapping partition filters",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 10},
-				{Begin: 5, Count: 10},
-			},
-			wantErr: true,
-		},
-		{
-			name: "Border partition filters",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 1000},
-				{Begin: 1000, Count: 3000},
-			},
-			wantErr: false,
-		},
-		{
-			name: "Duplicate begin value",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 1},
-				{Begin: 0, Count: 1},
-			},
-			wantErr: true,
-		},
-		{
-			name: "Mixed filters with no overlap",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 1},
-				{Begin: 5, Count: 5},
-				{Begin: 20, Count: 1},
-				{Begin: 30, Count: 10},
-			},
-			wantErr: false,
-		},
-		{
-			name: "Invalid count in filter",
-			partitionFilters: []*aerospike.PartitionFilter{
-				{Begin: 0, Count: 0},
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := ValidatePartitionFilters(tt.partitionFilters)
+			err := validateStorages(tt.isBackup, tt.awsS3, tt.gcpStorage, tt.azureBlob, tt.local)
 			if tt.wantErr {
 				assert.Error(t, err, "Expected error but got none")
 			} else {

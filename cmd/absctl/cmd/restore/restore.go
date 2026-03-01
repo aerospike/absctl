@@ -15,6 +15,7 @@
 package restore
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -84,10 +85,11 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 	c.flagsCommon = flags.NewCommon(&c.flagsRestore.Common, flags.OperationRestore)
 
 	restoreCmd := &cobra.Command{
-		Use:   useCommand,
-		Short: welcomeMessageShort,
-		Long:  welcomeMessage,
-		RunE:  c.run,
+		Use:               useCommand,
+		Short:             welcomeMessageShort,
+		Long:              welcomeMessage,
+		RunE:              c.run,
+		PersistentPreRunE: c.preRun,
 	}
 
 	// Disable sorting
@@ -96,6 +98,7 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
+	flags.WrapCertFlagsForSecrets(aerospikeFlagSet)
 	clientPolicyFlagSet := c.flagsClientPolicy.NewFlagSet()
 	commonFlagSet := c.flagsCommon.NewFlagSet()
 	restoreFlagSet := c.flagsRestore.NewFlagSet()
@@ -171,7 +174,7 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Init app.
-	serviceConfig, err := c.newServiceConfig()
+	serviceConfig, err := c.newServiceConfig(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to initialize app: %w", err)
 	}
@@ -215,12 +218,18 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
+	sa := c.flagsSecretAgent.GetSecretAgent()
+
+	return c.flagsApp.PreRun(cmd, sa)
+}
+
 // newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig() (*config.RestoreServiceConfig, error) {
+func (c *Cmd) newServiceConfig(ctx context.Context) (*config.RestoreServiceConfig, error) {
 	app := c.flagsApp.GetApp()
 	// If we have a config file, load serviceConfig from it.
 	if app != nil && app.ConfigFilePath != "" {
-		serviceConfig, err := config.DecodeRestoreServiceConfig(app.ConfigFilePath)
+		serviceConfig, err := config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}

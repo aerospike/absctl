@@ -30,16 +30,16 @@ func TestGcpStorage_NewFlagSetBackup(t *testing.T) {
 	flagSet := gcpStorage.NewFlagSet()
 
 	args := []string{
-		"--gcp-key-path", "/path/to/keyfile.json",
-		"--gcp-bucket-name", "my-bucket",
-		"--gcp-endpoint-override", "https://gcp.custom-endpoint.com",
-		"--gcp-chunk-size", "1",
-		"--gcp-retry-max-attempts", "10",
-		"--gcp-retry-max-backoff", "10",
-		"--gcp-retry-init-backoff", "10",
-		"--gcp-retry-backoff-multiplier", "10",
-		"--gcp-max-conns-per-host", "10",
-		"--gcp-request-timeout", "10",
+		"--" + flagGcpKeyPath, "/path/to/keyfile.json",
+		"--" + flagGcpBucketName, "my-bucket",
+		"--" + flagGcpEndpoint, "https://gcp.custom-endpoint.com",
+		"--" + flagGcpChunkSize, "1",
+		"--" + flagGcpRetryMaxAttempts, "10",
+		"--" + flagGcpRetryMaxBackoff, "10",
+		"--" + flagGcpRetryInitBackoff, "10",
+		"--" + flagGcpRetryBackoffMult, "10",
+		"--" + flagGcpMaxConnsPerHost, "10",
+		"--" + flagGcpRequestTimeout, "10",
 	}
 
 	err := flagSet.Parse(args)
@@ -67,9 +67,9 @@ func TestGcpStorage_NewFlagSetRestore(t *testing.T) {
 	flagSet := gcpStorage.NewFlagSet()
 
 	args := []string{
-		"--gcp-retry-read-backoff", "900",
-		"--gcp-retry-read-multiplier", "1.5",
-		"--gcp-retry-read-max-attempts", "5",
+		"--" + flagGcpRetryReadBackoff, "900",
+		"--" + flagGcpRetryReadMultiplier, "1.5",
+		"--" + flagGcpRetryReadMaxAttempts, "5",
 	}
 
 	err := flagSet.Parse(args)

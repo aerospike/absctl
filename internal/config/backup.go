@@ -84,32 +84,32 @@ func NewBackupServiceConfig(
 }
 
 // IsXDR determines if the backup configuration is an XDR backup by checking if BackupXDR is non-nil and Backup is nil.
-func (p *BackupServiceConfig) IsXDR() bool {
-	return p.BackupXDR != nil && p.Backup == nil
+func (b *BackupServiceConfig) IsXDR() bool {
+	return b.BackupXDR != nil && b.Backup == nil
 }
 
 // IsContinue determines if the backup configuration is a continue backup
 // by checking if Backup is non-nil and Continue is non-empty.
-func (p *BackupServiceConfig) IsContinue() bool {
-	return p.Backup != nil && p.Backup.Continue != ""
+func (b *BackupServiceConfig) IsContinue() bool {
+	return b.Backup != nil && b.Backup.Continue != ""
 }
 
 // IsStopXDR checks if the backup operation should stop XDR by verifying that BackupXDR is non-nil and StopXDR is true.
-func (p *BackupServiceConfig) IsStopXDR() bool {
-	return p.BackupXDR != nil && p.BackupXDR.StopXDR
+func (b *BackupServiceConfig) IsStopXDR() bool {
+	return b.BackupXDR != nil && b.BackupXDR.StopXDR
 }
 
 // IsUnblockMRT checks if the backup operation should unblock MRT writes
 // by verifying that BackupXDR is non-nil and UnblockMRT is true.
-func (p *BackupServiceConfig) IsUnblockMRT() bool {
-	return p.BackupXDR != nil && p.BackupXDR.UnblockMRT
+func (b *BackupServiceConfig) IsUnblockMRT() bool {
+	return b.BackupXDR != nil && b.BackupXDR.UnblockMRT
 }
 
 // SkipWriterInit checks if the backup operation should skip writer initialization
 // by verifying that Backup is non-nil and Estimate is false.
-func (p *BackupServiceConfig) SkipWriterInit() bool {
-	if p.Backup != nil {
-		return !p.Backup.Estimate
+func (b *BackupServiceConfig) SkipWriterInit() bool {
+	if b.Backup != nil {
+		return !b.Backup.Estimate
 	}
 
 	return true
@@ -117,12 +117,39 @@ func (p *BackupServiceConfig) SkipWriterInit() bool {
 
 // IsStdout checks if the backup operation should write to stdout
 // by verifying that Backup is non-nil and OutputFile is StdPlaceholder.
-func (p *BackupServiceConfig) IsStdout() bool {
-	if p.Backup != nil && p.Backup.OutputFile == StdPlaceholder {
+func (b *BackupServiceConfig) IsStdout() bool {
+	if b.Backup != nil && b.Backup.OutputFile == StdPlaceholder {
 		return true
 	}
 
 	return false
+}
+
+// Validate validates the backup configuration and returns an error if any validation fails.
+func (b *BackupServiceConfig) Validate() error {
+	if err := b.Backup.Validate(); err != nil {
+		return err
+	}
+
+	if err := b.BackupXDR.Validate(); err != nil {
+		return err
+	}
+
+	if err := validateStorages(
+		true,
+		b.AwsS3,
+		b.GcpStorage,
+		b.AzureBlob,
+		b.Local,
+	); err != nil {
+		return err
+	}
+
+	if err := b.SecretAgent.Validate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // NewBackupConfigs creates and returns a new ConfigBackup and ConfigBackupXDR object,
@@ -167,29 +194,29 @@ func NewBackupConfigs(serviceConfig *BackupServiceConfig, logger *slog.Logger,
 // newBackupConfig initializes and returns a configured instance of ConfigBackup based on the provided params.
 // This function sets various backup parameters including namespace, file limits, parallelism options, bandwidth,
 // compression, encryption, and partition filters. It returns an error if any validation or parsing fails.
-func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) {
+func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) {
 	c := backup.NewDefaultBackupConfig()
-	c.Namespace = params.Backup.Namespace
-	c.SetList = SplitByComma(params.Backup.SetList)
-	c.BinList = SplitByComma(params.Backup.BinList)
-	c.NoRecords = params.Backup.NoRecords
-	c.NoIndexes = params.Backup.NoIndexes
-	c.RecordsPerSecond = params.Backup.RecordsPerSecond
-	c.FileLimit = params.Backup.FileLimit * 1024 * 1024
-	c.NoUDFs = params.Backup.NoUDFs
+	c.Namespace = config.Backup.Namespace
+	c.SetList = config.Backup.Sets()
+	c.BinList = config.Backup.Bins()
+	c.NoRecords = config.Backup.NoRecords
+	c.NoIndexes = config.Backup.NoIndexes
+	c.RecordsPerSecond = config.Backup.RecordsPerSecond
+	c.FileLimit = config.Backup.FileLimit * 1024 * 1024
+	c.NoUDFs = config.Backup.NoUDFs
 	// The original backup tools have a single parallelism configuration property.
 	// We may consider splitting the configuration in the future.
-	c.ParallelWrite = params.Backup.Parallel
-	c.ParallelRead = params.Backup.Parallel
+	c.ParallelWrite = config.Backup.Parallel
+	c.ParallelRead = config.Backup.Parallel
 	// As we set --bandwidth in MiB we must convert it to bytes
-	c.Bandwidth = params.Backup.Bandwidth * 1024 * 1024
-	c.Compact = params.Backup.Compact
-	c.NoTTLOnly = params.Backup.NoTTLOnly
-	c.OutputFilePrefix = params.Backup.OutputFilePrefix
+	c.Bandwidth = config.Backup.Bandwidth * 1024 * 1024
+	c.Compact = config.Backup.Compact
+	c.NoTTLOnly = config.Backup.NoTTLOnly
+	c.OutputFilePrefix = config.Backup.OutputFilePrefix
 	c.MetricsEnabled = true
 
 	// Reconfigure params for stdout or single file backup.
-	if params.IsStdout() || params.Backup.OutputFile != "" {
+	if config.IsStdout() || config.Backup.OutputFile != "" {
 		// If we back up to stdout, file limit can break the input stream because it will file headers and close descriptors.
 		// So the file limit is disabled for stdout.
 		c.FileLimit = 0
@@ -197,8 +224,8 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.ParallelWrite = 1
 	}
 
-	if params.Backup.RackList != "" {
-		list, err := ParseRacks(params.Backup.RackList)
+	if config.Backup.RackList != "" {
+		list, err := config.Backup.Racks()
 		if err != nil {
 			return nil, err
 		}
@@ -206,45 +233,41 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.RackList = list
 	}
 
-	if params.Backup.Continue != "" {
-		c.StateFile = path.Join(params.Backup.Directory, params.Backup.Continue)
+	if config.Backup.Continue != "" {
+		c.StateFile = path.Join(config.Backup.Directory, config.Backup.Continue)
 		c.Continue = true
-		c.PageSize = params.Backup.ScanPageSize
+		c.PageSize = config.Backup.ScanPageSize
 	}
 
-	if params.Backup.StateFileDst != "" {
-		c.StateFile = path.Join(params.Backup.Directory, params.Backup.StateFileDst)
-		c.PageSize = params.Backup.ScanPageSize
+	if config.Backup.StateFileDst != "" {
+		c.StateFile = path.Join(config.Backup.Directory, config.Backup.StateFileDst)
+		c.PageSize = config.Backup.ScanPageSize
 	}
 
 	// Overwrite partitions if we use nodes.
-	if params.Backup.NodeList != "" {
-		c.NodeList = SplitByComma(params.Backup.NodeList)
+	if config.Backup.NodeList != "" {
+		c.NodeList = config.Backup.Nodes()
 	}
 
-	pf, err := mapPartitionFilter(params.Backup)
+	pf, err := config.Backup.PartitionFilters()
 	if err != nil {
-		return nil, err
-	}
-
-	if err := ValidatePartitionFilters(pf); err != nil {
 		return nil, err
 	}
 
 	c.PartitionFilters = pf
 
-	sp, err := newScanPolicy(params.Backup)
+	sp, err := config.Backup.ScanPolicy()
 	if err != nil {
 		return nil, err
 	}
 
 	c.ScanPolicy = sp
-	c.CompressionPolicy = newCompressionPolicy(params.Compression)
-	c.EncryptionPolicy = newEncryptionPolicy(params.Encryption)
-	c.SecretAgentConfig = newSecretAgentConfig(params.SecretAgent)
+	c.CompressionPolicy = config.Compression.Policy()
+	c.EncryptionPolicy = config.Encryption.Policy()
+	c.SecretAgentConfig = config.SecretAgent.Config()
 
-	if params.Backup.ModifiedBefore != "" {
-		modBeforeTime, err := parseLocalTimeToUTC(params.Backup.ModifiedBefore)
+	if config.Backup.ModifiedBefore != "" {
+		modBeforeTime, err := config.Backup.ModifiedBeforeTime()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified before date: %w", err)
 		}
@@ -252,8 +275,8 @@ func newBackupConfig(params *BackupServiceConfig) (*backup.ConfigBackup, error) 
 		c.ModBefore = &modBeforeTime
 	}
 
-	if params.Backup.ModifiedAfter != "" {
-		modAfterTime, err := parseLocalTimeToUTC(params.Backup.ModifiedAfter)
+	if config.Backup.ModifiedAfter != "" {
+		modAfterTime, err := config.Backup.ModifiedAfterTime()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse modified after date: %w", err)
 		}
@@ -272,9 +295,9 @@ func newBackupXDRConfig(params *BackupServiceConfig) *backup.ConfigBackupXDR {
 	}
 
 	c := &backup.ConfigBackupXDR{
-		EncryptionPolicy:  newEncryptionPolicy(params.Encryption),
-		CompressionPolicy: newCompressionPolicy(params.Compression),
-		SecretAgentConfig: newSecretAgentConfig(params.SecretAgent),
+		EncryptionPolicy:  params.Encryption.Policy(),
+		CompressionPolicy: params.Compression.Policy(),
+		SecretAgentConfig: params.SecretAgent.Config(),
 		EncoderType:       backup.EncoderTypeASBX,
 		FileLimit:         params.BackupXDR.FileLimit * 1024 * 1024,
 		ParallelWrite:     parallelWrite,

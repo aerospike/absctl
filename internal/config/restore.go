@@ -24,6 +24,8 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
+const noneVal = "NONE"
+
 // RestoreServiceConfig contains configuration settings for the restore service,
 // including client, restore, and storage details.
 type RestoreServiceConfig struct {
@@ -78,47 +80,66 @@ func (r *RestoreServiceConfig) IsStdin() bool {
 	return false
 }
 
+// Validate validates the backup configuration and returns an error if any validation fails.
+func (r *RestoreServiceConfig) Validate() error {
+	if err := r.Restore.Validate(); err != nil {
+		return err
+	}
+
+	if err := validateStorages(
+		false,
+		r.AwsS3,
+		r.GcpStorage,
+		r.AzureBlob,
+		nil,
+	); err != nil {
+		return err
+	}
+
+	if err := r.SecretAgent.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // NewRestoreConfig creates and returns a new ConfigRestore object, initialized with given restore parameters.
-func NewRestoreConfig(serviceConfig *RestoreServiceConfig, logger *slog.Logger) *backup.ConfigRestore {
+func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup.ConfigRestore {
 	logger.Info("initializing restore config")
 
 	parallel := runtime.NumCPU()
-	if serviceConfig.Restore.Parallel > 0 {
-		parallel = serviceConfig.Restore.Parallel
+	if config.Restore.Parallel > 0 {
+		parallel = config.Restore.Parallel
 	}
 
 	c := backup.NewDefaultRestoreConfig()
-	c.Namespace = newRestoreNamespace(serviceConfig.Restore.Namespace)
-	c.SetList = SplitByComma(serviceConfig.Restore.SetList)
-	c.BinList = SplitByComma(serviceConfig.Restore.BinList)
-	c.NoRecords = serviceConfig.Restore.NoRecords
-	c.NoIndexes = serviceConfig.Restore.NoIndexes
-	c.NoUDFs = serviceConfig.Restore.NoUDFs
-	c.RecordsPerSecond = serviceConfig.Restore.RecordsPerSecond
+	c.Namespace = config.Restore.NamespaceConfig()
+	c.SetList = config.Restore.Sets()
+	c.BinList = config.Restore.Bins()
+	c.NoRecords = config.Restore.NoRecords
+	c.NoIndexes = config.Restore.NoIndexes
+	c.NoUDFs = config.Restore.NoUDFs
+	c.RecordsPerSecond = config.Restore.RecordsPerSecond
 	c.Parallel = parallel
-	c.WritePolicy = newWritePolicy(serviceConfig.Restore)
+	c.WritePolicy = config.Restore.WritePolicy()
 	// As we set --bandwidth in MiB we must convert it to bytes
-	c.Bandwidth = serviceConfig.Restore.Bandwidth * 1024 * 1024
-	c.ExtraTTL = serviceConfig.Restore.ExtraTTL
-	c.IgnoreRecordError = serviceConfig.Restore.IgnoreRecordError
-	c.DisableBatchWrites = serviceConfig.Restore.DisableBatchWrites
-	c.BatchSize = serviceConfig.Restore.BatchSize
-	c.MaxAsyncBatches = serviceConfig.Restore.MaxAsyncBatches
+	c.Bandwidth = config.Restore.Bandwidth * 1024 * 1024
+	c.ExtraTTL = config.Restore.ExtraTTL
+	c.IgnoreRecordError = config.Restore.IgnoreRecordError
+	c.DisableBatchWrites = config.Restore.DisableBatchWrites
+	c.BatchSize = config.Restore.BatchSize
+	c.MaxAsyncBatches = config.Restore.MaxAsyncBatches
 	c.MetricsEnabled = true
 
-	c.CompressionPolicy = newCompressionPolicy(serviceConfig.Compression)
-	c.EncryptionPolicy = newEncryptionPolicy(serviceConfig.Encryption)
-	c.SecretAgentConfig = newSecretAgentConfig(serviceConfig.SecretAgent)
-	c.RetryPolicy = NewRetryPolicy(
-		serviceConfig.Restore.RetryBaseInterval,
-		serviceConfig.Restore.RetryMultiplier,
-		serviceConfig.Restore.RetryMaxAttempts,
-	)
-	c.ValidateOnly = serviceConfig.Restore.ValidateOnly
-	c.ApplyMetadataLast = serviceConfig.Restore.ApplyMetadataLast
+	c.CompressionPolicy = config.Compression.Policy()
+	c.EncryptionPolicy = config.Encryption.Policy()
+	c.SecretAgentConfig = config.SecretAgent.Config()
+	c.RetryPolicy = config.Restore.RetryPolicy()
+	c.ValidateOnly = config.Restore.ValidateOnly
+	c.ApplyMetadataLast = config.Restore.ApplyMetadataLast
 
 	if !c.ValidateOnly {
-		logRestoreConfig(logger, serviceConfig, c)
+		logRestoreConfig(logger, config, c)
 	}
 
 	return c
