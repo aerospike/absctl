@@ -123,7 +123,7 @@ func TestValidateRestore(t *testing.T) {
 				Uniq:    true,
 			},
 			wantErr: true,
-			errMsg:  "replace and uniq are mutually exclusive",
+			errMsg:  "replace and unique are mutually exclusive",
 		},
 	}
 
