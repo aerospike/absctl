@@ -103,6 +103,10 @@ func (r *Restore) Validate() error {
 		}
 	}
 
+	if r.Uniq && r.Replace {
+		return fmt.Errorf("replace and unique are mutually exclusive")
+	}
+
 	return nil
 }
 

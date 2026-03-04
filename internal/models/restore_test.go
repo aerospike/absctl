@@ -111,6 +111,20 @@ func TestValidateRestore(t *testing.T) {
 			wantErr: true,
 			errMsg:  "namespace is required",
 		},
+		{
+			name: "Replace and uniq are mutually exclusive",
+			restore: &Restore{
+				Mode: RestoreModeASB,
+				Common: Common{
+					Directory: "restore-dir",
+					Namespace: "test",
+				},
+				Replace: true,
+				Uniq:    true,
+			},
+			wantErr: true,
+			errMsg:  "replace and unique are mutually exclusive",
+		},
 	}
 
 	for _, tt := range tests {
