@@ -74,6 +74,8 @@ linters:
     wsl_v5:
       disable:
         - assign
+    misspell:
+      locale: US
   exclusions:
     generated: lax
     presets:
