@@ -291,69 +291,48 @@ func newHelpFunction(
 	return func() {
 		fmt.Println(welcomeMessage)
 		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
-		fmt.Println("\nUsage:")
-		fmt.Println("  absctl backup [flags]")
+		fmt.Println(flags.SectionTextUsageBackup)
 
 		// Print section: App Flags
-		fmt.Println("\nGeneral Flags:")
+		fmt.Println(flags.SectionTextGeneral)
 		appFlagSet.PrintDefaults()
 
 		// Print section: Common Flags
-		fmt.Println("\nAerospike Client Flags:")
+		fmt.Println(flags.SectionTextAerospike)
 		aerospikeFlagSet.PrintDefaults()
 		clientPolicyFlagSet.PrintDefaults()
 
 		// Print section: Backup Flags
-		fmt.Println("\nBackup Flags:")
+		fmt.Println(flags.SectionTextBackup)
 		commonFlagSet.PrintDefaults()
 		backupFlagSet.PrintDefaults()
 
 		// Print section: Compression Flags
-		fmt.Println("\nCompression Flags:")
+		fmt.Println(flags.SectionTextCompression)
 		compressionFlagSet.PrintDefaults()
 
 		// Print section: Encryption Flags
-		fmt.Println("\nEncryption Flags:")
+		fmt.Println(flags.SectionTextEncryption)
 		encryptionFlagSet.PrintDefaults()
 
 		// Print section: Secret Agent Flags
-		fmt.Println("\nSecret Agent Flags:\n" +
-			"Options pertaining to the Aerospike Secret Agent.\n" +
-			"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
-			"Both backup and restore commands support getting all the cloud configuration parameters\n" +
-			"from the Aerospike Secret Agent.\n" +
-			"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-			"Example: absctl backup --azure-account-name secret:resource1:azaccount")
+		fmt.Println(flags.SectionTextSecretAgentBackup)
 		secretAgentFlagSet.PrintDefaults()
 
 		// Print section: Local Flags
-		fmt.Println("\nLocal Storage Flags:")
+		fmt.Println(flags.SectionTextLocal)
 		localFlagSet.PrintDefaults()
 
 		// Print section: AWS Flags
-		fmt.Println("\nAWS Storage Flags:\n" +
-			"For S3, the storage bucket name must be set with the --s3-bucket-name flag.\n" +
-			"--directory path will only contain the folder name.\n" +
-			"--s3-endpoint-override is used for MinIO storage instead of AWS.\n" +
-			"Any AWS parameter can be retrieved from Secret Agent.")
+		fmt.Println(flags.SectionTextAWS)
 		awsFlagSet.PrintDefaults()
 
 		// Print section: GCP Flags
-		fmt.Println("\nGCP Storage Flags:\n" +
-			"For GCP storage, the bucket name must be set with --gcp-bucket-name flag.\n" +
-			"--directory path will only contain the folder name.\n" +
-			"The flag --gcp-endpoint-override  is optional, and is used for tests or any other GCP emulator.\n" +
-			"Any GCP parameter can be retrieved from Secret Agent.")
+		fmt.Println(flags.SectionTextGCP)
 		gcpFlagSet.PrintDefaults()
 
 		// Print section: Azure Flags
-		fmt.Println("\nAzure Storage Flags:\n" +
-			"For Azure storage, the container name must be set with --azure-container-name flag.\n" +
-			"--directory path will only contain folder name.\n" +
-			"The flag --azure-endpoint is also mandatory, as each storage account has different service address.\n" +
-			"For authentication, use --azure-account-name and --azure-account-key, or \n" +
-			"--azure-tenant-id, --azure-client-id and --azure-client-secret.\n" +
-			"Any Azure parameter can be retrieved from Secret Agent.")
+		fmt.Println(flags.SectionTextAzure)
 		azureFlagSet.PrintDefaults()
 	}
 }
