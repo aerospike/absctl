@@ -48,7 +48,7 @@ func (f *App) NewFlagSet() *pflag.FlagSet {
 		"Set output in JSON format for parsing by external tools.")
 	flagSet.StringVar(&f.LogFile, "log-file",
 		models.DefaultAppLogFile,
-		"Path to log file. If empty logs will be printed to stderr.")
+		"Path to log file. If empty, logs will be printed to stderr.")
 	flagSet.StringVar(&f.ConfigFilePath, "config",
 		models.DefaultAppConfigFilePath,
 		"Path to YAML configuration file.")
