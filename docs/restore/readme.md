@@ -31,8 +31,14 @@ make build
 ### Release
 Version artifacts are automatically built and uploaded under releases in GitHub.
 
+
+
+
+
+
 ## Supported flags
 ```
+
 Usage:
   absctl restore [flags]
 
@@ -85,7 +91,7 @@ Aerospike Client Flags:
 
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
-Restore Flags:
+Backup Flags:
   -d, --directory string              The directory that holds the backup files. Required, unless --input-file is used.
   -n, --namespace string              Used to restore to a different namespace. Example: source-ns,destination-ns
   -s, --set-list string               Only restore the given sets from the backup.
@@ -315,7 +321,6 @@ Any Azure parameter can be retrieved from Secret Agent.
                                              0 means no limit. (default 600000)
 ```
 
-
 ## Configuration file schema with example values
 ```yaml
 app:
@@ -327,21 +332,21 @@ app:
   log-json: false
   # Path to log file. If empty logs will be printed to stderr.
   log-file: ""
-
 cluster:
   seeds:
     - host: 127.0.0.1
       tls-name: ""
       port: 3000
-  # The Aerospike user to use to connect to the Aerospike cluster.
-  user: "db_user"
-  # The Aerospike password to use to connect to the Aerospike cluster.
-  password: "db_password"
+  # The Aerospike user for the connection to the Aerospike cluster.
+  user: db_user
+  # The Aerospike password for the connection to the Aerospike
+  # cluster.
+  password: db_password
   # The authentication mode used by the Aerospike server. INTERNAL
   # uses standard user/pass. EXTERNAL uses external methods (like LDAP)
   # which are configured on the server. EXTERNAL requires TLS. PKI allows
   # TLS authentication and authorization based on a certificate. No
-  # username needs to be configured. (default INTERNAL)
+  # username needs to be configured.
   auth: INTERNAL
   # Initial host connection timeout duration. The timeout when opening a connection
   # to the server host for the first time.
@@ -363,38 +368,39 @@ cluster:
   # of "services" in info request during cluster tending.
   services-alternate: false
   tls:
-    # Enable TLS authentication with Aerospike. If false, other TLS options are ignored.
+    # Enable TLS authentication with Aerospike. If false, other TLS
+    # options are ignored.
     enable: true
     # Set the TLS protocol selection criteria. This format is the same
     # as Apache's SSLProtocol documented at
-    # https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol.
-    protocols: "+TLSv1.2"
+    # https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol
+    protocols: +TLSv1.2
     # The CA used when connecting to Aerospike.
     cafile: ""
     # A path containing CAs for connecting to Aerospike.
     capath: ""
-    # The certificate file for mutual TLS authentication with Aerospike.
+    # The certificate file for mutual TLS authentication with
+    # Aerospike.
     certfile: ""
     # The key file used for mutual TLS authentication with Aerospike.
     keyfile: ""
     # The password used to decrypt the key file if encrypted.
     keyfile-password: ""
-
 restore:
   # The directory that holds the backup files. Required, unless input-file is used.
-  directory: "backup_dir"
+  directory: backup_dir
   # Used to restore to a different namespace. Example: source-ns,destination-ns
-  namespace: "source-ns1"
+  namespace: source-ns1
   # Only restore the given sets from the backup.
   # Default: restore all sets.
   set-list:
-    - "set1"
-    - "set2"
+    - set1
+    - set2
   # Only restore the given bins in the backup.
   # If empty, include all bins.
   bin-list:
-    - "bin1"
-    - "bin2"
+    - bin1
+    - bin2
   # The number of restore threads. Accepts values from 1-1024 inclusive.
   # If not set, the default value is automatically calculated and appears as the number of CPUs on your machine.
   parallel: 1
@@ -421,8 +427,8 @@ restore:
   # unless -i or -d is used. The paths may not contain commas.
   # Example: 'absctl restore directory-list /path/to/dir1/,/path/to/dir2'
   directory-list:
-    - "dir1"
-    - "dir2"
+    - dir1
+    - dir2
   # A common root path for all paths used in directory-list.
   # This path is prepended to all entries in directory-list.
   # Example: 'absctl restore parent-directory /common/root/path
@@ -430,18 +436,18 @@ restore:
   parent-directory: ""
   # Disables the use of batch writes when restoring records to the Aerospike cluster.
   # By default, the cluster is checked for batch write support. Only set this flag if you explicitly
-  # don't want batch writes to be used or if absctl restore is failing to work because it cannot recognize
+  # don't want batch writes to be used or if restore tool is failing to work because it cannot recognize
   # that batch writes are disabled.
   disable-batch-writes: false
   # The max allowed number of records to simultaneously upload to Aerospike.
   # Default is 128 with batch writes enabled. If you disable batch writes,
   # this flag is superseded because each worker sends writes one by one.
   # All three batch flags are linked. If disable-batch-writes=false,
-  # absctl restore uses batch write workers to send data to the database.
-  # absctl restore creates a number of workers equal to max-async-batches that work in parallel,
+  # The restore tool uses batch write workers to send data to the database.
+  # restore tool creates a number of workers equal to max-async-batches that work in parallel,
   # and form and send a number of records equal to batch-size to the database.
   batch-size: 128
-  # To send data to Aerospike Database, absctl restore creates write workers that work in parallel.
+  # To send data to Aerospike Database, restore tool creates write workers that work in parallel.
   # This value is the number of workers that form batches and send them to the database.
   # For Aerospike Database versions prior to 6.0, 'batches' are only a logical grouping of records,
   # and each record is uploaded individually.
@@ -462,7 +468,7 @@ restore:
   # AEROSPIKE_FAIL_FORBIDDEN,
   # AEROSPIKE_BIN_TYPE_ERROR,
   # AEROSPIKE_BIN_NOT_FOUND.
-  # By default, these errors are not ignored and absctl restore terminates.
+  # By default, these errors are not ignored and restore tool terminates.
   ignore-record-error: false
   # Skip modifying records that already exist in the namespace.
   unique: false
@@ -473,16 +479,6 @@ restore:
   replace: false
   # Don't check the generation of records that already exist in the namespace.
   no-generation: false
-  # Set the timeout (in ms) for asinfo commands sent from absctl restore to the database.
-  # The info commands are to check version, get indexes, get udfs, count records, and check batch write support.
-  info-timeout: 10000
-  # Number of retries to send info commands before failing.
-  info-max-retries: 3
-  # Increases the delay between subsequent retry attempts.
-  # The actual delay is calculated as: info-retry-interval * (info-retry-multiplier ^ attemptNumber)
-  info-retry-multiplier: 1
-  # Set the initial interval for a retry (in ms) when info commands are sent.
-  info-retry-interval: 1000
   # Set the initial interval for a retry (in ms) when data is sent to the Aerospike database
   # during a restore. This retry sequence is triggered by the following non-critical errors:
   # AEROSPIKE_NO_AVAILABLE_CONNECTIONS_TO_NODE,
@@ -503,12 +499,21 @@ restore:
   retry-max-attempts: 0
   # Validate backup files without restoring.
   validate: false
+  # Set the timeout (in ms) for asinfo commands sent from restore tool to the database.
+  # The info commands are to check version, get indexes, get udfs, count records, and check batch write support.
+  info-timeout: 10000
+  # Number of retries to send info commands before failing.
+  info-max-retries: 3
+  # Increases the delay between subsequent retry attempts.
+  # The actual delay is calculated as: info-retry-interval * (info-retry-multiplier ^ attemptNumber)
+  info-retry-multiplier: 1
+  # Set the initial interval for a retry (in ms) when info commands are sent.
+  info-retry-interval: 1000
   # Defines when to restore metadata (secondary indexes and UDFs).
   # If set to true, metadata from separate file will be restored after all records have been processed.
   apply-metadata-last: false
   # Buffer size in MiB for stdin and stdout operations. Used for pipelining.
   std-buffer: 4
-
 compression:
   # Enables decompressing of backup files using the specified compression algorithm.
   # This must match the compression mode used when backing up the data.
@@ -517,7 +522,6 @@ compression:
   compress: NONE
   # ZSTD compression level.
   level: 3
-
 encryption:
   # Enables decryption of backup files using the specified encryption algorithm.
   # This must match the encryption mode used when backing up the data.
@@ -531,7 +535,6 @@ encryption:
   key-env: ""
   # Gets the encryption key from secret-agent.
   key-secret: ""
-
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP
@@ -543,16 +546,14 @@ secret-agent:
   timeout: 10000
   # Path to ca file for encrypted connections.
   ca-file: ""
-  # TLS name (SNI) for encrypted connections.
-  tls-name: ""
   # Path to a client certificate file for mutual TLS authentication.
   cert-file: ""
   # Path to a client private key file for mutual TLS authentication.
   key-file: ""
-  # Whether Secret Agent responses are Base64 encoded.
+  # TLS name (SNI) for encrypted connections.
+  tls-name: ""
   # Whether Secret Agent responses are Base64 encoded.
   is-base64: false
-
 aws:
   s3:
     # Existing S3 bucket name
@@ -567,26 +568,26 @@ aws:
     access-key-id: ""
     # S3 secret access key. If not set, profile auth info will be used.
     secret-access-key: ""
+    # How often ((in ms)) a backup client checks object status when restoring an archived object.
+    restore-poll-duration: 60000
     # If is set, tool will try to restore archived files to the specified tier.
     # Attention! This triggers an asynchronous process that cannot be terminated.
     # Tiers are: Standard, Bulk, Expedited.
     tier: ""
-    # How often ((in ms)) a backup client checks object status when restoring an archived object.
-    restore-poll-duration: 60000
     # Maximum number of attempts that should be made in case of an error.
     retry-max-attempts: 10
     # Max backoff duration (in ms) between retried attempts.
     # The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.
     retry-max-backoff: 90000
-    # The initial delay (in ms) between retry attempts.
-    # In case of connection errors tool will retry reading the object from the last known position.
-    retry-read-backoff: 1
+    # The initial delay (in ms) between retry attempts. In case of connection errors
+    # tool will retry reading the object from the last known position.
+    retry-read-backoff: 1000
     # Multiplier is used to increase the delay between subsequent retry attempts.
     # Used in combination with initial delay.
-    retry-read-multiplier: 2.0
+    retry-read-multiplier: 2
     # The maximum number of retry attempts that will be made. If set to 0, no retries will be performed.
     retry-read-max-attempts: 3
-    # MaxConnsPerHost optionally limits the total number of connections per host,
+    # Max connections per host optionally limits the total number of connections per host,
     # including connections in the dialing, active, and idle states. On limit violation, dials will block.
     # Should be greater than parallel to avoid download speed degradation.
     # 0 means no limit.
@@ -595,7 +596,6 @@ aws:
     # The timeout includes connection time, any redirects, and reading the response body.
     # 0 means no limit.
     request-timeout: 600000
-
 gcp:
   storage:
     # Path to file containing service account JSON key.
@@ -614,15 +614,15 @@ gcp:
     # Multiplier is the factor by which the retry period increases.
     # It should be greater than 1.
     retry-backoff-multiplier: 2
-    # The initial delay (in ms) between retry attempts.
-    # In case of connection errors tool will retry reading the object from the last known position.
-    retry-read-backoff: 1
+    # The initial delay (in ms) between retry attempts. In case of connection errors
+    # tool will retry reading the object from the last known position.
+    retry-read-backoff: 1000
     # Multiplier is used to increase the delay between subsequent retry attempts.
     # Used in combination with initial delay.
-    retry-read-multiplier: 2.0
+    retry-read-multiplier: 2
     # The maximum number of retry attempts that will be made. If set to 0, no retries will be performed.
     retry-read-max-attempts: 3
-    # MaxConnsPerHost optionally limits the total number of connections per host,
+    # Max connections per host optionally limits the total number of connections per host,
     # including connections in the dialing, active, and idle states. On limit violation, dials will block.
     # Should be greater than parallel to avoid speed degradation.
     # 0 means no limit.
@@ -631,7 +631,6 @@ gcp:
     # The timeout includes connection time, any redirects, and reading the response body.
     # 0 means no limit.
     request-timeout: 600000
-
 azure:
   blob:
     # Azure account name for account name, key authorization.
@@ -664,15 +663,15 @@ azure:
     # Max retry delay specifies the maximum delay (in ms) allowed before retrying an operation.
     # Typically the value is greater than or equal to the value specified in azure-retry-delay.
     retry-max-delay: 90000
-    # The initial delay (in ms) between retry attempts.
-    # In case of connection errors tool will retry reading the object from the last known position.
-    retry-read-backoff: 1
+    # The initial delay (in ms) between retry attempts. In case of connection errors
+    # tool will retry reading the object from the last known position.
+    retry-read-backoff: 1000
     # Multiplier is used to increase the delay between subsequent retry attempts.
     # Used in combination with initial delay.
-    retry-read-multiplier: 2.0
+    retry-read-multiplier: 2
     # The maximum number of retry attempts that will be made. If set to 0, no retries will be performed.
     retry-read-max-attempts: 3
-    # MaxConnsPerHost optionally limits the total number of connections per host,
+    # Max connections per host optionally limits the total number of connections per host,
     # including connections in the dialing, active, and idle states. On limit violation, dials will block.
     # Should be greater than parallel to avoid download speed degradation.
     # 0 means no limit.

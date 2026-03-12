@@ -3,7 +3,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/absctl)](https://pkg.go.dev/github.com/aerospike/absctl)
 [![codecov](https://codecov.io/gh/aerospike/absctl/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/absctl)
 
-The repository includes the [backup](cmd/absctl/cmd/backup/readme.md) and [restore](cmd/absctl/cmd/restore/readme.md) CLI tools,
+The repository includes the [backup](docs/backup/readme.md) and [restore](docs/restore/readme.md) CLI tools,
 built using [backup-go](https://github.com/aerospike/backup-go) library.
 Refer to their respective README files for usage instructions.
 Binaries for various platforms are released alongside the library and can be found under
@@ -89,10 +89,10 @@ docker:
 docker pull aerospike/absctl:<version>
 
 # Run backup
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl backup -h <aerospike-address>  -n <namespace> -d <container-path> 
+docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl backup -h <aerospike-address>  -n <namespace> -d <container-path>
 
 # Run restore
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl restore -h <aerospike-address>  -n <namespace> -d <container-path> 
+docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl restore -h <aerospike-address>  -n <namespace> -d <container-path>
 ```
 
 ## Quick Start
