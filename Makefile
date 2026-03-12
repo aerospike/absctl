@@ -150,3 +150,8 @@ vulnerability-scan-container:
 	--policy-path=$(WORKSPACE)/.snyk \
 	--file=Dockerfile \
 	--severity-threshold=high
+
+.PHONY: docs-generate
+docs-generate:
+	@echo "Building documentation..."
+	$(GO) run docs/docgen/main.go

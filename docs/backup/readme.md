@@ -42,19 +42,25 @@ Release artifacts are automatically built and uploaded under GitHub Releases.
 
 
 
+
+
+
 ## Supported flags
 ```bash
 
 Usage:
   absctl backup [flags]
-General Flags:  -Z, --help               Display help information.
+
+General Flags:
+  -Z, --help               Display help information.
   -v, --verbose            Enable more detailed logging.
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty logs will be printed to stderr.
       --config string      Path to YAML configuration file.
 
-Aerospike Client Flags:  -h, --host host[:tls-name][:port][,...]                                                           The Aerospike host. (default 127.0.0.1)
+Aerospike Client Flags:
+  -h, --host host[:tls-name][:port][,...]                                                           The Aerospike host. (default 127.0.0.1)
   -p, --port int                                                                                    The default Aerospike port. (default 3000)
   -U, --user string                                                                                 The Aerospike user for the connection to the Aerospike cluster.
   -P, --password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"                   The Aerospike password for the connection to the Aerospike
@@ -94,7 +100,8 @@ Aerospike Client Flags:  -h, --host host[:tls-name][:port][,...]                
 
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
-Backup Flags:  -d, --directory string              The directory that holds the backup files. Required, unless -o or -e is used.
+Backup Flags:
+  -d, --directory string              The directory that holds the backup files. Required, unless -o or -e is used.
   -n, --namespace string              The namespace to be backed up. Required.
   -s, --set-list string               The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
                                       If multiple sets are being backed up, filter-exp cannot be used.
@@ -209,12 +216,14 @@ Backup Flags:  -d, --directory string              The directory that holds the 
                                     Affects size if overlap on resuming backup after an error.
                                     Used only with --state-file-dst or --continue. (default 10000)
 
-Compression Flags:  -z, --compress string         Enables compressing of backup files using the specified compression algorithm.
+Compression Flags:
+  -z, --compress string         Enables compressing of backup files using the specified compression algorithm.
                                 Supported compression algorithms are: ZSTD, NONE
                                 Set the ZSTD compression level via the --compression-level option. (default "NONE")
       --compression-level int   ZSTD compression level. (default 3)
 
-Encryption Flags:      --encrypt string                 Enables encryption of backup files using the specified encryption algorithm.
+Encryption Flags:
+      --encrypt string                 Enables encryption of backup files using the specified encryption algorithm.
                                        Supported encryption algorithms are: NONE, AES128, AES256.
                                        A private key must be given, either with the --encryption-key-file option or
                                        the --encryption-key-env option or the --encryption-key-secret. (default "NONE")
@@ -228,7 +237,8 @@ See documentation here: https://aerospike.com/docs/tools/secret-agent.
 Both backup and restore commands support getting all the cloud configuration parameters
 from the Aerospike Secret Agent.
 To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
-Example: absctl backup --azure-account-name secret:resource1:azaccount      --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
+Example: absctl backup --azure-account-name secret:resource1:azaccount
+      --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
       --sa-port int                 Secret Agent port (only for TCP connection).
       --sa-timeout int              Secret Agent connection and reading timeout. (default 10000)
@@ -238,13 +248,15 @@ Example: absctl backup --azure-account-name secret:resource1:azaccount      --sa
       --sa-key-file string          Path to a client private key file for mutual TLS authentication.
       --sa-is-base64                Whether Secret Agent responses are Base64 encoded.
 
-Local Storage Flags:      --local-buffer-size int   Buffer size in megabytes for local file writes. (default 5)
+Local Storage Flags:
+      --local-buffer-size int   Buffer size in megabytes for local file writes. (default 5)
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
 --directory path will only contain the folder name.
 --s3-endpoint-override is used for MinIO storage instead of AWS.
-Any AWS parameter can be retrieved from Secret Agent.      --s3-bucket-name string         Existing S3 bucket name
+Any AWS parameter can be retrieved from Secret Agent.
+      --s3-bucket-name string         Existing S3 bucket name
       --s3-region string              The S3 region that the bucket(s) exist in.
       --s3-profile string             The S3 profile to use for credentials.
       --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
@@ -283,7 +295,8 @@ GCP Storage Flags:
 For GCP storage, the bucket name must be set with --gcp-bucket-name flag.
 --directory path will only contain the folder name.
 The flag --gcp-endpoint-override  is optional, and is used for tests or any other GCP emulator.
-Any GCP parameter can be retrieved from Secret Agent.      --gcp-key-path string                  Path to file containing service account JSON key.
+Any GCP parameter can be retrieved from Secret Agent.
+      --gcp-key-path string                  Path to file containing service account JSON key.
       --gcp-bucket-name string               Name of the Google cloud storage bucket.
       --gcp-endpoint-override string         An alternate url endpoint to send GCP API calls to.
       --gcp-chunk-size int                   Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to
@@ -310,7 +323,8 @@ For Azure storage, the container name must be set with --azure-container-name fl
 The flag --azure-endpoint is also mandatory, as each storage account has different service address.
 For authentication, use --azure-account-name and --azure-account-key, or
 --azure-tenant-id, --azure-client-id and --azure-client-secret.
-Any Azure parameter can be retrieved from Secret Agent.      --azure-account-name string      Azure account name for account name, key authorization.
+Any Azure parameter can be retrieved from Secret Agent.
+      --azure-account-name string      Azure account name for account name, key authorization.
       --azure-account-key string       Azure account key for account name, key authorization.
       --azure-tenant-id string         Azure tenant ID for Azure Active Directory authorization.
       --azure-client-id string         Azure client ID for Azure Active Directory authorization.

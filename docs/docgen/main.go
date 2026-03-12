@@ -19,8 +19,8 @@
 //
 // Usage:
 //
-//    go run ./cmd/docgen
-//    make generate-docs
+//	go run ./cmd/docgen
+//	make docs-generate
 package main
 
 import (
@@ -307,6 +307,7 @@ func generateFlagsContent(sections []docSection) string {
 	for _, sec := range sections {
 		if sec.TextContent != "" {
 			sb.WriteString(sec.TextContent)
+			sb.WriteString("\n")
 		}
 		if sec.FS != nil {
 			sb.WriteString(fsStr(sec.FS))
