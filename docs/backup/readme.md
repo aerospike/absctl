@@ -45,6 +45,7 @@ Release artifacts are automatically built and uploaded under GitHub Releases.
 
 
 
+
 ## Supported flags
 ```bash
 
@@ -56,7 +57,7 @@ General Flags:
   -v, --verbose            Enable more detailed logging.
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
-      --log-file string    Path to log file. If empty logs will be printed to stderr.
+      --log-file string    Path to log file. If empty, logs will be printed to stderr.
       --config string      Path to YAML configuration file.
 
 Aerospike Client Flags:
@@ -396,7 +397,7 @@ app:
   log-level: debug
   # Set output in JSON format for parsing by external tools.
   log-json: false
-  # Path to log file. If empty logs will be printed to stderr.
+  # Path to log file. If empty, logs will be printed to stderr.
   log-file: ""
 cluster:
   seeds:

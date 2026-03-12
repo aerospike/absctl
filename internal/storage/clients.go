@@ -208,7 +208,10 @@ func getGcpAuth(ctx context.Context, keyFile string) (*google.Credentials, error
 		return nil, fmt.Errorf("failed to read key file %s: %w", keyFile, err)
 	}
 
-	creds, err := google.CredentialsFromJSON(ctx, jsonKey,
+	creds, err := google.CredentialsFromJSONWithType(
+		ctx,
+		jsonKey,
+		google.ServiceAccount,
 		gcpStorage.ScopeReadWrite,
 	)
 	if err != nil {
