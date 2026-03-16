@@ -202,7 +202,7 @@ jobs:
 
       - name: Download Aerospike Backup Service OCI Archive
         if: steps.check-bundle.outputs.found == 'true' && steps.promote-to-dockerhub.outputs.status == 'failure'
-        uses: dawidd6/action-download-artifact@09b07ec687d10771279a426c79925ee415c12906 # v17
+        uses: dawidd6/action-download-artifact@1f8785ff7a5130826f848e7f72725c85d241860f # v18
         with:
           workflow: pre-release.yaml
           name: cli-image
