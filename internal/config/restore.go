@@ -29,16 +29,9 @@ const noneVal = "NONE"
 // RestoreServiceConfig contains configuration settings for the restore service,
 // including client, restore, and storage details.
 type RestoreServiceConfig struct {
-	App          *models.App
-	ClientConfig *client.AerospikeConfig
-	ClientPolicy *models.ClientPolicy
-	Restore      *models.Restore
-	Compression  *models.Compression
-	Encryption   *models.Encryption
-	SecretAgent  *models.SecretAgent
-	AwsS3        *models.AwsS3
-	GcpStorage   *models.GcpStorage
-	AzureBlob    *models.AzureBlob
+	Restore *models.Restore
+
+	ServiceConfigCommon
 }
 
 // NewRestoreServiceConfig creates and returns a new RestoreServiceConfig initialized with the provided parameters.
@@ -57,16 +50,18 @@ func NewRestoreServiceConfig(
 	azureBlob *models.AzureBlob,
 ) (*RestoreServiceConfig, error) {
 	return &RestoreServiceConfig{
-		App:          app,
-		ClientConfig: clientConfig,
-		ClientPolicy: clientPolicy,
-		Restore:      restore,
-		Compression:  compression,
-		Encryption:   encryption,
-		SecretAgent:  secretAgent,
-		AwsS3:        awsS3,
-		GcpStorage:   gcpStorage,
-		AzureBlob:    azureBlob,
+		Restore: restore,
+		ServiceConfigCommon: ServiceConfigCommon{
+			App:          app,
+			ClientConfig: clientConfig,
+			ClientPolicy: clientPolicy,
+			Compression:  compression,
+			Encryption:   encryption,
+			SecretAgent:  secretAgent,
+			AwsS3:        awsS3,
+			GcpStorage:   gcpStorage,
+			AzureBlob:    azureBlob,
+		},
 	}, nil
 }
 
@@ -86,17 +81,7 @@ func (r *RestoreServiceConfig) Validate() error {
 		return err
 	}
 
-	if err := validateStorages(
-		false,
-		r.AwsS3,
-		r.GcpStorage,
-		r.AzureBlob,
-		nil,
-	); err != nil {
-		return err
-	}
-
-	if err := r.SecretAgent.Validate(); err != nil {
+	if err := r.ServiceConfigCommon.Validate(); err != nil {
 		return err
 	}
 

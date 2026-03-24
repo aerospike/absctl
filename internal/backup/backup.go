@@ -31,10 +31,6 @@ import (
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
 
-const (
-	idBackup = "absctl-backup"
-)
-
 var xdrSupportedVersion = asinfo.AerospikeVersion{Major: 8}
 
 // Service represents a struct that encapsulates components for backup and logging functionalities.
@@ -114,12 +110,11 @@ func NewService(
 		return nil, err
 	}
 
-	logger.Info("initializing backup client", slog.String("id", idBackup))
+	logger.Info("initializing backup client")
 
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithID(idBackup),
 		backup.WithInfoPolicies(infoPolicy, retryInfoPolicy),
 	)
 	if err != nil {

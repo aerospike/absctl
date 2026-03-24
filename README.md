@@ -112,7 +112,7 @@ absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 
 ## Configuration Reference
 
-Please look at [backup](cmd/absctl/cmd/backup/readme.md) and [restore](cmd/absctl/cmd/restore/readme.md) readme files for details.
+Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-example-values) and [restore](docs/restore/readme.md#configuration-file-schema-with-example-values) readme files for details.
 
 ## License
 

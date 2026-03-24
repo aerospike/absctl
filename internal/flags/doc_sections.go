@@ -37,6 +37,7 @@ const (
 
 	SectionTextBackup  = "\nBackup Flags:"
 	SectionTextRestore = "\nBackup Flags:"
+	SectionTextSSB = "\nServer Side Backup Flags:"
 
 	SectionTextGeneral     = "\nGeneral Flags:"
 	SectionTextAerospike   = "\nAerospike Client Flags:"

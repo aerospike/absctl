@@ -28,8 +28,6 @@ import (
 	bModels "github.com/aerospike/backup-go/models"
 )
 
-const idRestore = "absctl-restore"
-
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
 type Service struct {
 	backupClient  *backup.Client
@@ -91,7 +89,7 @@ func NewService(
 		return nil, fmt.Errorf("failed to create restore reader: %w", err)
 	}
 
-	logger.Info("initializing restore client", slog.String("id", idRestore))
+	logger.Info("initializing restore client")
 
 	infoRetryPolicy := cfg.Restore.RetryPolicy()
 
@@ -100,7 +98,6 @@ func NewService(
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithID(idRestore),
 		backup.WithInfoPolicies(infoPolicy, infoRetryPolicy))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore client: %w", err)
