@@ -40,26 +40,59 @@ import (
 // NewRestoreReader creates and returns a reader based on the restore mode specified in RestoreServiceConfig.
 func NewRestoreReader(
 	ctx context.Context,
-	params *config.RestoreServiceConfig,
+	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
 ) (reader, xdrReader backup.StreamingReader, err error) {
-	switch params.Restore.Mode {
+	directory, inputFile := cfg.Restore.Directory, cfg.Restore.InputFile
+	parentDirectory, directoryList := cfg.Restore.ParentDirectory, cfg.Restore.DirectoryList
+
+	switch cfg.Restore.Mode {
 	case models.RestoreModeASB, models.RestoreModeAuto:
-		reader, err = newReader(ctx, params, false, logger)
+		reader, err = NewReader(
+			ctx,
+			&cfg.ServiceConfigCommon,
+			directory,
+			inputFile,
+			parentDirectory,
+			directoryList,
+			cfg.Restore.StdBufferSize,
+			false,
+			logger,
+		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create asb reader: %w", err)
 		}
 
 		return reader, nil, nil
 	case models.RestoreModeASBX:
-		xdrReader, err = newReader(ctx, params, true, logger)
+		xdrReader, err = NewReader(
+			ctx,
+			&cfg.ServiceConfigCommon,
+			directory,
+			inputFile,
+			parentDirectory,
+			directoryList,
+			cfg.Restore.StdBufferSize,
+			true,
+			logger,
+		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create asbx reader: %w", err)
 		}
 
 		return nil, xdrReader, nil
 	default:
-		reader, err = newReader(ctx, params, false, logger)
+		reader, err = NewReader(
+			ctx,
+			&cfg.ServiceConfigCommon,
+			directory,
+			inputFile,
+			parentDirectory,
+			directoryList,
+			cfg.Restore.StdBufferSize,
+			false,
+			logger,
+		)
 
 		switch {
 		case errors.Is(err, common.ErrEmptyStorage):
@@ -69,7 +102,17 @@ func NewRestoreReader(
 		default:
 		}
 
-		xdrReader, err = newReader(ctx, params, true, logger)
+		xdrReader, err = NewReader(
+			ctx,
+			&cfg.ServiceConfigCommon,
+			directory,
+			inputFile,
+			parentDirectory,
+			directoryList,
+			cfg.Restore.StdBufferSize,
+			true,
+			logger,
+		)
 
 		switch {
 		case errors.Is(err, common.ErrEmptyStorage):
@@ -91,43 +134,47 @@ func NewRestoreReader(
 // NewStateReader initialize reader for a state file.
 func NewStateReader(
 	ctx context.Context,
-	params *config.BackupServiceConfig,
+	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
-	if params.Backup == nil ||
-		!params.Backup.ShouldSaveState() ||
-		params.Backup.StateFileDst != "" {
+	if cfg.Backup == nil ||
+		!cfg.Backup.ShouldSaveState() ||
+		cfg.Backup.StateFileDst != "" {
 		return nil, nil
 	}
 
-	stateFile := params.Backup.StateFileDst
-	if params.Backup.Continue != "" {
-		stateFile = params.Backup.Continue
-	}
-
-	restoreParams := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: stateFile,
-			Common: models.Common{
-				Directory: params.Backup.Directory,
-			},
-		},
+	stateFile := cfg.Backup.StateFileDst
+	if cfg.Backup.Continue != "" {
+		stateFile = cfg.Backup.Continue
 	}
 
 	logger.Info("initializing state file", slog.String("path", stateFile))
 
-	return newReader(ctx, restoreParams, false, logger)
+	return NewReader(
+		ctx,
+		&cfg.ServiceConfigCommon,
+		cfg.Backup.Directory,
+		stateFile,
+		"",
+		"",
+		0,
+		false,
+		logger,
+	)
 }
 
-func newReader(
+// NewReader creates and returns a reader based on the provided parameters.
+func NewReader(
 	ctx context.Context,
-	params *config.RestoreServiceConfig,
+	cfg *config.ServiceConfigCommon,
+	directory,
+	inputFile,
+	parentDirectory,
+	directoryList string,
+	stdBufferSize int,
 	isXdr bool,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
-	directory, inputFile := params.Restore.Directory, params.Restore.InputFile
-	parentDirectory, directoryList := params.Restore.ParentDirectory, params.Restore.DirectoryList
-
 	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, isXdr, logger)
 
 	logger.Info("initializing storage for reader",
@@ -138,35 +185,35 @@ func newReader(
 	)
 
 	switch {
-	case params.AwsS3 != nil && params.AwsS3.BucketName != "":
+	case cfg.AwsS3 != nil && cfg.AwsS3.BucketName != "":
 		defer logger.Info("initialized AWS storage reader",
-			slog.String("bucket", params.AwsS3.BucketName),
-			slog.String("access_tier", params.AwsS3.AccessTier),
-			slog.Int("chunk_size", params.AwsS3.ChunkSize),
-			slog.String("endpoint", params.AwsS3.Endpoint),
+			slog.String("bucket", cfg.AwsS3.BucketName),
+			slog.String("access_tier", cfg.AwsS3.AccessTier),
+			slog.Int("chunk_size", cfg.AwsS3.ChunkSize),
+			slog.String("endpoint", cfg.AwsS3.Endpoint),
 		)
 
-		return newS3Reader(ctx, params.AwsS3, opts, logger)
-	case params.GcpStorage != nil && params.GcpStorage.BucketName != "":
+		return newS3Reader(ctx, cfg.AwsS3, opts, logger)
+	case cfg.GcpStorage != nil && cfg.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage reader",
-			slog.String("bucket", params.GcpStorage.BucketName),
-			slog.Int("chunk_size", params.GcpStorage.ChunkSize),
-			slog.String("endpoint", params.GcpStorage.Endpoint),
+			slog.String("bucket", cfg.GcpStorage.BucketName),
+			slog.Int("chunk_size", cfg.GcpStorage.ChunkSize),
+			slog.String("endpoint", cfg.GcpStorage.Endpoint),
 		)
 
-		return newGcpReader(ctx, params.GcpStorage, opts)
-	case params.AzureBlob != nil && params.AzureBlob.ContainerName != "":
+		return newGcpReader(ctx, cfg.GcpStorage, opts)
+	case cfg.AzureBlob != nil && cfg.AzureBlob.ContainerName != "":
 		defer logger.Info("initialized Azure storage reader",
-			slog.String("container", params.AzureBlob.ContainerName),
-			slog.String("access_tier", params.AzureBlob.AccessTier),
-			slog.Int("block_size", params.AzureBlob.BlockSize),
-			slog.String("endpoint", params.AzureBlob.Endpoint),
+			slog.String("container", cfg.AzureBlob.ContainerName),
+			slog.String("access_tier", cfg.AzureBlob.AccessTier),
+			slog.Int("block_size", cfg.AzureBlob.BlockSize),
+			slog.String("endpoint", cfg.AzureBlob.Endpoint),
 		)
 
-		return newAzureReader(ctx, params.AzureBlob, opts, logger)
-	case params.IsStdin():
+		return newAzureReader(ctx, cfg.AzureBlob, opts, logger)
+	case inputFile == config.StdPlaceholder:
 		defer logger.Info("initialized standard input reader")
-		return newStdReader(ctx, params.Restore.StdBufferSize)
+		return newStdReader(ctx, stdBufferSize)
 	default:
 		defer logger.Info("initialized local storage reader")
 		return newLocalReader(ctx, opts)

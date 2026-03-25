@@ -64,7 +64,7 @@ func (l *Lister) ListSSB(ctx context.Context, path string) ([]*BackupEntry, erro
 }
 
 // findMetafiles finds all metafiles in the given path.
-func (l *Lister) findMetafiles(ctx context.Context, path string, filename string) ([]*BackupEntry, error) {
+func (l *Lister) findMetafiles(ctx context.Context, path, filename string) ([]*BackupEntry, error) {
 	allObjects, err := l.reader.ListObjects(ctx, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects: %w", err)
@@ -103,13 +103,14 @@ func (l *Lister) readMetafile(ctx context.Context, path string) (*BackupEntry, e
 }
 
 // openFile opens a file for reading.
-func (l *Lister) openFile(ctx context.Context, filepath string) (models.File, error) {
+func (l *Lister) openFile(ctx context.Context, path string) (models.File, error) {
 	readersCh := make(chan models.File, 1)
 	errorsCh := make(chan error, 1)
+
 	defer close(readersCh)
 	defer close(errorsCh)
 
-	go l.reader.StreamFile(ctx, filepath, readersCh, errorsCh)
+	go l.reader.StreamFile(ctx, path, readersCh, errorsCh)
 
 	select {
 	case <-ctx.Done():

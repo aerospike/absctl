@@ -49,7 +49,7 @@ func NewRestoreServiceConfig(
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 ) (*RestoreServiceConfig, error) {
-	return &RestoreServiceConfig{
+	serviceConfig := &RestoreServiceConfig{
 		Restore: restore,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
@@ -62,7 +62,13 @@ func NewRestoreServiceConfig(
 			GcpStorage:   gcpStorage,
 			AzureBlob:    azureBlob,
 		},
-	}, nil
+	}
+
+	if err := serviceConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	return serviceConfig, nil
 }
 
 // IsStdin checks if the restore operation should read from stdin

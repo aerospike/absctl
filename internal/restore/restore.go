@@ -30,11 +30,11 @@ import (
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
 type Service struct {
-	backupClient  *backup.Client
-	restoreConfig *backup.ConfigRestore
+	backupClient *backup.Client
+	config       *backup.ConfigRestore
 
 	reader    backup.StreamingReader
-	xdrReader backup.StreamingReader
+	readerXdr backup.StreamingReader
 	// Restore Mode: auto, asb, asbx
 	mode string
 
@@ -59,10 +59,6 @@ func NewService(
 	// Set default restore mode to asb.
 	// This should be removed once asbx is released.
 	cfg.Restore.Mode = models.RestoreModeASB
-	// Validations.
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
 
 	// Initializations.
 	restoreConfig := config.NewRestoreConfig(cfg, logger)
@@ -104,13 +100,13 @@ func NewService(
 	}
 
 	return &Service{
-		backupClient:  backupClient,
-		restoreConfig: restoreConfig,
-		reader:        reader,
-		xdrReader:     xdrReader,
-		mode:          cfg.Restore.Mode,
-		logger:        logger,
-		reportToLog:   cfg.App.LogJSON || cfg.App.LogFile != "",
+		backupClient: backupClient,
+		config:       restoreConfig,
+		reader:       reader,
+		readerXdr:    xdrReader,
+		mode:         cfg.Restore.Mode,
+		logger:       logger,
+		reportToLog:  cfg.App.LogJSON || cfg.App.LogFile != "",
 	}, nil
 }
 
@@ -122,7 +118,7 @@ func (r *Service) Run(ctx context.Context) error {
 
 	// For restore and validation we init different header for log messages.
 	logMessage := "restore"
-	if r.restoreConfig.ValidateOnly {
+	if r.config.ValidateOnly {
 		logMessage = "validation"
 	}
 
@@ -144,9 +140,9 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 
 	r.logger.Info(fmt.Sprintf("starting %s %s", restoreType, logMessage))
 
-	r.restoreConfig.EncoderType = encoderType
+	r.config.EncoderType = encoderType
 	// Run restore / validation.
-	h, err := r.backupClient.Restore(ctx, r.restoreConfig, r.reader)
+	h, err := r.backupClient.Restore(ctx, r.config, r.reader)
 	if err != nil {
 		return fmt.Errorf("failed to start %s %s: %w", restoreType, logMessage, err)
 	}
@@ -166,7 +162,7 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 
 	wg.Wait()
 	// Print report.
-	logging.ReportRestore(h.GetStats(), r.restoreConfig.ValidateOnly, r.reportToLog, r.logger)
+	logging.ReportRestore(h.GetStats(), r.config.ValidateOnly, r.reportToLog, r.logger)
 
 	return nil
 }
@@ -185,7 +181,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 
 	if r.reader != nil {
 		wg.Go(func() {
-			restoreCfg := *r.restoreConfig
+			restoreCfg := *r.config
 			restoreCfg.EncoderType = backup.EncoderTypeASB
 
 			h, err := r.backupClient.Restore(ctx, &restoreCfg, r.reader)
@@ -212,12 +208,12 @@ func (r *Service) runAuto(ctx context.Context) error {
 		})
 	}
 
-	if r.xdrReader != nil {
+	if r.readerXdr != nil {
 		wg.Go(func() {
-			restoreXdrCfg := *r.restoreConfig
+			restoreXdrCfg := *r.config
 			restoreXdrCfg.EncoderType = backup.EncoderTypeASBX
 
-			hXdr, err := r.backupClient.Restore(ctx, &restoreXdrCfg, r.xdrReader)
+			hXdr, err := r.backupClient.Restore(ctx, &restoreXdrCfg, r.readerXdr)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to start asbx restore: %w", err)
 
@@ -226,8 +222,8 @@ func (r *Service) runAuto(ctx context.Context) error {
 				return
 			}
 
-			go logging.PrintFilesNumber(ctx, r.xdrReader.GetNumber, models.RestoreModeASBX, r.logger)
-			go logging.PrintRestoreEstimate(ctx, hXdr.GetStats(), hXdr.GetMetrics, r.xdrReader.GetSize, r.logger)
+			go logging.PrintFilesNumber(ctx, r.readerXdr.GetNumber, models.RestoreModeASBX, r.logger)
+			go logging.PrintRestoreEstimate(ctx, hXdr.GetStats(), hXdr.GetMetrics, r.readerXdr.GetSize, r.logger)
 
 			if err = hXdr.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asbx restore: %w", err)
@@ -253,7 +249,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 	}
 
 	restStats := bModels.SumRestoreStats(xdrStats, stats)
-	logging.ReportRestore(restStats, r.restoreConfig.ValidateOnly, r.reportToLog, r.logger)
+	logging.ReportRestore(restStats, r.config.ValidateOnly, r.reportToLog, r.logger)
 
 	// To prevent context leaking.
 	cancel()

@@ -55,18 +55,23 @@ func Test_BackupRestore(t *testing.T) {
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		App: &models.App{},
-		ClientConfig: &client.AerospikeConfig{
-			Seeds: client.HostTLSPortSlice{
-				hostPort,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			App: &models.App{},
+			ClientConfig: &client.AerospikeConfig{
+				Seeds: client.HostTLSPortSlice{
+					hostPort,
+				},
+				User:     testASLoginPassword,
+				Password: testASLoginPassword,
 			},
-			User:     testASLoginPassword,
-			Password: testASLoginPassword,
-		},
-		ClientPolicy: &models.ClientPolicy{
-			Timeout:      1000,
-			IdleTimeout:  1000,
-			LoginTimeout: 1000,
+			ClientPolicy: &models.ClientPolicy{
+				Timeout:      1000,
+				IdleTimeout:  1000,
+				LoginTimeout: 1000,
+			},
+			Compression: &models.Compression{
+				Mode: backup.CompressNone,
+			},
 		},
 		Backup: &models.Backup{
 			Common: models.Common{
@@ -77,9 +82,6 @@ func Test_BackupRestore(t *testing.T) {
 				InfoRetriesMultiplier:         1,
 				InfoRetryIntervalMilliseconds: 1000,
 			},
-		},
-		Compression: &models.Compression{
-			Mode: backup.CompressNone,
 		},
 	}
 
@@ -95,18 +97,29 @@ func Test_BackupRestore(t *testing.T) {
 	require.NoError(t, err)
 
 	asrParams := &config.RestoreServiceConfig{
-		App: &models.App{},
-		ClientConfig: &client.AerospikeConfig{
-			Seeds: client.HostTLSPortSlice{
-				hostPort,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			App: &models.App{},
+			ClientConfig: &client.AerospikeConfig{
+				Seeds: client.HostTLSPortSlice{
+					hostPort,
+				},
+				User:     testASLoginPassword,
+				Password: testASLoginPassword,
 			},
-			User:     testASLoginPassword,
-			Password: testASLoginPassword,
-		},
-		ClientPolicy: &models.ClientPolicy{
-			Timeout:      1000,
-			IdleTimeout:  1000,
-			LoginTimeout: 1000,
+			ClientPolicy: &models.ClientPolicy{
+				Timeout:      1000,
+				IdleTimeout:  1000,
+				LoginTimeout: 1000,
+			},
+			Compression: &models.Compression{
+				Mode: backup.CompressNone,
+			},
+			AwsS3: &models.AwsS3{
+				RestorePollDuration: 1000,
+			},
+			AzureBlob: &models.AzureBlob{
+				RestorePollDuration: 1000,
+			},
 		},
 		Restore: &models.Restore{
 			BatchSize:       1,
@@ -120,15 +133,6 @@ func Test_BackupRestore(t *testing.T) {
 				InfoRetriesMultiplier:         1,
 				InfoRetryIntervalMilliseconds: 1000,
 			},
-		},
-		Compression: &models.Compression{
-			Mode: backup.CompressNone,
-		},
-		AwsS3: &models.AwsS3{
-			RestorePollDuration: 1000,
-		},
-		AzureBlob: &models.AzureBlob{
-			RestorePollDuration: 1000,
 		},
 	}
 

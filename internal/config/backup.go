@@ -59,7 +59,7 @@ func NewBackupServiceConfig(
 	azureBlob *models.AzureBlob,
 	local *models.Local,
 ) (*BackupServiceConfig, error) {
-	return &BackupServiceConfig{
+	serviceConfig := &BackupServiceConfig{
 		Backup:    backupScan,
 		BackupXDR: backupXDR,
 		ServiceConfigCommon: ServiceConfigCommon{
@@ -74,7 +74,13 @@ func NewBackupServiceConfig(
 			AzureBlob:    azureBlob,
 			Local:        local,
 		},
-	}, nil
+	}
+
+	if err := serviceConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	return serviceConfig, nil
 }
 
 // IsXDR determines if the backup configuration is an XDR backup by checking if BackupXDR is non-nil and Backup is nil.

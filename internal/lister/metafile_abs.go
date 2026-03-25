@@ -37,7 +37,9 @@ func newMetadataFromBytes(data []byte) (*BackupMetadata, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty metadata file")
 	}
+
 	var metadata BackupMetadata
+
 	err := yaml.Unmarshal(data, &metadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)

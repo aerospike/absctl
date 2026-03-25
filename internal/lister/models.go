@@ -64,9 +64,11 @@ func (m *BackupMetadata) validate() error {
 	if m.Created.IsZero() {
 		return errors.New("`created` is required")
 	}
+
 	if m.Finished.IsZero() {
 		return errors.New("`finished` is required")
 	}
+
 	if m.Namespace == "" {
 		return errors.New("`namespace` is required")
 	}

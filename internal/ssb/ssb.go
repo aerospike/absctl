@@ -16,19 +16,23 @@ package ssb
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/lister"
+	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/backup-go"
 )
 
 // Service represents a server side backup and restore service.
 type Service struct {
 	backupClient *backup.Client
+	config       *config.SSBServiceConfig
 
 	reader backup.StreamingReader
 
-	reportToLog bool
+	// reportToLog bool
 
 	logger *slog.Logger
 }
@@ -36,14 +40,60 @@ type Service struct {
 // NewService initializes and returns a new Service instance.
 func NewService(
 	ctx context.Context,
-	cfg *config.ServiceConfigCommon,
+	cfg *config.SSBServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
+	reader, err := storage.NewReader(
+		ctx,
+		&cfg.ServiceConfigCommon,
+		cfg.SSb.List,
+		"",
+		"",
+		"",
+		0,
+		false,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create reader: %w", err)
+	}
+
+	aerospikeClient, err := storage.NewAerospikeClient(
+		cfg.ClientConfig,
+		cfg.ClientPolicy,
+		nil,
+		0,
+		logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
+	}
+
+	backupClient, err := backup.NewClient(
+		aerospikeClient,
+		backup.WithLogger(logger),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create backup client: %w", err)
+	}
+
 	return &Service{
-		logger: logger,
+		backupClient: backupClient,
+		reader:       reader,
+		logger:       logger,
 	}, nil
 }
 
 func (s *Service) Run(ctx context.Context) error {
+	if s.config.SSb.List != "" {
+		l := lister.NewLister(s.reader, &lister.MetafileParserAbs{})
+
+		backups, err := l.ListABS(ctx, s.config.SSb.List)
+		if err != nil {
+			return fmt.Errorf("failed to list backups: %w", err)
+		}
+
+		fmt.Println(backups)
+	}
+
 	return nil
 }

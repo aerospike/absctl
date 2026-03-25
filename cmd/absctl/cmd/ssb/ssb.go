@@ -209,8 +209,9 @@ func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 }
 
 // newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig(_ context.Context) (*config.ServiceConfigCommon, error) {
-	serviceConfig := config.NewServiceConfigCommon(
+func (c *Cmd) newServiceConfig(_ context.Context) (*config.SSBServiceConfig, error) {
+	serviceConfig := config.NewSSBServiceConfig(
+		c.flagsSSB.GetServerSideBackup(),
 		c.flagsApp.GetApp(),
 		c.flagsAerospike.NewAerospikeConfig(),
 		c.flagsClientPolicy.GetClientPolicy(),
@@ -222,6 +223,10 @@ func (c *Cmd) newServiceConfig(_ context.Context) (*config.ServiceConfigCommon, 
 		c.flagsAzure.GetAzureBlob(),
 		nil,
 	)
+
+	if err := serviceConfig.Validate(); err != nil {
+		return nil, err
+	}
 
 	return serviceConfig, nil
 }
@@ -252,7 +257,7 @@ func newHelpFunction(
 		// fmt.Println("You can set restore mode manually with --mode flag. " +
 		// 	"Flags that are incompatible with restore mode,")
 		// fmt.Println("are also incompatible in automatic mode (when mode is not set).")
-		fmt.Println(flags.SectionTextUsageRestore)
+		fmt.Println(flags.SectionTextUsageServerSideBackup)
 
 		// Print section: App Flags
 		fmt.Println(flags.SectionTextGeneral)
