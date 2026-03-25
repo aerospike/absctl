@@ -64,6 +64,7 @@ func TestNewLocalReader(t *testing.T) {
 		params,
 		dir, "", "", "", 0,
 		true,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -75,6 +76,7 @@ func TestNewLocalReader(t *testing.T) {
 		params,
 		"", dir+testFileNameASBX, "", "", 0,
 		false,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -85,6 +87,7 @@ func TestNewLocalReader(t *testing.T) {
 		ctx,
 		params,
 		"", "", "", "", 0,
+		false,
 		false,
 		logger,
 	)
@@ -140,6 +143,7 @@ func TestNewS3Reader(t *testing.T) {
 		params,
 		dir, "", "", "", 0,
 		true,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -161,6 +165,7 @@ func TestNewS3Reader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
+		false,
 		false,
 		logger,
 	)
@@ -213,6 +218,7 @@ func TestNewGcpReader(t *testing.T) {
 		params,
 		dir, "", "", "", 0,
 		true,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -232,6 +238,7 @@ func TestNewGcpReader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
+		false,
 		false,
 		logger,
 	)
@@ -290,6 +297,7 @@ func TestNewAzureReader(t *testing.T) {
 		params,
 		dir, "", "", "", 0,
 		true,
+		false,
 		logger,
 	)
 	require.NoError(t, err)
@@ -311,6 +319,7 @@ func TestNewAzureReader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
+		false,
 		false,
 		logger,
 	)
@@ -441,6 +450,7 @@ func TestNewStdReader(t *testing.T) {
 		params,
 		"", config.StdPlaceholder, "", "", 0,
 		true,
+		false,
 		logger,
 	)
 	require.NoError(t, err)

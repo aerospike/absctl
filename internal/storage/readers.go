@@ -57,6 +57,7 @@ func NewRestoreReader(
 			directoryList,
 			cfg.Restore.StdBufferSize,
 			false,
+			false,
 			logger,
 		)
 		if err != nil {
@@ -74,6 +75,7 @@ func NewRestoreReader(
 			directoryList,
 			cfg.Restore.StdBufferSize,
 			true,
+			false,
 			logger,
 		)
 		if err != nil {
@@ -90,6 +92,7 @@ func NewRestoreReader(
 			parentDirectory,
 			directoryList,
 			cfg.Restore.StdBufferSize,
+			false,
 			false,
 			logger,
 		)
@@ -111,6 +114,7 @@ func NewRestoreReader(
 			directoryList,
 			cfg.Restore.StdBufferSize,
 			true,
+			false,
 			logger,
 		)
 
@@ -159,6 +163,7 @@ func NewStateReader(
 		"",
 		0,
 		false,
+		false,
 		logger,
 	)
 }
@@ -172,10 +177,11 @@ func NewReader(
 	parentDirectory,
 	directoryList string,
 	stdBufferSize int,
-	isXdr bool,
+	isXdr,
+	skipCheck bool,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
-	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, isXdr, logger)
+	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, isXdr, skipCheck, logger)
 
 	logger.Info("initializing storage for reader",
 		slog.String("directory", directory),
@@ -225,7 +231,8 @@ func newReaderOpts(
 	inputFile,
 	parentDirectory,
 	directoryList string,
-	isXDR bool,
+	isXDR,
+	skipCheck bool,
 	logger *slog.Logger,
 ) []options.Opt {
 	opts := make([]options.Opt, 0)
@@ -241,11 +248,15 @@ func newReaderOpts(
 		opts = append(opts, options.WithDirList(dirList))
 	}
 
-	// Append Validator always. As it is not applied to direct file reading.
-	if isXDR {
-		opts = append(opts, options.WithValidator(asbx.NewValidator()), options.WithSorting())
+	if skipCheck {
+		opts = append(opts, options.WithSkipDirCheck(), options.WithNestedDir())
 	} else {
-		opts = append(opts, options.WithValidator(asb.NewValidator()))
+		// Append Validator always. As it is not applied to direct file reading.
+		if isXDR {
+			opts = append(opts, options.WithValidator(asbx.NewValidator()), options.WithSorting())
+		} else {
+			opts = append(opts, options.WithValidator(asb.NewValidator()))
+		}
 	}
 
 	// options.WithCalculateTotalSize() is required for estimating total size of backup.

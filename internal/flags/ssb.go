@@ -30,7 +30,15 @@ func NewServerSideBackup() *ServerSideBackup {
 func (f *ServerSideBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.List, "list", "", "List backups in a path")
+	flagSet.StringVar(&f.List, "list", "", "List backups in a path.")
+
+	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
+
+	flagSet.Int64Var(&f.JobID, "job-id", 0, "Job id used for restore.")
+
+	flagSet.BoolVar(&f.Backup, "backup", false, "Backup the specified namespace.")
+
+	flagSet.BoolVar(&f.Restore, "restore", false, "Restore the specified namespace.")
 
 	return flagSet
 }
