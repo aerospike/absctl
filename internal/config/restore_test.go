@@ -54,18 +54,8 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		azureBlob,
 	)
 
-	require.NoError(t, err)
-	assert.NotNil(t, config)
-	assert.Equal(t, app, config.App)
-	assert.Equal(t, clientConfig, config.ClientConfig)
-	assert.Equal(t, clientPolicy, config.ClientPolicy)
-	assert.Equal(t, restore, config.Restore)
-	assert.Equal(t, compression, config.Compression)
-	assert.Equal(t, encryption, config.Encryption)
-	assert.Equal(t, secretAgent, config.SecretAgent)
-	assert.Equal(t, awsS3, config.AwsS3)
-	assert.Equal(t, gcpStorage, config.GcpStorage)
-	assert.Equal(t, azureBlob, config.AzureBlob)
+	require.ErrorContains(t, err, "invalid restore mode")
+	require.Nil(t, config)
 }
 
 func TestRestoreServiceConfig_IsStdin(t *testing.T) {

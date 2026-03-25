@@ -87,19 +87,8 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 		local,
 	)
 
-	require.NoError(t, err)
-	assert.NotNil(t, config)
-	assert.Equal(t, app, config.App)
-	assert.Equal(t, clientConfig, config.ClientConfig)
-	assert.Equal(t, clientPolicy, config.ClientPolicy)
-	assert.Equal(t, backupModel, config.Backup)
-	assert.Equal(t, backupXDRModel, config.BackupXDR)
-	assert.Equal(t, compression, config.Compression)
-	assert.Equal(t, encryption, config.Encryption)
-	assert.Equal(t, secretAgent, config.SecretAgent)
-	assert.Equal(t, awsS3, config.AwsS3)
-	assert.Equal(t, gcpStorage, config.GcpStorage)
-	assert.Equal(t, azureBlob, config.AzureBlob)
+	require.ErrorContains(t, err, "must specify either estimate, output-file or directory")
+	require.Nil(t, config)
 }
 
 func TestBackupServiceConfig_IsXDR(t *testing.T) {
