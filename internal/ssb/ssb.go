@@ -87,12 +87,12 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) listBackups(ctx context.Context) error {
 	l := lister.NewLister(s.reader, &lister.MetafileParserAbs{})
 
-	backups, err := l.ListABS(ctx, s.config.SSb.List)
+	backups, err := l.ListSSB(ctx, s.config.SSb.List)
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
 
-	printBackupEntries(backups)
+	printBackupEntriesForSSB(backups)
 
 	return nil
 }
@@ -165,7 +165,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	return infoClient, nil
 }
 
-func printBackupEntries(backups []*lister.BackupEntry) {
+func printBackupEntriesForABS(backups []*lister.BackupEntry) {
 	// Initialize tabwriter
 	// minwidth, tabwidth, padding, padchar, flags
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
@@ -188,7 +188,7 @@ func printBackupEntries(backups []*lister.BackupEntry) {
 
 		// Use \t to separate columns
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%d\t%s\n",
-			b.Namespace,
+			b.BackupMetadata.Namespace,
 			b.Created.Format("2006-01-02 15:04:05"),
 			duration,
 			b.RecordCount,
@@ -199,5 +199,29 @@ func printBackupEntries(backups []*lister.BackupEntry) {
 	}
 
 	// Flush the writer to output the buffered data
+	w.Flush()
+}
+
+func printBackupEntriesForSSB(backups []*lister.BackupEntry) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+
+	// Header (adapted to Root fields)
+	fmt.Fprintln(w, "NAMESPACE\tBACKUP_ID\tNODE\tFORMAT\tPARTITIONS")
+
+	for _, b := range backups {
+		// Skip entries without Root (safety)
+		if b.Root == nil {
+			continue
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\n",
+			b.Root.Namespace,
+			b.Root.BackupID,
+			b.Root.NodeID,
+			b.Root.FormatVersion,
+			len(b.Root.Partitions),
+		)
+	}
+
 	w.Flush()
 }

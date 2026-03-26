@@ -28,7 +28,7 @@ const (
 	// metafileABS is the name of the metadata file for ABS.
 	metafileABS = "metadata.yaml"
 	// metafileSSB is the name of the metadata file for Server Side Backup.
-	metafileSSB = "manifest.yaml"
+	metafileSSB = "root.json"
 )
 
 // metafileParser parses the content of a BackupEntry.

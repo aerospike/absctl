@@ -17,9 +17,54 @@ package lister
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// BackupMetadata is an internal container for storing backup metadata.
+// It is stored as a separate metadata file within each backup.
+type BackupMetadata struct {
+	// The backup time in the ISO 8601 format.
+	Created time.Time `yaml:"created" json:"created"`
+	// The time the backup operation completed.
+	Finished time.Time `yaml:"finished" json:"finished"`
+	// The lower time bound of backup entities in the ISO 8601 format (for incremental backups).
+	// It's 0 for full backups.
+	From time.Time `yaml:"from" json:"from"`
+	// The namespace of a backup.
+	Namespace string `yaml:"namespace" json:"namespace"`
+	// The total number of records backed up.
+	RecordCount uint64 `yaml:"record-count" json:"record-count"`
+	// The size of the backup in bytes.
+	ByteCount uint64 `yaml:"byte-count" json:"byte-count"`
+	// The number of backup files created.
+	FileCount uint64 `yaml:"file-count" json:"file-count"`
+	// The number of secondary indexes backed up.
+	SecondaryIndexCount uint64 `yaml:"secondary-index-count" json:"secondary-index-count"`
+	// The number of UDF files backed up.
+	UDFCount uint64 `yaml:"udf-count" json:"udf-count"`
+	// Compression specifies the compression mode used for the backup (ZSTD or NONE).
+	Compression string
+	// Encryption specifies the encryption mode used for the backup (NONE, AES128, AES256).
+	Encryption string
+}
+
+func (m *BackupMetadata) validate() error {
+	if m.Created.IsZero() {
+		return errors.New("`created` is required")
+	}
+
+	if m.Finished.IsZero() {
+		return errors.New("`finished` is required")
+	}
+
+	if m.Namespace == "" {
+		return errors.New("`namespace` is required")
+	}
+
+	return nil
+}
 
 type MetafileParserAbs struct{}
 
@@ -29,7 +74,7 @@ func (p *MetafileParserAbs) Parse(path string, content []byte) (*BackupEntry, er
 		return nil, fmt.Errorf("failed to parse metadata: %w", err)
 	}
 
-	return newBackupEntry(path, md), nil
+	return newBackupFromMetadata(path, md), nil
 }
 
 // newMetadataFromBytes creates a new Metadata object from a byte slice.
