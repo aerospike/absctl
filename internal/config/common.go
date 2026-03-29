@@ -18,7 +18,69 @@ import (
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/tools-common-go/client"
 )
+
+// ServiceConfigCommon is the common configuration for all services.
+type ServiceConfigCommon struct {
+	App          *models.App
+	ClientConfig *client.AerospikeConfig
+	ClientPolicy *models.ClientPolicy
+	Compression  *models.Compression
+	Encryption   *models.Encryption
+	SecretAgent  *models.SecretAgent
+	AwsS3        *models.AwsS3
+	GcpStorage   *models.GcpStorage
+	AzureBlob    *models.AzureBlob
+	Local        *models.Local
+}
+
+// NewServiceConfigCommon initializes and returns a ServiceConfigCommon
+// object with the provided configuration parameters.
+func NewServiceConfigCommon(
+	app *models.App,
+	clientConfig *client.AerospikeConfig,
+	clientPolicy *models.ClientPolicy,
+	compression *models.Compression,
+	encryption *models.Encryption,
+	secretAgent *models.SecretAgent,
+	awsS3 *models.AwsS3,
+	gcpStorage *models.GcpStorage,
+	azureBlob *models.AzureBlob,
+	local *models.Local,
+) *ServiceConfigCommon {
+	return &ServiceConfigCommon{
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		Compression:  compression,
+		Encryption:   encryption,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
+		GcpStorage:   gcpStorage,
+		AzureBlob:    azureBlob,
+		Local:        local,
+	}
+}
+
+// Validate validates the backup configuration and returns an error if any validation fails.
+func (r *ServiceConfigCommon) Validate() error {
+	if err := validateStorages(
+		false,
+		r.AwsS3,
+		r.GcpStorage,
+		r.AzureBlob,
+		nil,
+	); err != nil {
+		return err
+	}
+
+	if err := r.SecretAgent.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // validateStorages performs storages validation.
 // As we allow only one cloud provider to be configured, we can check it here.

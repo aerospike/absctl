@@ -54,18 +54,8 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		azureBlob,
 	)
 
-	require.NoError(t, err)
-	assert.NotNil(t, config)
-	assert.Equal(t, app, config.App)
-	assert.Equal(t, clientConfig, config.ClientConfig)
-	assert.Equal(t, clientPolicy, config.ClientPolicy)
-	assert.Equal(t, restore, config.Restore)
-	assert.Equal(t, compression, config.Compression)
-	assert.Equal(t, encryption, config.Encryption)
-	assert.Equal(t, secretAgent, config.SecretAgent)
-	assert.Equal(t, awsS3, config.AwsS3)
-	assert.Equal(t, gcpStorage, config.GcpStorage)
-	assert.Equal(t, azureBlob, config.AzureBlob)
+	require.ErrorContains(t, err, "invalid restore mode")
+	require.Nil(t, config)
 }
 
 func TestRestoreServiceConfig_IsStdin(t *testing.T) {
@@ -127,10 +117,12 @@ func TestNewRestoreConfig_DefaultValues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
-		Restore:     &models.Restore{},
-		Compression: &models.Compression{},
-		Encryption:  &models.Encryption{},
-		SecretAgent: &models.SecretAgent{},
+		Restore: &models.Restore{},
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: &models.Compression{},
+			Encryption:  &models.Encryption{},
+			SecretAgent: &models.SecretAgent{},
+		},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -159,9 +151,11 @@ func TestNewRestoreConfig_CustomParallel(t *testing.T) {
 				Parallel: customParallel,
 			},
 		},
-		Compression: &models.Compression{},
-		Encryption:  &models.Encryption{},
-		SecretAgent: &models.SecretAgent{},
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: &models.Compression{},
+			Encryption:  &models.Encryption{},
+			SecretAgent: &models.SecretAgent{},
+		},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -211,9 +205,11 @@ func TestNewRestoreConfig_BandwidthConversion(t *testing.T) {
 						Bandwidth: tt.bandwidthMiB,
 					},
 				},
-				Compression: &models.Compression{},
-				Encryption:  &models.Encryption{},
-				SecretAgent: &models.SecretAgent{},
+				ServiceConfigCommon: ServiceConfigCommon{
+					Compression: &models.Compression{},
+					Encryption:  &models.Encryption{},
+					SecretAgent: &models.SecretAgent{},
+				},
 			}
 
 			config := NewRestoreConfig(serviceConfig, logger)
@@ -251,15 +247,17 @@ func TestNewRestoreConfig_AllFlags(t *testing.T) {
 			RetryMaxAttempts:   5,
 			ValidateOnly:       false,
 		},
-		Compression: &models.Compression{
-			Mode:  "zstd",
-			Level: 3,
-		},
-		Encryption: &models.Encryption{
-			Mode: "aes256",
-		},
-		SecretAgent: &models.SecretAgent{
-			Address: "localhost",
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: &models.Compression{
+				Mode:  "zstd",
+				Level: 3,
+			},
+			Encryption: &models.Encryption{
+				Mode: "aes256",
+			},
+			SecretAgent: &models.SecretAgent{
+				Address: "localhost",
+			},
 		},
 	}
 
@@ -302,9 +300,11 @@ func TestNewRestoreConfig_ValidateOnly(t *testing.T) {
 		Restore: &models.Restore{
 			ValidateOnly: true,
 		},
-		Compression: &models.Compression{},
-		Encryption:  &models.Encryption{},
-		SecretAgent: &models.SecretAgent{},
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: &models.Compression{},
+			Encryption:  &models.Encryption{},
+			SecretAgent: &models.SecretAgent{},
+		},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -456,10 +456,12 @@ func TestNewRestoreConfig_NilValues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
-		Restore:     &models.Restore{},
-		Compression: nil,
-		Encryption:  nil,
-		SecretAgent: nil,
+		Restore: &models.Restore{},
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: nil,
+			Encryption:  nil,
+			SecretAgent: nil,
+		},
 	}
 
 	// Should not panic.
@@ -478,9 +480,11 @@ func TestNewRestoreConfig_EmptyStringLists(t *testing.T) {
 				BinList: "",
 			},
 		},
-		Compression: &models.Compression{},
-		Encryption:  &models.Encryption{},
-		SecretAgent: &models.SecretAgent{},
+		ServiceConfigCommon: ServiceConfigCommon{
+			Compression: &models.Compression{},
+			Encryption:  &models.Encryption{},
+			SecretAgent: &models.SecretAgent{},
+		},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -534,9 +538,11 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 					RetryMultiplier:   tt.multiplier,
 					RetryMaxAttempts:  tt.maxRetries,
 				},
-				Compression: &models.Compression{},
-				Encryption:  &models.Encryption{},
-				SecretAgent: &models.SecretAgent{},
+				ServiceConfigCommon: ServiceConfigCommon{
+					Compression: &models.Compression{},
+					Encryption:  &models.Encryption{},
+					SecretAgent: &models.SecretAgent{},
+				},
 			}
 
 			config := NewRestoreConfig(serviceConfig, logger)
@@ -553,7 +559,6 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 func TestMapRestoreConfig_Success(t *testing.T) {
 	t.Parallel()
 	params := &RestoreServiceConfig{
-		App: &models.App{},
 		Restore: &models.Restore{
 			Common: models.Common{
 				Namespace:        "test-namespace",
@@ -566,9 +571,12 @@ func TestMapRestoreConfig_Success(t *testing.T) {
 				Parallel:         5,
 			},
 		},
-		Compression: testCompression(),
-		Encryption:  testEncryption(),
-		SecretAgent: testSecretAgent(),
+		ServiceConfigCommon: ServiceConfigCommon{
+			App:         &models.App{},
+			Compression: testCompression(),
+			Encryption:  testEncryption(),
+			SecretAgent: testSecretAgent(),
+		},
 	}
 	logger := logging.NewDefaultLogger()
 	config := NewRestoreConfig(params, logger)
@@ -597,7 +605,6 @@ func TestMapRestoreConfig_PartialConfig(t *testing.T) {
 	t.Parallel()
 
 	params := &RestoreServiceConfig{
-		App: &models.App{},
 		Restore: &models.Restore{
 			ExtraTTL:           3600,
 			IgnoreRecordError:  true,
@@ -608,9 +615,12 @@ func TestMapRestoreConfig_PartialConfig(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 		},
-		Compression: testCompression(),
-		Encryption:  testEncryption(),
-		SecretAgent: testSecretAgent(),
+		ServiceConfigCommon: ServiceConfigCommon{
+			App:         &models.App{},
+			Compression: testCompression(),
+			Encryption:  testEncryption(),
+			SecretAgent: testSecretAgent(),
+		},
 	}
 
 	logger := logging.NewDefaultLogger()

@@ -48,12 +48,7 @@ func TestNewLocalReader(t *testing.T) {
 
 	dir := t.TempDir()
 
-	params := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			Common: models.Common{
-				Directory: dir,
-			},
-		},
+	params := &config.ServiceConfigCommon{
 		AwsS3:      &models.AwsS3{},
 		GcpStorage: &models.GcpStorage{},
 		AzureBlob:  &models.AzureBlob{},
@@ -64,32 +59,38 @@ func TestNewLocalReader(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, err := newReader(ctx, params, true, logger)
+	reader, err := NewReader(
+		ctx,
+		params,
+		dir, "", "", "", 0,
+		true,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testLocalType, reader.GetType())
 
-	params = &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: dir + testFileNameASBX,
-		},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-	}
-
-	reader, err = newReader(ctx, params, false, logger)
+	reader, err = NewReader(
+		ctx,
+		params,
+		"", dir+testFileNameASBX, "", "", 0,
+		false,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testLocalType, reader.GetType())
 
-	params = &config.RestoreServiceConfig{
-		Restore:    &models.Restore{},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-	}
-	reader, err = newReader(ctx, params, false, logger)
+	reader, err = NewReader(
+		ctx,
+		params,
+		"", "", "", "", 0,
+		false,
+		false,
+		logger,
+	)
 	require.Error(t, err)
 	assert.Nil(t, reader)
 }
@@ -116,12 +117,7 @@ func TestNewS3Reader(t *testing.T) {
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
 
-	params := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			Common: models.Common{
-				Directory: dir,
-			},
-		},
+	params := &config.ServiceConfigCommon{
 		AwsS3: &models.AwsS3{
 			BucketName:          testS3Bucket,
 			Region:              testS3Region,
@@ -142,15 +138,19 @@ func TestNewS3Reader(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, err := newReader(ctx, params, true, logger)
+	reader, err := NewReader(
+		ctx,
+		params,
+		dir, "", "", "", 0,
+		true,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testS3Type, reader.GetType())
 
-	params = &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: dir + testFileName,
-		},
+	params = &config.ServiceConfigCommon{
 		AwsS3: &models.AwsS3{
 			BucketName: testS3Bucket,
 			Region:     testS3Region,
@@ -161,7 +161,14 @@ func TestNewS3Reader(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 	}
 
-	reader, err = newReader(ctx, params, false, logger)
+	reader, err = NewReader(
+		ctx,
+		params,
+		"", dir+testFileName, "", "", 0,
+		false,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testS3Type, reader.GetType())
@@ -189,12 +196,7 @@ func TestNewGcpReader(t *testing.T) {
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
 
-	params := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			Common: models.Common{
-				Directory: dir,
-			},
-		},
+	params := &config.ServiceConfigCommon{
 		GcpStorage: &models.GcpStorage{
 			BucketName: testBucket,
 			Endpoint:   testGcpEndpoint,
@@ -211,15 +213,19 @@ func TestNewGcpReader(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, err := newReader(ctx, params, true, logger)
+	reader, err := NewReader(
+		ctx,
+		params,
+		dir, "", "", "", 0,
+		true,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testGcpType, reader.GetType())
 
-	params = &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: dir + testFileName,
-		},
+	params = &config.ServiceConfigCommon{
 		GcpStorage: &models.GcpStorage{
 			BucketName: testBucket,
 			Endpoint:   testGcpEndpoint,
@@ -228,7 +234,14 @@ func TestNewGcpReader(t *testing.T) {
 		AzureBlob: &models.AzureBlob{},
 	}
 
-	reader, err = newReader(ctx, params, false, logger)
+	reader, err = NewReader(
+		ctx,
+		params,
+		"", dir+testFileName, "", "", 0,
+		false,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testGcpType, reader.GetType())
@@ -258,12 +271,7 @@ func TestNewAzureReader(t *testing.T) {
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
 
-	params := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			Common: models.Common{
-				Directory: dir,
-			},
-		},
+	params := &config.ServiceConfigCommon{
 		AzureBlob: &models.AzureBlob{
 			AccountName:         testAzureAccountName,
 			AccountKey:          testAzureAccountKey,
@@ -284,15 +292,19 @@ func TestNewAzureReader(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, err := newReader(ctx, params, true, logger)
+	reader, err := NewReader(
+		ctx,
+		params,
+		dir, "", "", "", 0,
+		true,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testAzureType, reader.GetType())
 
-	params = &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: dir + testFileName,
-		},
+	params = &config.ServiceConfigCommon{
 		AzureBlob: &models.AzureBlob{
 			AccountName:   testAzureAccountName,
 			AccountKey:    testAzureAccountKey,
@@ -303,7 +315,14 @@ func TestNewAzureReader(t *testing.T) {
 		GcpStorage: &models.GcpStorage{},
 	}
 
-	reader, err = newReader(ctx, params, false, logger)
+	reader, err = NewReader(
+		ctx,
+		params,
+		"", dir+testFileName, "", "", 0,
+		false,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testAzureType, reader.GetType())
@@ -418,10 +437,7 @@ func TestNewStdReader(t *testing.T) {
 
 	ctx := t.Context()
 
-	params := &config.RestoreServiceConfig{
-		Restore: &models.Restore{
-			InputFile: config.StdPlaceholder,
-		},
+	params := &config.ServiceConfigCommon{
 		AwsS3:      &models.AwsS3{},
 		GcpStorage: &models.GcpStorage{},
 		AzureBlob:  &models.AzureBlob{},
@@ -429,7 +445,14 @@ func TestNewStdReader(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, err := newReader(ctx, params, true, logger)
+	reader, err := NewReader(
+		ctx,
+		params,
+		"", config.StdPlaceholder, "", "", 0,
+		true,
+		false,
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 	assert.Equal(t, testStdinType, reader.GetType())

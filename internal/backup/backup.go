@@ -31,19 +31,15 @@ import (
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
 
-const (
-	idBackup = "absctl-backup"
-)
-
 var xdrSupportedVersion = asinfo.AerospikeVersion{Major: 8}
 
 // Service represents a struct that encapsulates components for backup and logging functionalities.
 // It is responsible for managing backup clients, configurations,
 // and related components with additional operational parameters.
 type Service struct {
-	backupClient    *backup.Client
-	backupConfig    *backup.ConfigBackup
-	backupConfigXDR *backup.ConfigBackupXDR
+	backupClient *backup.Client
+	config       *backup.ConfigBackup
+	configXdr    *backup.ConfigBackupXDR
 
 	writer backup.Writer
 	// reader is used to read a state file.
@@ -65,11 +61,6 @@ func NewService(
 	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	// Validations.
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-
 	// Initializations.
 	backupConfig, backupXDRConfig, err := config.NewBackupConfigs(cfg, logger)
 	if err != nil {
@@ -114,12 +105,11 @@ func NewService(
 		return nil, err
 	}
 
-	logger.Info("initializing backup client", slog.String("id", idBackup))
+	logger.Info("initializing backup client")
 
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithID(idBackup),
 		backup.WithInfoPolicies(infoPolicy, retryInfoPolicy),
 	)
 	if err != nil {
@@ -127,13 +117,13 @@ func NewService(
 	}
 
 	asb := &Service{
-		backupClient:    backupClient,
-		backupConfig:    backupConfig,
-		backupConfigXDR: backupXDRConfig,
-		writer:          writer,
-		reader:          reader,
-		logger:          logger,
-		reportToLog:     cfg.App.LogJSON || cfg.App.LogFile != "",
+		backupClient: backupClient,
+		config:       backupConfig,
+		configXdr:    backupXDRConfig,
+		writer:       writer,
+		reader:       reader,
+		logger:       logger,
+		reportToLog:  cfg.App.LogJSON || cfg.App.LogFile != "",
 	}
 
 	if cfg.Backup != nil {
@@ -215,21 +205,21 @@ func (s *Service) Run(ctx context.Context) error {
 	case s.isEstimate:
 		s.logger.Info("calculating backup estimate")
 		// Calculating estimates.
-		estimates, err := s.backupClient.Estimate(ctx, s.backupConfig, s.estimatesSamples)
+		estimates, err := s.backupClient.Estimate(ctx, s.config, s.estimatesSamples)
 		if err != nil {
 			return fmt.Errorf("failed to calculate backup estimate: %w", err)
 		}
 
 		logging.ReportEstimate(estimates, s.reportToLog, s.logger)
-	case s.backupConfigXDR != nil:
+	case s.configXdr != nil:
 		s.logger.Info("starting xdr backup")
 		// Running xdr backup.
-		hXdr, err := s.backupClient.BackupXDR(ctx, s.backupConfigXDR, s.writer)
+		hXdr, err := s.backupClient.BackupXDR(ctx, s.configXdr, s.writer)
 		if err != nil {
 			return fmt.Errorf("failed to start xdr backup: %w", err)
 		}
 		// Backup indexes and udfs.
-		h, err := s.backupClient.Backup(ctx, s.backupConfig, s.writer, s.reader)
+		h, err := s.backupClient.Backup(ctx, s.config, s.writer, s.reader)
 		if err != nil {
 			return fmt.Errorf("failed to start backup of indexes and udfs: %w", err)
 		}
@@ -249,7 +239,7 @@ func (s *Service) Run(ctx context.Context) error {
 	default:
 		s.logger.Info("starting scan backup")
 		// Running ordinary backup.
-		h, err := s.backupClient.Backup(ctx, s.backupConfig, s.writer, s.reader)
+		h, err := s.backupClient.Backup(ctx, s.config, s.writer, s.reader)
 		if err != nil {
 			return fmt.Errorf("failed to start backup: %w", errHumanize(err))
 		}

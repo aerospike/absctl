@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package restore
+package ssb
 
 import (
 	"context"
@@ -24,19 +24,18 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
-	"github.com/aerospike/absctl/internal/restore"
+	"github.com/aerospike/absctl/internal/ssb"
 	asFlags "github.com/aerospike/tools-common-go/flags"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 const (
-	welcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
-	welcomeMessageShort = "Aerospike restore CLI tool"
-	useCommand          = "restore"
+	welcomeMessage      = "Welcome to the Aerospike server dside backup tool!"
+	welcomeMessageShort = "Aerospike  server dside backup tool"
+	useCommand          = "ssb"
 )
 
-// Cmd represents the base command when called without any subcommands
 type Cmd struct {
 	// Version params.
 	appVersion string
@@ -55,9 +54,8 @@ type Cmd struct {
 	flagsGcp          *flags.GcpStorage
 	flagsAzure        *flags.AzureBlob
 
-	// Restore flags.
-	flagsRestore *flags.Restore
-	flagsCommon  *flags.Common
+	// Server side backup flags.
+	flagsSSB *flags.ServerSideBackup
 
 	Logger *slog.Logger
 }
@@ -71,7 +69,6 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 		flagsApp:          flags.NewApp(),
 		flagsAerospike:    asFlags.NewDefaultAerospikeFlags(),
 		flagsClientPolicy: flags.NewClientPolicy(),
-		flagsRestore:      flags.NewRestore(),
 		flagsCompression:  flags.NewCompression(flags.OperationRestore),
 		flagsEncryption:   flags.NewEncryption(flags.OperationRestore),
 		flagsSecretAgent:  flags.NewSecretAgent(),
@@ -80,11 +77,11 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 		flagsAzure:        flags.NewAzureBlob(flags.OperationRestore),
 		// First init default logger.
 		Logger: logging.NewDefaultLogger(),
+
+		flagsSSB: flags.NewServerSideBackup(),
 	}
 
-	c.flagsCommon = flags.NewCommon(&c.flagsRestore.Common, flags.OperationRestore)
-
-	restoreCmd := &cobra.Command{
+	ssbCmd := &cobra.Command{
 		Use:               useCommand,
 		Short:             welcomeMessageShort,
 		Long:              welcomeMessage,
@@ -93,15 +90,13 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 	}
 
 	// Disable sorting
-	restoreCmd.PersistentFlags().SortFlags = false
-	restoreCmd.SilenceUsage = true
+	ssbCmd.PersistentFlags().SortFlags = false
+	ssbCmd.SilenceUsage = true
 
 	appFlagSet := c.flagsApp.NewFlagSet()
 	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
 	flags.WrapCertFlagsForSecrets(aerospikeFlagSet)
 	clientPolicyFlagSet := c.flagsClientPolicy.NewFlagSet()
-	commonFlagSet := c.flagsCommon.NewFlagSet()
-	restoreFlagSet := c.flagsRestore.NewFlagSet()
 	compressionFlagSet := c.flagsCompression.NewFlagSet()
 	encryptionFlagSet := c.flagsEncryption.NewFlagSet()
 	secretAgentFlagSet := c.flagsSecretAgent.NewFlagSet()
@@ -109,52 +104,46 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 	gcpFlagSet := c.flagsGcp.NewFlagSet()
 	azureFlagSet := c.flagsAzure.NewFlagSet()
 
+	ssbFlagSet := c.flagsSSB.NewFlagSet()
+
 	// App flags.
-	restoreCmd.PersistentFlags().AddFlagSet(appFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(appFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
 
-	restoreCmd.Flags().AddFlagSet(commonFlagSet)
-	restoreCmd.Flags().AddFlagSet(restoreFlagSet)
+	ssbCmd.Flags().AddFlagSet(ssbFlagSet)
 
-	restoreCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	restoreCmd.PersistentFlags().AddFlagSet(azureFlagSet)
-
-	// Deprecated fields.
-	if err := restoreCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
-		log.Fatal(err)
-	}
-
-	restoreCmd.Flags().Lookup("nice").Hidden = false
+	ssbCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(awsFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
+	ssbCmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	// Beautify help and usage.
 	helpFunc := newHelpFunction(
 		appFlagSet,
 		aerospikeFlagSet,
 		clientPolicyFlagSet,
-		commonFlagSet,
-		restoreFlagSet,
 		compressionFlagSet,
 		encryptionFlagSet,
 		secretAgentFlagSet,
 		awsFlagSet,
 		gcpFlagSet,
 		azureFlagSet,
+
+		ssbFlagSet,
 	)
 
-	restoreCmd.SetUsageFunc(func(_ *cobra.Command) error {
+	ssbCmd.SetUsageFunc(func(_ *cobra.Command) error {
 		helpFunc()
 		return nil
 	})
-	restoreCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+	ssbCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		helpFunc()
 	})
 
-	return restoreCmd
+	return ssbCmd
 }
 
 func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
@@ -201,18 +190,13 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 	// After initialization replace logger.
 	c.Logger = logger
 
-	logMsg := "restore"
-	if serviceConfig.Restore.ValidateOnly {
-		logMsg = "validation"
-	}
-
-	asr, err := restore.NewService(cmd.Context(), serviceConfig, logger)
+	asr, err := ssb.NewService(cmd.Context(), serviceConfig, logger)
 	if err != nil {
-		return fmt.Errorf("%s initialization failed: %w", logMsg, err)
+		return fmt.Errorf("server side backup initialization failed: %w", err)
 	}
 
 	if err = asr.Run(cmd.Context()); err != nil {
-		return fmt.Errorf("%s failed: %w", logMsg, err)
+		return fmt.Errorf("server side backup failed: %w", err)
 	}
 
 	return nil
@@ -225,31 +209,22 @@ func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
 }
 
 // newServiceConfig returns a new *config.RestoreServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig(ctx context.Context) (*config.RestoreServiceConfig, error) {
-	app := c.flagsApp.GetApp()
-	// If we have a config file, load serviceConfig from it.
-	if app != nil && app.ConfigFilePath != "" {
-		serviceConfig, err := config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
-		}
-
-		return serviceConfig, nil
-	}
-
-	serviceConfig, err := config.NewRestoreServiceConfig(
+func (c *Cmd) newServiceConfig(_ context.Context) (*config.SSBServiceConfig, error) {
+	serviceConfig := config.NewSSBServiceConfig(
+		c.flagsSSB.GetServerSideBackup(),
 		c.flagsApp.GetApp(),
 		c.flagsAerospike.NewAerospikeConfig(),
 		c.flagsClientPolicy.GetClientPolicy(),
-		c.flagsRestore.GetRestore(),
 		c.flagsCompression.GetCompression(),
 		c.flagsEncryption.GetEncryption(),
 		c.flagsSecretAgent.GetSecretAgent(),
 		c.flagsAws.GetAwsS3(),
 		c.flagsGcp.GetGcpStorage(),
 		c.flagsAzure.GetAzureBlob(),
+		nil,
 	)
-	if err != nil {
+
+	if err := serviceConfig.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -264,14 +239,13 @@ func newHelpFunction(
 	appFlagSet,
 	aerospikeFlagSet,
 	clientPolicyFlagSet,
-	commonFlagSet,
-	restoreFlagSet,
 	compressionFlagSet,
 	encryptionFlagSet,
 	secretAgentFlagSet,
 	awsFlagSet,
 	gcpFlagSet,
-	azureFlagSet *pflag.FlagSet,
+	azureFlagSet,
+	ssbFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
 		fmt.Println(welcomeMessage)
@@ -283,7 +257,7 @@ func newHelpFunction(
 		// fmt.Println("You can set restore mode manually with --mode flag. " +
 		// 	"Flags that are incompatible with restore mode,")
 		// fmt.Println("are also incompatible in automatic mode (when mode is not set).")
-		fmt.Println(flags.SectionTextUsageRestore)
+		fmt.Println(flags.SectionTextUsageServerSideBackup)
 
 		// Print section: App Flags
 		fmt.Println(flags.SectionTextGeneral)
@@ -295,9 +269,8 @@ func newHelpFunction(
 		clientPolicyFlagSet.PrintDefaults()
 
 		// Print section: Restore Flags
-		fmt.Println(flags.SectionTextRestore)
-		commonFlagSet.PrintDefaults()
-		restoreFlagSet.PrintDefaults()
+		fmt.Println(flags.SectionTextSSB)
+		ssbFlagSet.PrintDefaults()
 
 		// Print section: Compression Flags
 		fmt.Println(flags.SectionTextCompression)
