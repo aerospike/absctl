@@ -54,7 +54,7 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		azureBlob,
 	)
 
-	require.ErrorContains(t, err, "invalid restore mode")
+	require.ErrorContains(t, err, "input file or directory required")
 	require.Nil(t, config)
 }
 
