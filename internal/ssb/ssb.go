@@ -165,6 +165,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	return infoClient, nil
 }
 
+//nolint:unused // Function for testing concept.
 func printBackupEntriesForABS(backups []*lister.BackupEntry) {
 	// Initialize tabwriter
 	// minwidth, tabwidth, padding, padchar, flags
@@ -216,10 +217,10 @@ func printBackupEntriesForSSB(backups []*lister.BackupEntry) {
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\n",
 			b.Root.Namespace,
-			b.Root.BackupID,
-			b.Root.NodeID,
-			b.Root.FormatVersion,
-			len(b.Root.Partitions),
+			b.BackupID,
+			b.NodeID,
+			b.FormatVersion,
+			len(b.Partitions),
 		)
 	}
 

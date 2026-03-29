@@ -70,13 +70,16 @@ func parseRoot(data []byte) (*Root, error) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, err
 	}
+
 	return &r, nil
 }
 
+//nolint:unused // Function for testing concept.
 func parseManifest(data []byte) (*Manifest, error) {
 	var m Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
+
 	return &m, nil
 }
