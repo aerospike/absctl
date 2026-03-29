@@ -24,8 +24,7 @@ import (
 	"github.com/aerospike/absctl/internal/backup"
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
-	"github.com/aerospike/absctl/internal/logging"
-	asFlags "github.com/aerospike/tools-common-go/flags"
+	"github.com/aerospike/absctl/internal/subcmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -33,245 +32,122 @@ import (
 const (
 	welcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
 	welcomeMessageShort = "Aerospike backup CLI tool"
-	useCommand          = "backup"
 )
 
-// Cmd represents the base command when called without any subcommands
-type Cmd struct {
-	// Version params.
-	appVersion string
-	commitHash string
-	buildTime  string
-
-	// Root flags
-	flagsRoot         *flags.Root
-	flagsApp          *flags.App
-	flagsAerospike    *asFlags.AerospikeFlags
-	flagsClientPolicy *flags.ClientPolicy
-	flagsCompression  *flags.Compression
-	flagsEncryption   *flags.Encryption
-	flagsSecretAgent  *flags.SecretAgent
-	flagsAws          *flags.AwsS3
-	flagsGcp          *flags.GcpStorage
-	flagsAzure        *flags.AzureBlob
-	flagsLocal        *flags.Local
-
-	// backup flags.
+type runner struct {
 	flagsBackup *flags.Backup
 	flagsCommon *flags.Common
+	flagsLocal  *flags.Local
 
-	Logger *slog.Logger
+	commonFlagSet *pflag.FlagSet
+	backupFlagSet *pflag.FlagSet
+	localFlagSet  *pflag.FlagSet
 }
 
 func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
-	c := &Cmd{
-		appVersion:        appVersion,
-		commitHash:        commitHash,
-		buildTime:         buildTime,
-		flagsRoot:         flagsRoot,
-		flagsApp:          flags.NewApp(),
-		flagsAerospike:    asFlags.NewDefaultAerospikeFlags(),
-		flagsClientPolicy: flags.NewClientPolicy(),
-		flagsBackup:       flags.NewBackup(),
-		flagsCompression:  flags.NewCompression(flags.OperationBackup),
-		flagsEncryption:   flags.NewEncryption(flags.OperationBackup),
-		flagsSecretAgent:  flags.NewSecretAgent(),
-		flagsAws:          flags.NewAwsS3(flags.OperationBackup),
-		flagsGcp:          flags.NewGcpStorage(flags.OperationBackup),
-		flagsAzure:        flags.NewAzureBlob(flags.OperationBackup),
-		flagsLocal:        flags.NewLocal(flags.OperationBackup),
-		// First init default logger.
-		Logger: logging.NewDefaultLogger(),
+	r := &runner{
+		flagsBackup: flags.NewBackup(),
+		flagsLocal:  flags.NewLocal(flags.OperationBackup),
 	}
-	c.flagsCommon = flags.NewCommon(&c.flagsBackup.Common, flags.OperationBackup)
+	r.flagsCommon = flags.NewCommon(&r.flagsBackup.Common, flags.OperationBackup)
 
-	backupCmd := &cobra.Command{
-		Use:               useCommand,
-		Short:             welcomeMessageShort,
-		Long:              welcomeMessage,
-		RunE:              c.run,
-		PersistentPreRunE: c.preRun,
+	return subcmd.BuildCommand(
+		"backup", welcomeMessageShort, welcomeMessage,
+		flagsRoot, appVersion, commitHash, buildTime,
+		flags.OperationBackup, r,
+	)
+}
+
+func (r *runner) FlagSets() []*pflag.FlagSet {
+	r.commonFlagSet = r.flagsCommon.NewFlagSet()
+	r.backupFlagSet = r.flagsBackup.NewFlagSet()
+	r.localFlagSet = r.flagsLocal.NewFlagSet()
+
+	return []*pflag.FlagSet{
+		r.commonFlagSet,
+		r.backupFlagSet,
+		r.localFlagSet,
 	}
+}
 
-	// Disable sorting
-	backupCmd.PersistentFlags().SortFlags = false
-	backupCmd.SilenceUsage = true
-
-	// Add sub command
-	// xdrCmd := xdr.NewCmd(
-	// 	c.flagsApp,
-	// 	c.flagsAerospike,
-	// 	c.flagsClientPolicy,
-	// 	c.flagsCompression,
-	// 	c.flagsEncryption,
-	// 	c.flagsSecretAgent,
-	// 	c.flagsAws,
-	// 	c.flagsGcp,
-	// 	c.flagsAzure,
-	// )
-	// backupCmd.AddCommand(xdrCmd)
-
-	appFlagSet := c.flagsApp.NewFlagSet()
-	aerospikeFlagSet := c.flagsAerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapCertFlagsForSecrets(aerospikeFlagSet)
-	clientPolicyFlagSet := c.flagsClientPolicy.NewFlagSet()
-	commonFlagSet := c.flagsCommon.NewFlagSet()
-	backupFlagSet := c.flagsBackup.NewFlagSet()
-	compressionFlagSet := c.flagsCompression.NewFlagSet()
-	encryptionFlagSet := c.flagsEncryption.NewFlagSet()
-	secretAgentFlagSet := c.flagsSecretAgent.NewFlagSet()
-	awsFlagSet := c.flagsAws.NewFlagSet()
-	gcpFlagSet := c.flagsGcp.NewFlagSet()
-	azureFlagSet := c.flagsAzure.NewFlagSet()
-	localFlagSet := c.flagsLocal.NewFlagSet()
-
-	// App flags.
-	backupCmd.PersistentFlags().AddFlagSet(appFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
-
-	backupCmd.Flags().AddFlagSet(commonFlagSet)
-	backupCmd.Flags().AddFlagSet(backupFlagSet)
-
-	backupCmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(azureFlagSet)
-	backupCmd.PersistentFlags().AddFlagSet(localFlagSet)
-
-	// Deprecated fields.
-	if err := backupCmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
+func (r *runner) PostRegistration(cmd *cobra.Command) {
+	if err := cmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
 
-	backupCmd.Flags().Lookup("nice").Hidden = false
+	cmd.Flags().Lookup("nice").Hidden = false
+}
 
-	// Beautify help and usage.
+func (r *runner) SetHelpUsage(cmd *cobra.Command, shared subcmd.SharedFlagSets) {
 	helpFunc := newHelpFunction(
-		appFlagSet,
-		aerospikeFlagSet,
-		clientPolicyFlagSet,
-		commonFlagSet,
-		backupFlagSet,
-		compressionFlagSet,
-		encryptionFlagSet,
-		secretAgentFlagSet,
-		awsFlagSet,
-		gcpFlagSet,
-		azureFlagSet,
-		localFlagSet,
+		shared.App,
+		shared.Aerospike,
+		shared.ClientPolicy,
+		r.commonFlagSet,
+		r.backupFlagSet,
+		shared.Compression,
+		shared.Encryption,
+		shared.SecretAgent,
+		shared.Aws,
+		shared.Gcp,
+		shared.Azure,
+		r.localFlagSet,
 	)
 
-	backupCmd.SetUsageFunc(func(_ *cobra.Command) error {
+	cmd.SetUsageFunc(func(_ *cobra.Command) error {
 		helpFunc()
 		return nil
 	})
-	backupCmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		helpFunc()
 	})
-
-	return backupCmd
 }
 
-func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
-	if c.flagsRoot.Version {
-		c.printVersion()
-
-		return nil
-	}
-
-	// If no flags were passed, show help.
-	if cmd.Flags().NFlag() == 0 {
-		if err := cmd.Help(); err != nil {
-			return fmt.Errorf("failed to load help: %w", err)
-		}
-
-		return nil
-	}
-
-	// Init app.
-	serviceConfig, err := c.newServiceConfig(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("failed to initialize app: %w", err)
-	}
-
-	// Init logger.
-	loggerConf := logging.NewConfig(
-		serviceConfig.App.Verbose,
-		serviceConfig.App.LogJSON,
-		serviceConfig.App.LogLevel,
-		serviceConfig.App.LogFile,
-	)
-
-	logger, loggerClose, err := logging.NewLogger(loggerConf)
-	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
-	}
-
-	defer func() {
-		if err := loggerClose(); err != nil {
-			log.Printf("failed to close logger: %v", err)
-		}
-	}()
-	// After initialization replace logger.
-	c.Logger = logger
-
-	asb, err := backup.NewService(cmd.Context(), serviceConfig, logger)
-	if err != nil {
-		return fmt.Errorf("backup initialization failed: %w", err)
-	}
-
-	if err = asb.Run(cmd.Context()); err != nil {
-		return fmt.Errorf("backup failed: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Cmd) preRun(cmd *cobra.Command, _ []string) error {
-	sa := c.flagsSecretAgent.GetSecretAgent()
-
-	return c.flagsApp.PreRun(cmd, sa)
-}
-
-// newServiceConfig returns a new *config.BackupServiceConfig based on the flags or config file.
-func (c *Cmd) newServiceConfig(ctx context.Context) (*config.BackupServiceConfig, error) {
-	app := c.flagsApp.GetApp()
-	// If we have a config file, load serviceConfig from it.
+func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags) (subcmd.ServiceConfig, error) {
+	app := shared.App.GetApp()
 	if app != nil && app.ConfigFilePath != "" {
-		serviceConfig, err := config.DecodeBackupServiceConfig(ctx, app.ConfigFilePath)
+		cfg, err := config.DecodeBackupServiceConfig(ctx, app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}
 
-		return serviceConfig, nil
+		return cfg, nil
 	}
 
-	serviceConfig, err := config.NewBackupServiceConfig(
-		c.flagsApp.GetApp(),
-		c.flagsAerospike.NewAerospikeConfig(),
-		c.flagsClientPolicy.GetClientPolicy(),
-		c.flagsBackup.GetBackup(),
+	cfg, err := config.NewBackupServiceConfig(
+		shared.App.GetApp(),
+		shared.Aerospike.NewAerospikeConfig(),
+		shared.ClientPolicy.GetClientPolicy(),
+		r.flagsBackup.GetBackup(),
 		nil,
-		c.flagsCompression.GetCompression(),
-		c.flagsEncryption.GetEncryption(),
-		c.flagsSecretAgent.GetSecretAgent(),
-		c.flagsAws.GetAwsS3(),
-		c.flagsGcp.GetGcpStorage(),
-		c.flagsAzure.GetAzureBlob(),
-		c.flagsLocal.GetLocal(),
+		shared.Compression.GetCompression(),
+		shared.Encryption.GetEncryption(),
+		shared.SecretAgent.GetSecretAgent(),
+		shared.Aws.GetAwsS3(),
+		shared.Gcp.GetGcpStorage(),
+		shared.Azure.GetAzureBlob(),
+		r.flagsLocal.GetLocal(),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return serviceConfig, nil
+	return cfg, nil
 }
 
-func (c *Cmd) printVersion() {
-	fmt.Printf("version: %s (%s) %s \n", c.appVersion, c.commitHash, c.buildTime)
+func (r *runner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
+	backupCfg := cfg.(*config.BackupServiceConfig)
+
+	asb, err := backup.NewService(ctx, backupCfg, logger)
+	if err != nil {
+		return fmt.Errorf("backup initialization failed: %w", err)
+	}
+
+	if err = asb.Run(ctx); err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	return nil
 }
 
 func newHelpFunction(

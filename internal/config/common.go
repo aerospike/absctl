@@ -63,6 +63,11 @@ func NewServiceConfigCommon(
 	}
 }
 
+// GetApp returns the App configuration.
+func (r *ServiceConfigCommon) GetApp() *models.App {
+	return r.App
+}
+
 // Validate validates the backup configuration and returns an error if any validation fails.
 func (r *ServiceConfigCommon) Validate() error {
 	if err := validateStorages(
