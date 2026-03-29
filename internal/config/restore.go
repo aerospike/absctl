@@ -87,7 +87,7 @@ func (r *RestoreServiceConfig) Validate() error {
 		return err
 	}
 
-	if err := r.ServiceConfigCommon.Validate(); err != nil {
+	if err := r.ServiceConfigCommon.Validate(false); err != nil {
 		return err
 	}
 

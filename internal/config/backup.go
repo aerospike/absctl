@@ -135,7 +135,7 @@ func (b *BackupServiceConfig) Validate() error {
 		return err
 	}
 
-	if err := b.ServiceConfigCommon.Validate(); err != nil {
+	if err := b.ServiceConfigCommon.Validate(true); err != nil {
 		return err
 	}
 

@@ -69,9 +69,9 @@ func (r *ServiceConfigCommon) GetApp() *models.App {
 }
 
 // Validate validates the backup configuration and returns an error if any validation fails.
-func (r *ServiceConfigCommon) Validate() error {
+func (r *ServiceConfigCommon) Validate(isBackup bool) error {
 	if err := validateStorages(
-		false,
+		isBackup,
 		r.AwsS3,
 		r.GcpStorage,
 		r.AzureBlob,

@@ -60,7 +60,7 @@ func NewSSBServiceConfig(
 
 // Validate checks if the SSBServiceConfig and its embedded ServiceConfigCommon are correctly configured.
 func (s *SSBServiceConfig) Validate() error {
-	if err := s.ServiceConfigCommon.Validate(); err != nil {
+	if err := s.ServiceConfigCommon.Validate(false); err != nil {
 		return err
 	}
 
