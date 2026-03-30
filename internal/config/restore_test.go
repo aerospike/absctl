@@ -53,9 +53,10 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		gcpStorage,
 		azureBlob,
 	)
+	config.Restore.Mode = models.RestoreModeASB
 
+	err = config.Validate()
 	require.ErrorContains(t, err, "input file or directory required")
-	require.Nil(t, config)
 }
 
 func TestRestoreServiceConfig_IsStdin(t *testing.T) {
