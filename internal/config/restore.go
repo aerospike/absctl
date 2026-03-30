@@ -49,9 +49,6 @@ func NewRestoreServiceConfig(
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 ) (*RestoreServiceConfig, error) {
-	// Right now we have only 1 restore mode.
-	restore.Mode = models.RestoreModeASB
-
 	serviceConfig := &RestoreServiceConfig{
 		Restore: restore,
 		ServiceConfigCommon: ServiceConfigCommon{

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/restore"
 	"github.com/aerospike/absctl/internal/subcmd"
 	"github.com/spf13/cobra"
@@ -98,31 +99,38 @@ func (r *runner) SetHelpUsage(cmd *cobra.Command, shared subcmd.SharedFlagSets) 
 }
 
 func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags) (subcmd.ServiceConfig, error) {
+	var (
+		cfg *config.RestoreServiceConfig
+		err error
+	)
+
 	app := shared.App.GetApp()
 	if app != nil && app.ConfigFilePath != "" {
-		cfg, err := config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
+		cfg, err = config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}
-
-		return cfg, nil
+	} else {
+		cfg, err = config.NewRestoreServiceConfig(
+			shared.App.GetApp(),
+			shared.Aerospike.NewAerospikeConfig(),
+			shared.ClientPolicy.GetClientPolicy(),
+			r.flagsRestore.GetRestore(),
+			shared.Compression.GetCompression(),
+			shared.Encryption.GetEncryption(),
+			shared.SecretAgent.GetSecretAgent(),
+			shared.Aws.GetAwsS3(),
+			shared.Gcp.GetGcpStorage(),
+			shared.Azure.GetAzureBlob(),
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	cfg, err := config.NewRestoreServiceConfig(
-		shared.App.GetApp(),
-		shared.Aerospike.NewAerospikeConfig(),
-		shared.ClientPolicy.GetClientPolicy(),
-		r.flagsRestore.GetRestore(),
-		shared.Compression.GetCompression(),
-		shared.Encryption.GetEncryption(),
-		shared.SecretAgent.GetSecretAgent(),
-		shared.Aws.GetAwsS3(),
-		shared.Gcp.GetGcpStorage(),
-		shared.Azure.GetAzureBlob(),
-	)
-	if err != nil {
-		return nil, err
-	}
+	// Set default restore mode to asb.
+	// This should be removed once asbx is released.
+	cfg.Restore.Mode = models.RestoreModeASB
 
 	return cfg, nil
 }
