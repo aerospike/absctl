@@ -41,7 +41,7 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 	gcpStorage := &models.GcpStorage{}
 	azureBlob := &models.AzureBlob{}
 
-	config, err := NewRestoreServiceConfig(
+	config, _ := NewRestoreServiceConfig(
 		app,
 		clientConfig,
 		clientPolicy,
@@ -55,7 +55,7 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 	)
 	config.Restore.Mode = models.RestoreModeASB
 
-	err = config.Validate()
+	err := config.Validate()
 	require.ErrorContains(t, err, "input file or directory required")
 }
 

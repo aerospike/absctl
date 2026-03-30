@@ -72,7 +72,7 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 	azureBlob := &models.AzureBlob{}
 	local := &models.Local{}
 
-	config, err := NewBackupServiceConfig(
+	config, _ := NewBackupServiceConfig(
 		app,
 		clientConfig,
 		clientPolicy,
@@ -87,7 +87,7 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 		local,
 	)
 
-	err = config.Validate()
+	err := config.Validate()
 	require.ErrorContains(t, err, "must specify either estimate, output-file or directory")
 }
 
