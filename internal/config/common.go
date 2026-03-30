@@ -75,7 +75,7 @@ func (r *ServiceConfigCommon) Validate(isBackup bool) error {
 		r.AwsS3,
 		r.GcpStorage,
 		r.AzureBlob,
-		nil,
+		r.Local,
 	); err != nil {
 		return err
 	}
