@@ -32,6 +32,7 @@ import (
 // so the builder can extract App settings for logger initialization.
 type ServiceConfig interface {
 	GetApp() *models.App
+	Validate() error
 }
 
 // SharedFlags holds all flag objects shared across subcommands.
@@ -185,6 +186,10 @@ func runCommand(
 	cfg, err := runner.NewServiceConfig(cmd.Context(), shared)
 	if err != nil {
 		return fmt.Errorf("failed to initialize app: %w", err)
+	}
+
+	if err = cfg.Validate(); err != nil {
+		return fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	app := cfg.GetApp()

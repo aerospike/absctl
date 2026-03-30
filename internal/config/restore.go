@@ -67,10 +67,6 @@ func NewRestoreServiceConfig(
 		},
 	}
 
-	if err := serviceConfig.Validate(); err != nil {
-		return nil, err
-	}
-
 	return serviceConfig, nil
 }
 
