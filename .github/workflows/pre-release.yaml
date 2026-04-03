@@ -559,7 +559,7 @@ jobs:
           JF_PROJECT: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
 
       - name: Login to JFrog Artifactory
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ vars.ARTIFACTORY_REGISTRY_URL }}
           username: ${{ secrets.ARTIFACTORY_USER }}
