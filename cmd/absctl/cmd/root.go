@@ -21,7 +21,6 @@ import (
 
 	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
 	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
-	"github.com/aerospike/absctl/cmd/absctl/cmd/ssb"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
@@ -77,11 +76,9 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	// Add subcommands - they will initialize their own operation-specific flags
 	backupCmd := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	restoreCmd := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	ssbCmd := ssb.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
-	rootCmd.AddCommand(ssbCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
