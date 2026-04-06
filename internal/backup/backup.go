@@ -119,7 +119,6 @@ func NewService(
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithID(idBackup),
 		backup.WithInfoPolicies(infoPolicy, retryInfoPolicy),
 	)
 	if err != nil {

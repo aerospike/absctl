@@ -100,7 +100,6 @@ func NewService(
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithID(idRestore),
 		backup.WithInfoPolicies(infoPolicy, infoRetryPolicy))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore client: %w", err)
