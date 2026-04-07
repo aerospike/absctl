@@ -60,10 +60,12 @@ func TestNewLocalWriter(t *testing.T) {
 				Directory: t.TempDir(),
 			},
 		},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
 	}
 	ctx := t.Context()
 	writer, err := newWriter(ctx, params, slog.Default())
@@ -75,10 +77,12 @@ func TestNewLocalWriter(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: t.TempDir() + testFileName,
 		},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
 	}
 	writer, err = newWriter(ctx, params, slog.Default())
 	require.NoError(t, err)
@@ -86,11 +90,13 @@ func TestNewLocalWriter(t *testing.T) {
 	assert.Equal(t, testLocalType, writer.GetType())
 
 	params = &config.BackupServiceConfig{
-		Backup:     &models.Backup{},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
+		Backup: &models.Backup{},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
 	}
 	writer, err = newWriter(ctx, params, slog.Default())
 	require.Error(t, err)
@@ -110,16 +116,18 @@ func TestNewS3Writer(t *testing.T) {
 				Directory: t.TempDir(),
 			},
 		},
-		AwsS3: &models.AwsS3{
-			BucketName:   testS3Bucket,
-			Region:       testS3Region,
-			Profile:      testS3Profile,
-			Endpoint:     testS3Endpoint,
-			StorageClass: "STANDARD",
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3: &models.AwsS3{
+				BucketName:   testS3Bucket,
+				Region:       testS3Region,
+				Profile:      testS3Profile,
+				Endpoint:     testS3Endpoint,
+				StorageClass: "STANDARD",
+			},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
 		},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
 	}
 
 	ctx := t.Context()
@@ -133,15 +141,17 @@ func TestNewS3Writer(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: t.TempDir() + testFileName,
 		},
-		AwsS3: &models.AwsS3{
-			BucketName: testS3Bucket,
-			Region:     testS3Region,
-			Profile:    testS3Profile,
-			Endpoint:   testS3Endpoint,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3: &models.AwsS3{
+				BucketName: testS3Bucket,
+				Region:     testS3Region,
+				Profile:    testS3Profile,
+				Endpoint:   testS3Endpoint,
+			},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
 		},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
 	}
 
 	writer, err = newWriter(ctx, params, slog.Default())
@@ -194,13 +204,15 @@ func TestGcpWriter(t *testing.T) {
 				Directory: t.TempDir(),
 			},
 		},
-		GcpStorage: &models.GcpStorage{
-			BucketName: testBucket,
-			Endpoint:   testGcpEndpoint,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			GcpStorage: &models.GcpStorage{
+				BucketName: testBucket,
+				Endpoint:   testGcpEndpoint,
+			},
+			AzureBlob: &models.AzureBlob{},
+			AwsS3:     &models.AwsS3{},
+			Local:     &models.Local{},
 		},
-		AzureBlob: &models.AzureBlob{},
-		AwsS3:     &models.AwsS3{},
-		Local:     &models.Local{},
 	}
 
 	ctx := t.Context()
@@ -214,13 +226,15 @@ func TestGcpWriter(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: t.TempDir() + testFileName,
 		},
-		GcpStorage: &models.GcpStorage{
-			BucketName: testBucket,
-			Endpoint:   testGcpEndpoint,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			GcpStorage: &models.GcpStorage{
+				BucketName: testBucket,
+				Endpoint:   testGcpEndpoint,
+			},
+			AzureBlob: &models.AzureBlob{},
+			AwsS3:     &models.AwsS3{},
+			Local:     &models.Local{},
 		},
-		AzureBlob: &models.AzureBlob{},
-		AwsS3:     &models.AwsS3{},
-		Local:     &models.Local{},
 	}
 
 	writer, err = newWriter(ctx, params, slog.Default())
@@ -260,16 +274,18 @@ func TestAzureWriter(t *testing.T) {
 				Directory: t.TempDir(),
 			},
 		},
-		AzureBlob: &models.AzureBlob{
-			AccountName:   testAzureAccountName,
-			AccountKey:    testAzureAccountKey,
-			Endpoint:      testAzureEndpoint,
-			ContainerName: testBucket,
-			AccessTier:    "Cold",
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AzureBlob: &models.AzureBlob{
+				AccountName:   testAzureAccountName,
+				AccountKey:    testAzureAccountKey,
+				Endpoint:      testAzureEndpoint,
+				ContainerName: testBucket,
+				AccessTier:    "Cold",
+			},
+			GcpStorage: &models.GcpStorage{},
+			AwsS3:      &models.AwsS3{},
+			Local:      &models.Local{},
 		},
-		GcpStorage: &models.GcpStorage{},
-		AwsS3:      &models.AwsS3{},
-		Local:      &models.Local{},
 	}
 
 	ctx := t.Context()
@@ -283,15 +299,17 @@ func TestAzureWriter(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: t.TempDir() + testFileName,
 		},
-		AzureBlob: &models.AzureBlob{
-			AccountName:   testAzureAccountName,
-			AccountKey:    testAzureAccountKey,
-			Endpoint:      testAzureEndpoint,
-			ContainerName: testBucket,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AzureBlob: &models.AzureBlob{
+				AccountName:   testAzureAccountName,
+				AccountKey:    testAzureAccountKey,
+				Endpoint:      testAzureEndpoint,
+				ContainerName: testBucket,
+			},
+			GcpStorage: &models.GcpStorage{},
+			AwsS3:      &models.AwsS3{},
+			Local:      &models.Local{},
 		},
-		GcpStorage: &models.GcpStorage{},
-		AwsS3:      &models.AwsS3{},
-		Local:      &models.Local{},
 	}
 
 	writer, err = newWriter(ctx, params, slog.Default())
@@ -327,10 +345,12 @@ func TestNewStdWriter(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: config.StdPlaceholder,
 		},
-		AwsS3:      &models.AwsS3{},
-		GcpStorage: &models.GcpStorage{},
-		AzureBlob:  &models.AzureBlob{},
-		Local:      &models.Local{},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
 	}
 
 	writer, err := newWriter(t.Context(), params, slog.Default())

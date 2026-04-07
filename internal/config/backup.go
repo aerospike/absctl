@@ -36,18 +36,10 @@ const (
 // BackupServiceConfig represents the configuration structure for the backup service
 // involving various policies and integrations.
 type BackupServiceConfig struct {
-	App          *models.App
-	ClientConfig *client.AerospikeConfig
-	ClientPolicy *models.ClientPolicy
-	Backup       *models.Backup
-	BackupXDR    *models.BackupXDR
-	Compression  *models.Compression
-	Encryption   *models.Encryption
-	SecretAgent  *models.SecretAgent
-	AwsS3        *models.AwsS3
-	GcpStorage   *models.GcpStorage
-	AzureBlob    *models.AzureBlob
-	Local        *models.Local
+	Backup    *models.Backup
+	BackupXDR *models.BackupXDR
+
+	ServiceConfigCommon
 }
 
 // NewBackupServiceConfig initializes and returns a BackupServiceConfig struct
@@ -67,20 +59,24 @@ func NewBackupServiceConfig(
 	azureBlob *models.AzureBlob,
 	local *models.Local,
 ) (*BackupServiceConfig, error) {
-	return &BackupServiceConfig{
-		App:          app,
-		ClientConfig: clientConfig,
-		ClientPolicy: clientPolicy,
-		Backup:       backupScan,
-		BackupXDR:    backupXDR,
-		Compression:  compression,
-		Encryption:   encryption,
-		SecretAgent:  secretAgent,
-		AwsS3:        awsS3,
-		GcpStorage:   gcpStorage,
-		AzureBlob:    azureBlob,
-		Local:        local,
-	}, nil
+	serviceConfig := &BackupServiceConfig{
+		Backup:    backupScan,
+		BackupXDR: backupXDR,
+		ServiceConfigCommon: *NewServiceConfigCommon(
+			app,
+			clientConfig,
+			clientPolicy,
+			compression,
+			encryption,
+			secretAgent,
+			awsS3,
+			gcpStorage,
+			azureBlob,
+			local,
+		),
+	}
+
+	return serviceConfig, nil
 }
 
 // IsXDR determines if the backup configuration is an XDR backup by checking if BackupXDR is non-nil and Backup is nil.
@@ -135,17 +131,7 @@ func (b *BackupServiceConfig) Validate() error {
 		return err
 	}
 
-	if err := validateStorages(
-		true,
-		b.AwsS3,
-		b.GcpStorage,
-		b.AzureBlob,
-		b.Local,
-	); err != nil {
-		return err
-	}
-
-	if err := b.SecretAgent.Validate(); err != nil {
+	if err := b.ServiceConfigCommon.Validate(true); err != nil {
 		return err
 	}
 

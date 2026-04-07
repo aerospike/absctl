@@ -62,18 +62,23 @@ func Test_BackupWithState(t *testing.T) {
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		App: &models.App{},
-		ClientConfig: &client.AerospikeConfig{
-			Seeds: client.HostTLSPortSlice{
-				hostPort,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			App: &models.App{},
+			ClientConfig: &client.AerospikeConfig{
+				Seeds: client.HostTLSPortSlice{
+					hostPort,
+				},
+				User:     testASLoginPassword,
+				Password: testASLoginPassword,
 			},
-			User:     testASLoginPassword,
-			Password: testASLoginPassword,
-		},
-		ClientPolicy: &models.ClientPolicy{
-			Timeout:      1000,
-			IdleTimeout:  1000,
-			LoginTimeout: 1000,
+			ClientPolicy: &models.ClientPolicy{
+				Timeout:      1000,
+				IdleTimeout:  1000,
+				LoginTimeout: 1000,
+			},
+			Compression: &models.Compression{
+				Mode: backup.CompressNone,
+			},
 		},
 		Backup: &models.Backup{
 			StateFileDst: testStateFile,
@@ -87,9 +92,6 @@ func Test_BackupWithState(t *testing.T) {
 				InfoRetriesMultiplier:         1,
 				InfoRetryIntervalMilliseconds: 1000,
 			},
-		},
-		Compression: &models.Compression{
-			Mode: backup.CompressNone,
 		},
 	}
 
@@ -112,18 +114,23 @@ func Test_BackupXDR(t *testing.T) {
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		App: &models.App{},
-		ClientConfig: &client.AerospikeConfig{
-			Seeds: client.HostTLSPortSlice{
-				hostPort,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			App: &models.App{},
+			ClientConfig: &client.AerospikeConfig{
+				Seeds: client.HostTLSPortSlice{
+					hostPort,
+				},
+				User:     testASLoginPassword,
+				Password: testASLoginPassword,
 			},
-			User:     testASLoginPassword,
-			Password: testASLoginPassword,
-		},
-		ClientPolicy: &models.ClientPolicy{
-			Timeout:      1000,
-			IdleTimeout:  1000,
-			LoginTimeout: 1000,
+			ClientPolicy: &models.ClientPolicy{
+				Timeout:      1000,
+				IdleTimeout:  1000,
+				LoginTimeout: 1000,
+			},
+			Compression: &models.Compression{
+				Mode: backup.CompressNone,
+			},
 		},
 		BackupXDR: &models.BackupXDR{
 			FileLimit:                     100000,
@@ -143,9 +150,6 @@ func Test_BackupXDR(t *testing.T) {
 			ResultQueueSize:               testAckQueueSize,
 			AckQueueSize:                  testResultQueueSize,
 			StartTimeoutMilliseconds:      10000,
-		},
-		Compression: &models.Compression{
-			Mode: backup.CompressNone,
 		},
 	}
 
@@ -168,18 +172,29 @@ func Test_BackupEstimates(t *testing.T) {
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		App: &models.App{},
-		ClientConfig: &client.AerospikeConfig{
-			Seeds: client.HostTLSPortSlice{
-				hostPort,
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			App: &models.App{},
+			ClientConfig: &client.AerospikeConfig{
+				Seeds: client.HostTLSPortSlice{
+					hostPort,
+				},
+				User:     testASLoginPassword,
+				Password: testASLoginPassword,
 			},
-			User:     testASLoginPassword,
-			Password: testASLoginPassword,
-		},
-		ClientPolicy: &models.ClientPolicy{
-			Timeout:      1000,
-			IdleTimeout:  1000,
-			LoginTimeout: 1000,
+			ClientPolicy: &models.ClientPolicy{
+				Timeout:      1000,
+				IdleTimeout:  1000,
+				LoginTimeout: 1000,
+			},
+			Compression: &models.Compression{
+				Mode: backup.CompressNone,
+			},
+			Encryption:  nil,
+			SecretAgent: nil,
+			AwsS3:       nil,
+			GcpStorage:  nil,
+			AzureBlob:   nil,
+			Local:       nil,
 		},
 		Backup: &models.Backup{
 			FileLimit: 100000,
@@ -193,15 +208,6 @@ func Test_BackupEstimates(t *testing.T) {
 			Estimate:        true,
 			EstimateSamples: 100,
 		},
-		Compression: &models.Compression{
-			Mode: backup.CompressNone,
-		},
-		Encryption:  nil,
-		SecretAgent: nil,
-		AwsS3:       nil,
-		GcpStorage:  nil,
-		AzureBlob:   nil,
-		Local:       nil,
 	}
 
 	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
