@@ -175,7 +175,7 @@ func getCompressionLog(c *models.Compression) slog.Attr {
 	}
 	// Separated nil check and value check for easy read.
 	if c.Mode == "" || strings.EqualFold(c.Mode, noneVal) {
-		return slog.String("compression", noneVal)
+		return slog.String("compress", noneVal)
 	}
 
 	return slog.Group("compress",
