@@ -34,6 +34,9 @@ func (f *ServerSideBackup) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
 
+	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage."+
+		"Example: aws-s3")
+
 	flagSet.Int64Var(&f.JobID, "job-id", 0, "Job id used for restore.")
 
 	flagSet.BoolVar(&f.Backup, "backup", false, "Backup the specified namespace.")

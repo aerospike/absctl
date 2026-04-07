@@ -107,11 +107,14 @@ func (s *Service) startBackup(ctx context.Context) error {
 
 	err = client.StartBackup(
 		ctx,
+		jobID,
 		s.config.SSb.Namespace,
+		s.config.SSb.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
-		jobID,
+		s.config.AwsS3.AccessKeyID,
+		s.config.AwsS3.SecretAccessKey,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
@@ -128,11 +131,14 @@ func (s *Service) startRestore(ctx context.Context, jobID int64) error {
 
 	err = client.StartRestore(
 		ctx,
+		jobID,
 		s.config.SSb.Namespace,
+		s.config.SSb.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
-		jobID,
+		s.config.AwsS3.AccessKeyID,
+		s.config.AwsS3.SecretAccessKey,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
