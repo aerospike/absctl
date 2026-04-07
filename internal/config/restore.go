@@ -51,17 +51,18 @@ func NewRestoreServiceConfig(
 ) (*RestoreServiceConfig, error) {
 	serviceConfig := &RestoreServiceConfig{
 		Restore: restore,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			Compression:  compression,
-			Encryption:   encryption,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-			GcpStorage:   gcpStorage,
-			AzureBlob:    azureBlob,
-		},
+		ServiceConfigCommon: *NewServiceConfigCommon(
+			app,
+			clientConfig,
+			clientPolicy,
+			compression,
+			encryption,
+			secretAgent,
+			awsS3,
+			gcpStorage,
+			azureBlob,
+			nil,
+		),
 	}
 
 	return serviceConfig, nil

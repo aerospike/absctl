@@ -96,7 +96,6 @@ func validateStorages(
 	azureBlob *models.AzureBlob,
 	local *models.Local,
 ) error {
-	// TODO: think how to rework this func. I want to get rid of it. Maybe one day I'll introduce models.Storage
 	var count int
 
 	if local != nil {
