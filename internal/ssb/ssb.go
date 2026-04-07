@@ -48,20 +48,28 @@ func NewService(
 	cfg *config.SSBServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	reader, err := storage.NewReader(
-		ctx,
-		&cfg.ServiceConfigCommon,
-		cfg.SSb.List,
-		"",
-		"",
-		"",
-		0,
-		false,
-		true,
-		logger,
+	var (
+		reader backup.StreamingReader
+		err    error
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create reader: %w", err)
+
+	if cfg.SSb.List != "" {
+		reader, err = storage.NewReader(
+			ctx,
+			&cfg.ServiceConfigCommon,
+			cfg.SSb.List,
+			"",
+			"",
+			"",
+			0,
+			false,
+			true,
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create reader: %w", err)
+		}
+
 	}
 
 	return &Service{
