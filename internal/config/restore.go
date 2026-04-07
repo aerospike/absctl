@@ -138,45 +138,48 @@ func logRestoreConfig(logger *slog.Logger, params *RestoreServiceConfig, restore
 		getNamespaceLog(restoreConfig),
 		getEncryptionLog(params.Encryption),
 		getCompressionLog(params.Compression),
-		slog.Any("retry", *restoreConfig.RetryPolicy),
-		slog.Any("sets", restoreConfig.SetList),
-		slog.Any("bins", restoreConfig.BinList),
+		slog.Duration("retryBaseInterval", restoreConfig.RetryPolicy.BaseTimeout),
+		slog.Uint64("retryMaxAttempts", uint64(restoreConfig.RetryPolicy.MaxRetries)),
+		slog.Float64("retryMultiplier", restoreConfig.RetryPolicy.Multiplier),
+		slog.Any("setList", restoreConfig.SetList),
+		slog.Any("binList", restoreConfig.BinList),
 		slog.Int("parallel", restoreConfig.Parallel),
 		slog.Int64("bandwidth", restoreConfig.Bandwidth),
-		slog.Bool("no_records", restoreConfig.NoRecords),
-		slog.Bool("no_indexes", restoreConfig.NoIndexes),
-		slog.Bool("no_udfs", restoreConfig.NoUDFs),
-		slog.Bool("disable_batch_writes", restoreConfig.DisableBatchWrites),
-		slog.Int("batch_size", restoreConfig.BatchSize),
-		slog.Int("max_asynx_batches", restoreConfig.MaxAsyncBatches),
-		slog.Int64("extra_ttl", restoreConfig.ExtraTTL),
-		slog.Bool("ignore_records_error", restoreConfig.IgnoreRecordError),
+		slog.Bool("no-records", restoreConfig.NoRecords),
+		slog.Bool("no-indexes", restoreConfig.NoIndexes),
+		slog.Bool("no-udfs", restoreConfig.NoUDFs),
+		slog.Bool("disable-batch-writes", restoreConfig.DisableBatchWrites),
+		slog.Int("batch-size", restoreConfig.BatchSize),
+		slog.Int("max-async-batches", restoreConfig.MaxAsyncBatches),
+		slog.Int64("extra-ttl", restoreConfig.ExtraTTL),
+		slog.Bool("ignore-record-error", restoreConfig.IgnoreRecordError),
+		slog.Bool("apply-metadata-last", restoreConfig.ApplyMetadataLast),
 	)
 }
 
 func getEncryptionLog(e *models.Encryption) slog.Attr {
 	if e == nil {
-		return slog.String("encryption", noneVal)
+		return slog.String("encrypt", noneVal)
 	}
 
 	if e.Mode == "" || strings.EqualFold(e.Mode, noneVal) {
-		return slog.String("encryption", noneVal)
+		return slog.String("encrypt", noneVal)
 	}
 
-	return slog.String("encryption", e.Mode)
+	return slog.String("encrypt", e.Mode)
 }
 
 func getCompressionLog(c *models.Compression) slog.Attr {
 	if c == nil {
-		return slog.String("compression", noneVal)
+		return slog.String("compress", noneVal)
 	}
 	// Separated nil check and value check for easy read.
 	if c.Mode == "" || strings.EqualFold(c.Mode, noneVal) {
 		return slog.String("compression", noneVal)
 	}
 
-	return slog.Group("compression",
-		slog.String("mode", c.Mode), slog.Int("level", c.Level),
+	return slog.Group("compress",
+		slog.String("algorithms", c.Mode), slog.Int("level", c.Level),
 	)
 }
 
