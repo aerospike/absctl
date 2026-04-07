@@ -179,7 +179,7 @@ func getCompressionLog(c *models.Compression) slog.Attr {
 	}
 
 	return slog.Group("compress",
-		slog.String("algorithms", c.Mode), slog.Int("level", c.Level),
+		slog.String("algorithm", c.Mode), slog.Int("level", c.Level),
 	)
 }
 
