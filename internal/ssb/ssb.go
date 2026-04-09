@@ -93,9 +93,9 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) listBackups(ctx context.Context) error {
-	l := lister.NewLister(s.reader, &lister.MetafileParserAbs{})
+	l := lister.NewLister(s.reader, &lister.MetafileParserSSb{})
 
-	backups, err := l.ListSSB(ctx, s.config.SSb.List)
+	backups, err := l.ListSSB(ctx, "")
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
