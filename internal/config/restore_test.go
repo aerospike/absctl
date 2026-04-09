@@ -369,7 +369,7 @@ func TestGetEncryptionLog(t *testing.T) {
 			t.Parallel()
 
 			result := getEncryptionLog(tt.encryption)
-			assert.Equal(t, "encryption", result.Key)
+			assert.Equal(t, "encrypt", result.Key)
 			assert.Equal(t, tt.expected, result.Value.String())
 		})
 	}
@@ -439,7 +439,7 @@ func TestGetCompressionLog(t *testing.T) {
 			t.Parallel()
 
 			result := getCompressionLog(tt.compression)
-			assert.Equal(t, "compression", result.Key)
+			assert.Equal(t, "compress", result.Key)
 
 			if tt.expectNone {
 				assert.Equal(t, noneVal, result.Value.String())
