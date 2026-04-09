@@ -69,7 +69,6 @@ func NewService(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create reader: %w", err)
 		}
-
 	}
 
 	return &Service{
@@ -95,7 +94,11 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) listBackups(ctx context.Context) error {
 	l := lister.NewLister(s.reader, &lister.MetafileParserSSb{})
 
-	backups, err := l.ListSSB(ctx, "")
+	if s.config.SSb.List == "/" || s.config.SSb.List == "\\" {
+		s.config.SSb.List = ""
+	}
+
+	backups, err := l.ListSSB(ctx, s.config.SSb.List)
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
