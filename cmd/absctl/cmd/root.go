@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
+	backuplist "github.com/aerospike/absctl/cmd/absctl/cmd/backup/blist"
 	backupcreate "github.com/aerospike/absctl/cmd/absctl/cmd/backup/create"
-	backuplist "github.com/aerospike/absctl/cmd/absctl/cmd/backup/list"
 	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
 	restorestart "github.com/aerospike/absctl/cmd/absctl/cmd/restore/start"
 	"github.com/aerospike/absctl/internal/flags"
