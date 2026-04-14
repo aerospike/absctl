@@ -53,11 +53,11 @@ func NewService(
 		err    error
 	)
 
-	if cfg.SSb.List != "" {
+	if cfg.SSb.ListPath != "" {
 		reader, err = storage.NewReader(
 			ctx,
 			&cfg.ServiceConfigCommon,
-			cfg.SSb.List,
+			cfg.SSb.ListPath,
 			"",
 			"",
 			"",
@@ -80,25 +80,21 @@ func NewService(
 
 func (s *Service) Run(ctx context.Context) error {
 	switch {
-	case s.config.SSb.List != "":
-		return s.listBackups(ctx)
-	case s.config.SSb.Backup:
-		return s.startBackup(ctx)
-	case s.config.SSb.Restore:
-		return s.startRestore(ctx, s.config.SSb.JobID)
+	case s.config.SSb.ListPath != "":
+		return s.ListBackups(ctx)
 	default:
-		return fmt.Errorf("invalid command")
+		return s.StartBackup(ctx)
 	}
 }
 
-func (s *Service) listBackups(ctx context.Context) error {
+func (s *Service) ListBackups(ctx context.Context) error {
 	l := lister.NewLister(s.reader, &lister.MetafileParserSSb{})
 
-	if s.config.SSb.List == "/" || s.config.SSb.List == "\\" {
-		s.config.SSb.List = ""
+	if s.config.SSb.ListPath == "/" || s.config.SSb.ListPath == "\\" {
+		s.config.SSb.ListPath = ""
 	}
 
-	backups, err := l.ListSSB(ctx, s.config.SSb.List)
+	backups, err := l.ListSSB(ctx, s.config.SSb.ListPath)
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
@@ -108,7 +104,7 @@ func (s *Service) listBackups(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) startBackup(ctx context.Context) error {
+func (s *Service) StartBackup(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
@@ -134,7 +130,7 @@ func (s *Service) startBackup(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) startRestore(ctx context.Context, jobID int64) error {
+func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err

@@ -20,8 +20,10 @@ import (
 	"strings"
 
 	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
+	backupcreate "github.com/aerospike/absctl/cmd/absctl/cmd/backup/create"
+	backuplist "github.com/aerospike/absctl/cmd/absctl/cmd/backup/list"
 	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
-	"github.com/aerospike/absctl/cmd/absctl/cmd/ssb"
+	restorestart "github.com/aerospike/absctl/cmd/absctl/cmd/restore/start"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
@@ -75,13 +77,16 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	rootCmd.PersistentFlags().AddFlagSet(rootFlagSet)
 
 	// Add subcommands - they will initialize their own operation-specific flags
-	backupCmd := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	restoreCmd := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	ssbCmd := ssb.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	backupCmd, backupShared := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	restoreCmd, restoreShared := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+
+	// server-integrated backup subcommands under backup and restore.
+	backupCmd.AddCommand(backupcreate.NewCmd(backupShared, c.flagsRoot, appVersion, commitHash, buildTime))
+	backupCmd.AddCommand(backuplist.NewCmd(backupShared, c.flagsRoot, appVersion, commitHash, buildTime))
+	restoreCmd.AddCommand(restorestart.NewCmd(restoreShared, c.flagsRoot, appVersion, commitHash, buildTime))
 
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
-	rootCmd.AddCommand(ssbCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
@@ -123,8 +128,11 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
-		fmt.Println("  backup    Aerospike backup command")
-		fmt.Println("  restore   Aerospike restore command")
+		fmt.Println("  backup          Aerospike backup command")
+		fmt.Println("  backup create   Create a server-integrated backup")
+		fmt.Println("  backup list     List server-integrated backups")
+		fmt.Println("  restore         Aerospike restore command")
+		fmt.Println("  restore start   Start a server-integrated restore")
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()
 		fmt.Println("\nUse \"absctl [command] --help\" for more information about a command.")

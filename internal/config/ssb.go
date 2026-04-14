@@ -19,7 +19,7 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
-// SSBServiceConfig holds the configuration for the Server-Side Backup (SSB) service.
+// SSBServiceConfig holds the configuration for the server-integrated Backup (SSB) service.
 type SSBServiceConfig struct {
 	SSb *models.ServerSideBackup
 
@@ -59,8 +59,8 @@ func NewSSBServiceConfig(
 }
 
 // Validate checks if the SSBServiceConfig and its embedded ServiceConfigCommon are correctly configured.
-func (s *SSBServiceConfig) Validate() error {
-	if err := s.ServiceConfigCommon.Validate(false); err != nil {
+func (s *SSBServiceConfig) Validate(isBackup bool) error {
+	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
 

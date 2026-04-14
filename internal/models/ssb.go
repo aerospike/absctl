@@ -16,11 +16,8 @@ package models
 
 // ServerSideBackup contains flags that will be mapped to ServerSideBackup.
 type ServerSideBackup struct {
-	List        string
+	ListPath    string
 	Namespace   string
 	JobID       int64
 	StorageType string
-
-	Backup  bool
-	Restore bool
 }
