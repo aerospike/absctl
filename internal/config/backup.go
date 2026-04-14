@@ -62,22 +62,18 @@ func NewBackupServiceConfig(
 	serviceConfig := &BackupServiceConfig{
 		Backup:    backupScan,
 		BackupXDR: backupXDR,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			Compression:  compression,
-			Encryption:   encryption,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-			GcpStorage:   gcpStorage,
-			AzureBlob:    azureBlob,
-			Local:        local,
-		},
-	}
-
-	if err := serviceConfig.Validate(); err != nil {
-		return nil, err
+		ServiceConfigCommon: *NewServiceConfigCommon(
+			app,
+			clientConfig,
+			clientPolicy,
+			compression,
+			encryption,
+			secretAgent,
+			awsS3,
+			gcpStorage,
+			azureBlob,
+			local,
+		),
 	}
 
 	return serviceConfig, nil
@@ -135,7 +131,7 @@ func (b *BackupServiceConfig) Validate() error {
 		return err
 	}
 
-	if err := b.ServiceConfigCommon.Validate(); err != nil {
+	if err := b.ServiceConfigCommon.Validate(true); err != nil {
 		return err
 	}
 
@@ -317,25 +313,25 @@ func logBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backupCon
 		slog.String("namespace", backupConfig.Namespace),
 		getEncryptionLog(params.Encryption),
 		getCompressionLog(params.Compression),
-		slog.String("filters", params.Backup.PartitionList),
-		slog.Any("nodes", backupConfig.NodeList),
-		slog.Any("sets", backupConfig.SetList),
-		slog.Any("bins", backupConfig.BinList),
-		slog.Any("rack", backupConfig.RackList),
-		slog.Any("parallel_read", backupConfig.ParallelRead),
-		slog.Any("parallel_write", backupConfig.ParallelWrite),
-		slog.Bool("no_records", backupConfig.NoRecords),
-		slog.Bool("no_indexes", backupConfig.NoIndexes),
-		slog.Bool("no_udfs", backupConfig.NoUDFs),
-		slog.Int("records_per_second", backupConfig.RecordsPerSecond),
+		slog.String("partition-list", params.Backup.PartitionList),
+		slog.Any("node-list", backupConfig.NodeList),
+		slog.Any("set-list", backupConfig.SetList),
+		slog.Any("bin-list", backupConfig.BinList),
+		slog.Any("rack-list", backupConfig.RackList),
+		slog.Any("parallel-read", backupConfig.ParallelRead),
+		slog.Any("parallel-write", backupConfig.ParallelWrite),
+		slog.Bool("no-records", backupConfig.NoRecords),
+		slog.Bool("no-indexes", backupConfig.NoIndexes),
+		slog.Bool("no-udfs", backupConfig.NoUDFs),
+		slog.Int("records-per-second", backupConfig.RecordsPerSecond),
 		slog.Int64("bandwidth", backupConfig.Bandwidth),
-		slog.Uint64("file_limit", backupConfig.FileLimit),
+		slog.Uint64("file-limit", backupConfig.FileLimit),
 		slog.Bool("compact", backupConfig.Compact),
-		slog.Bool("not_ttl_only", backupConfig.NoTTLOnly),
-		slog.String("state_file", backupConfig.StateFile),
+		slog.Bool("no-ttl-only", backupConfig.NoTTLOnly),
+		slog.String("state-file-dst", backupConfig.StateFile),
 		slog.Bool("continue", backupConfig.Continue),
-		slog.Int64("page_size", backupConfig.PageSize),
-		slog.String("output_prefix", backupConfig.OutputFilePrefix),
+		slog.Int64("scan-page-size", backupConfig.PageSize),
+		slog.String("output-file-prefix", backupConfig.OutputFilePrefix),
 	)
 }
 
@@ -344,17 +340,17 @@ func logXdrBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backup
 		slog.String("namespace", backupXDRConfig.Namespace),
 		getEncryptionLog(params.Encryption),
 		getCompressionLog(params.Compression),
-		slog.Any("parallel_write", backupXDRConfig.ParallelWrite),
-		slog.Uint64("file_limit", backupXDRConfig.FileLimit),
+		slog.Any("parallel-write", backupXDRConfig.ParallelWrite),
+		slog.Uint64("file-limit", backupXDRConfig.FileLimit),
 		slog.String("dc", backupXDRConfig.DC),
-		slog.String("local_address", backupXDRConfig.LocalAddress),
-		slog.Int("local_port", backupXDRConfig.LocalPort),
+		slog.String("local-address", backupXDRConfig.LocalAddress),
+		slog.Int("local-port", backupXDRConfig.LocalPort),
 		slog.String("rewind", backupXDRConfig.Rewind),
-		slog.Int("max_throughput", backupXDRConfig.MaxThroughput),
-		slog.Duration("read_timeout", backupXDRConfig.ReadTimeout),
-		slog.Duration("write_timeout", backupXDRConfig.WriteTimeout),
-		slog.Int("result_queue_size", backupXDRConfig.ResultQueueSize),
-		slog.Int("ack_queue_size", backupXDRConfig.AckQueueSize),
-		slog.Int("max_connections", backupXDRConfig.MaxConnections),
+		slog.Int("max-throughput", backupXDRConfig.MaxThroughput),
+		slog.Duration("read-timeout", backupXDRConfig.ReadTimeout),
+		slog.Duration("write-timeout", backupXDRConfig.WriteTimeout),
+		slog.Int("results-queue-size", backupXDRConfig.ResultQueueSize),
+		slog.Int("ack-queue-size", backupXDRConfig.AckQueueSize),
+		slog.Int("max-connections", backupXDRConfig.MaxConnections),
 	)
 }

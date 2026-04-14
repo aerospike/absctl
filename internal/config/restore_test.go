@@ -41,7 +41,7 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 	gcpStorage := &models.GcpStorage{}
 	azureBlob := &models.AzureBlob{}
 
-	config, err := NewRestoreServiceConfig(
+	config, _ := NewRestoreServiceConfig(
 		app,
 		clientConfig,
 		clientPolicy,
@@ -53,9 +53,10 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		gcpStorage,
 		azureBlob,
 	)
+	config.Restore.Mode = models.RestoreModeASB
 
-	require.ErrorContains(t, err, "invalid restore mode")
-	require.Nil(t, config)
+	err := config.Validate()
+	require.ErrorContains(t, err, "input file or directory required")
 }
 
 func TestRestoreServiceConfig_IsStdin(t *testing.T) {
@@ -368,7 +369,7 @@ func TestGetEncryptionLog(t *testing.T) {
 			t.Parallel()
 
 			result := getEncryptionLog(tt.encryption)
-			assert.Equal(t, "encryption", result.Key)
+			assert.Equal(t, "encrypt", result.Key)
 			assert.Equal(t, tt.expected, result.Value.String())
 		})
 	}
@@ -438,7 +439,7 @@ func TestGetCompressionLog(t *testing.T) {
 			t.Parallel()
 
 			result := getCompressionLog(tt.compression)
-			assert.Equal(t, "compression", result.Key)
+			assert.Equal(t, "compress", result.Key)
 
 			if tt.expectNone {
 				assert.Equal(t, noneVal, result.Value.String())

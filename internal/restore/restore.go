@@ -56,9 +56,6 @@ func NewService(
 		aerospikeClient backup.AerospikeClient
 		err             error
 	)
-	// Set default restore mode to asb.
-	// This should be removed once asbx is released.
-	cfg.Restore.Mode = models.RestoreModeASB
 
 	// Initializations.
 	restoreConfig := config.NewRestoreConfig(cfg, logger)
