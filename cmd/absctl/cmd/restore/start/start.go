@@ -23,8 +23,8 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/integrated"
 	"github.com/aerospike/absctl/internal/logging"
-	"github.com/aerospike/absctl/internal/ssb"
 	"github.com/aerospike/absctl/internal/subcmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -86,7 +86,7 @@ func run(
 		}
 	}()
 
-	svc, err := ssb.NewService(cmd.Context(), cfg, logger)
+	svc, err := integrated.NewService(cmd.Context(), cfg, logger)
 	if err != nil {
 		return fmt.Errorf("server side restore initialization failed: %w", err)
 	}
@@ -102,8 +102,8 @@ func initService(
 	_ context.Context,
 	shared *subcmd.SharedFlags,
 	ssbFlags *flags.ServerSideBackup,
-) (*config.SSBServiceConfig, *slog.Logger, func() error, error) {
-	cfg := config.NewSSBServiceConfig(
+) (*config.IntegratedServiceConfig, *slog.Logger, func() error, error) {
+	cfg := config.NewIntegratedServiceConfig(
 		ssbFlags.GetServerSideBackup(),
 		shared.App.GetApp(),
 		shared.Aerospike.NewAerospikeConfig(),

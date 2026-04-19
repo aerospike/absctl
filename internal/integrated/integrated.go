@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ssb
+package integrated
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"text/tabwriter"
-	"time"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/lister"
@@ -31,10 +28,9 @@ import (
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
 
-// Service represents a server side backup and restore service.
+// Service represents a server integrated backup and restore service.
 type Service struct {
-	config *config.SSBServiceConfig
-
+	config *config.IntegratedServiceConfig
 	reader backup.StreamingReader
 
 	// reportToLog bool
@@ -45,7 +41,7 @@ type Service struct {
 // NewService initializes and returns a new Service instance.
 func NewService(
 	ctx context.Context,
-	cfg *config.SSBServiceConfig,
+	cfg *config.IntegratedServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	var (
@@ -53,11 +49,12 @@ func NewService(
 		err    error
 	)
 
-	if cfg.SSb.ListPath != "" {
+	// If list path is set, init reader.
+	if cfg.IntegratedBackup.ListPath != "" {
 		reader, err = storage.NewReader(
 			ctx,
 			&cfg.ServiceConfigCommon,
-			cfg.SSb.ListPath,
+			cfg.IntegratedBackup.ListPath,
 			"",
 			"",
 			"",
@@ -80,7 +77,7 @@ func NewService(
 
 func (s *Service) Run(ctx context.Context) error {
 	switch {
-	case s.config.SSb.ListPath != "":
+	case s.config.IntegratedBackup.ListPath != "":
 		return s.ListBackups(ctx)
 	default:
 		return s.StartBackup(ctx)
@@ -88,35 +85,32 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) ListBackups(ctx context.Context) error {
-	l := lister.NewLister(s.reader, &lister.MetafileParserSSb{})
+	l := lister.NewLister(s.reader)
 
-	if s.config.SSb.ListPath == "/" || s.config.SSb.ListPath == "\\" {
-		s.config.SSb.ListPath = ""
+	if s.config.IntegratedBackup.ListPath == "/" || s.config.IntegratedBackup.ListPath == "\\" {
+		s.config.IntegratedBackup.ListPath = ""
 	}
 
-	backups, err := l.ListSSB(ctx, s.config.SSb.ListPath)
-	if err != nil {
+	if err := l.ListBackups(ctx, s.config.IntegratedBackup.ListPath); err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
-
-	printBackupEntriesForSSB(backups)
 
 	return nil
 }
 
+// StartBackup initiates a backup process using the service's configured backup settings
+// and returns an error if it fails.
 func (s *Service) StartBackup(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
 
-	jobID := time.Now().UnixMilli()
-
 	err = client.StartBackup(
 		ctx,
-		jobID,
-		s.config.SSb.Namespace,
-		s.config.SSb.StorageType,
+		0,
+		s.config.IntegratedBackup.Namespace,
+		s.config.IntegratedBackup.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
@@ -127,9 +121,12 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
+	s.logger.Info("Server integrated backup started.")
+
 	return nil
 }
 
+// StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
 func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 	client, err := s.newInfoClient()
 	if err != nil {
@@ -139,8 +136,8 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 	err = client.StartRestore(
 		ctx,
 		jobID,
-		s.config.SSb.Namespace,
-		s.config.SSb.StorageType,
+		s.config.IntegratedBackup.Namespace,
+		s.config.IntegratedBackup.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
@@ -151,10 +148,12 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
+	s.logger.Info("Server integrated restore started.", slog.Int64("job-id", jobID))
+
 	return nil
 }
 
-// newInfoClient separate function for lazy load.
+// newInfoClient separate function for a lazy load.
 func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	aerospikeClient, err := storage.NewAerospikeClient(
 		s.config.ClientConfig,
@@ -176,66 +175,4 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	}
 
 	return infoClient, nil
-}
-
-//nolint:unused // Function for testing concept.
-func printBackupEntriesForABS(backups []*lister.BackupEntry) {
-	// Initialize tabwriter
-	// minwidth, tabwidth, padding, padchar, flags
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-
-	// Print the Header
-	fmt.Fprintln(w, "NAMESPACE\tCREATED\tDURATION\tRECORDS\tSIZE\tFILES\tCOMPRESSION")
-
-	for _, b := range backups {
-		// Calculate duration if finished time exists
-		duration := "N/A"
-		if !b.Finished.IsZero() {
-			duration = b.Finished.Sub(b.Created).Round(time.Second).String()
-		}
-
-		// Format size for readability (Optional: could add a helper for MB/GB)
-		sizeStr := fmt.Sprintf("%d B", b.ByteCount)
-		if b.ByteCount > 1024*1024 {
-			sizeStr = fmt.Sprintf("%.2f MB", float64(b.ByteCount)/(1024*1024))
-		}
-
-		// Use \t to separate columns
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%d\t%s\n",
-			b.BackupMetadata.Namespace,
-			b.Created.Format("2006-01-02 15:04:05"),
-			duration,
-			b.RecordCount,
-			sizeStr,
-			b.FileCount,
-			b.Compression,
-		)
-	}
-
-	// Flush the writer to output the buffered data
-	w.Flush()
-}
-
-func printBackupEntriesForSSB(backups []*lister.BackupEntry) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-
-	// Header (adapted to Root fields)
-	fmt.Fprintln(w, "NAMESPACE\tBACKUP_ID\tNODE\tFORMAT\tPARTITIONS")
-
-	for _, b := range backups {
-		// Skip entries without Root (safety)
-		if b.Root == nil {
-			continue
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\n",
-			b.Root.Namespace,
-			b.BackupID,
-			b.NodeID,
-			b.FormatVersion,
-			len(b.Partitions),
-		)
-	}
-
-	w.Flush()
 }

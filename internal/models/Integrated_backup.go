@@ -14,8 +14,8 @@
 
 package models
 
-// ServerSideBackup contains flags that will be mapped to ServerSideBackup.
-type ServerSideBackup struct {
+// IntegratedBackup contains flags that will be mapped to IntegratedBackup.
+type IntegratedBackup struct {
 	ListPath    string
 	Namespace   string
 	JobID       int64

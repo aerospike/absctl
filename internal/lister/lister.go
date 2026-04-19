@@ -16,95 +16,79 @@ package lister
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 
+	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
-	"github.com/aerospike/backup-go/models"
+	bModels "github.com/aerospike/backup-go/models"
 )
 
-const (
-	// metafileABS is the name of the metadata file for ABS.
-	metafileABS = "metadata.yaml"
-	// metafileSSB is the name of the metadata file for Server Side Backup.
-	metafileSSB = "root.json"
-)
-
-// metafileParser parses the content of a BackupEntry.
-type metafileParser interface {
-	Parse(string, []byte) (*BackupEntry, error)
-}
+// metafileSSB is the name of the metadata file for Server Side Backup.
+const metafileSSB = "metadata.json"
 
 // Lister lists all backups in the given path.
 type Lister struct {
 	reader backup.StreamingReader
-	parser metafileParser
 }
 
 // NewLister creates a new backup Lister.
 func NewLister(
 	reader backup.StreamingReader,
-	parser metafileParser,
 ) *Lister {
 	return &Lister{
 		reader: reader,
-		parser: parser,
 	}
 }
 
-// ListABS lists all backups in the given path.
-func (l *Lister) ListABS(ctx context.Context, path string) ([]*BackupEntry, error) {
-	return l.findMetafiles(ctx, path, metafileABS)
-}
-
-// ListSSB lists all backups in the given path.
-func (l *Lister) ListSSB(ctx context.Context, path string) ([]*BackupEntry, error) {
-	return l.findMetafiles(ctx, path, metafileSSB)
-}
-
-// findMetafiles finds all metafiles in the given path.
-func (l *Lister) findMetafiles(ctx context.Context, path, filename string) ([]*BackupEntry, error) {
+// ListBackups lists all backups in the given path.
+func (l *Lister) ListBackups(ctx context.Context, path string) error {
 	allObjects, err := l.reader.ListObjects(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list objects: %w", err)
+		return fmt.Errorf("failed to list objects: %w", err)
 	}
 
-	metafiles := make([]*BackupEntry, 0)
-
 	for _, object := range allObjects {
-		if filepath.Base(object) == filename {
+		if filepath.Base(object) == metafileSSB {
 			mf, err := l.readMetafile(ctx, object)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
+				return fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
 			}
 
-			metafiles = append(metafiles, mf)
+			logging.PrintMetadata(mf)
 		}
 	}
 
-	return metafiles, nil
+	return nil
 }
 
 // readMetafile reads the content of a BackupEntry.
-func (l *Lister) readMetafile(ctx context.Context, path string) (*BackupEntry, error) {
+func (l *Lister) readMetafile(ctx context.Context, path string) (models.Metadata, error) {
 	file, err := l.openFile(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", path, err)
+		return models.Metadata{}, fmt.Errorf("failed to open file %s: %w", path, err)
 	}
 	defer file.Reader.Close()
 
 	content, err := io.ReadAll(file.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
+		return models.Metadata{}, fmt.Errorf("failed to read file %s: %w", path, err)
 	}
 
-	return l.parser.Parse(path, content)
+	var b models.Metadata
+	if err := json.Unmarshal(content, &b); err != nil {
+		return models.Metadata{}, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	return b, nil
 }
 
 // openFile opens a file for reading.
-func (l *Lister) openFile(ctx context.Context, path string) (models.File, error) {
-	readersCh := make(chan models.File, 1)
+func (l *Lister) openFile(ctx context.Context, path string) (bModels.File, error) {
+	readersCh := make(chan bModels.File, 1)
 	errorsCh := make(chan error, 1)
 
 	defer close(readersCh)
@@ -114,9 +98,9 @@ func (l *Lister) openFile(ctx context.Context, path string) (models.File, error)
 
 	select {
 	case <-ctx.Done():
-		return models.File{}, ctx.Err()
+		return bModels.File{}, ctx.Err()
 	case err := <-errorsCh:
-		return models.File{}, err
+		return bModels.File{}, err
 	case file := <-readersCh:
 		return file, nil
 	}
