@@ -158,7 +158,7 @@ func buildSections(operation string, opID int) []docSection {
 	// 3. Aerospike Client Flags
 	aeroFlags := asFlags.NewDefaultAerospikeFlags()
 	aeroFS := aeroFlags.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapCertFlagsForSecrets(aeroFS)
+	flags.WrapFlagsForSecrets(aeroFS)
 	sections = append(sections, docSection{
 		TextContent: flags.SectionTextAerospike,
 		FS:          aeroFS,

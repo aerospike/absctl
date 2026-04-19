@@ -43,6 +43,9 @@ const (
 // Secret Agent reference (secrets:resource:key). Without this wrapper,
 // CertFlag.Set() attempts to read the value as a file path during flag parsing,
 // which fails before PersistentPreRunE can resolve secrets.
+//
+// After resolution the cert content is assigned directly, bypassing
+// CertFlag.Set() which would interpret it as a file path.
 type deferredCertValue struct {
 	pendingSecret bool
 	raw           string
@@ -58,8 +61,6 @@ func (d *deferredCertValue) Set(val string) error {
 	}
 
 	if d.pendingSecret {
-		// Secret was resolved — store the cert content directly,
-		// bypassing CertFlag.Set() which would try to read it as a file.
 		d.pendingSecret = false
 		d.raw = ""
 		*d.original = asFlags.CertFlag(val)
@@ -82,13 +83,56 @@ func (d *deferredCertValue) Type() string {
 	return d.original.Type()
 }
 
-// WrapCertFlagsForSecrets replaces CertFlag Values on TLS-related flags with a
-// deferred wrapper that accepts Secret Agent references (secrets:resource:key).
-// Must be called after NewFlagSet() and before the flagset is parsed by cobra.
-func WrapCertFlagsForSecrets(fs *pflag.FlagSet) {
-	certFlagNames := []string{flagTLSCaFile, flagTLSCertFile, flagTLSKeyFile, flagTLSCapath, flagTLSKeyFilePassword}
+// deferredSecretValue wraps any pflag.Value to defer validation when the value
+// is a Secret Agent reference (secrets:resource:key). Unlike deferredCertValue,
+// the resolved value is passed through to the original Set() method, which is
+// correct for types like HostTLSPortSliceFlag, TLSProtocolsFlag, CertPathFlag
+// and int where Set() can parse the resolved string.
+type deferredSecretValue struct {
+	pendingSecret bool
+	raw           string
+	original      pflag.Value
+}
 
-	for _, name := range certFlagNames {
+func (d *deferredSecretValue) Set(val string) error {
+	if strings.HasPrefix(val, secretsPrefix) {
+		d.pendingSecret = true
+		d.raw = val
+
+		return nil
+	}
+
+	if d.pendingSecret {
+		d.pendingSecret = false
+		d.raw = ""
+	}
+
+	return d.original.Set(val)
+}
+
+func (d *deferredSecretValue) String() string {
+	if d.raw != "" {
+		return d.raw
+	}
+
+	return d.original.String()
+}
+
+func (d *deferredSecretValue) Type() string {
+	return d.original.Type()
+}
+
+// WrapFlagsForSecrets replaces flag Values on Aerospike connection flags with
+// deferred wrappers that accept Secret Agent references (secrets:resource:key).
+// Must be called after NewFlagSet() and before the flagset is parsed by cobra.
+//
+// CertFlag values get a specialised wrapper that bypasses Set() after
+// resolution (the resolved value is cert content, not a file path).
+// All other custom types get a generic wrapper that delegates to the original
+// Set() after resolution.
+func WrapFlagsForSecrets(fs *pflag.FlagSet) {
+	// CertFlag types: resolved value is cert content, must bypass Set().
+	for _, name := range []string{flagTLSCaFile, flagTLSCertFile, flagTLSKeyFile} {
 		f := fs.Lookup(name)
 		if f == nil {
 			continue
@@ -100,5 +144,16 @@ func WrapCertFlagsForSecrets(fs *pflag.FlagSet) {
 		}
 
 		f.Value = &deferredCertValue{original: cert}
+	}
+
+	// Other flag types whose Set() would reject a secrets: value during
+	// parsing. The resolved value is passed through to the original Set().
+	for _, name := range []string{flagHost, flagPort, flagTLSCapath, flagTLSProtocols} {
+		f := fs.Lookup(name)
+		if f == nil {
+			continue
+		}
+
+		f.Value = &deferredSecretValue{original: f.Value}
 	}
 }
