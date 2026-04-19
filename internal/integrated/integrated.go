@@ -148,6 +148,7 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
+	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated restore started.", slog.Int64("job-id", jobID))
 
 	return nil
