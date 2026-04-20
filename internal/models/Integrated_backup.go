@@ -18,6 +18,6 @@ package models
 type IntegratedBackup struct {
 	ListPath    string
 	Namespace   string
-	JobID       int64
+	JobID       string
 	StorageType string
 }

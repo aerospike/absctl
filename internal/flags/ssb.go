@@ -33,7 +33,7 @@ func (f *ServerSideBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
 		"Example: aws-s3")
-	flagSet.Int64Var(&f.JobID, "job-id", 0, "Job id used for restore.")
+	flagSet.StringVar(&f.JobID, "job-id", "", "Job id used for restore.")
 
 	return flagSet
 }
@@ -52,7 +52,7 @@ func (f *ServerSideBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
 		"Example: aws-s3")
-	flagSet.Int64Var(&f.JobID, "job-id", 0, "Job id used for restore.")
+	flagSet.StringVar(&f.JobID, "job-id", "", "Job id used for restore.")
 
 	return flagSet
 }

@@ -127,7 +127,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 }
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
-func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
+func (s *Service) StartRestore(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 
 	err = client.StartRestore(
 		ctx,
-		jobID,
+		s.config.IntegratedBackup.JobID,
 		s.config.IntegratedBackup.Namespace,
 		s.config.IntegratedBackup.StorageType,
 		s.config.AwsS3.BucketName,
@@ -149,7 +149,8 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 	}
 
 	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
-	s.logger.Info("Server integrated restore started", slog.Int64("job-id", jobID))
+	s.logger.Info("Server integrated restore started",
+		slog.String("job-id", s.config.IntegratedBackup.JobID))
 
 	return nil
 }

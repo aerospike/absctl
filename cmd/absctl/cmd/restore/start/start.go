@@ -91,7 +91,7 @@ func run(
 		return fmt.Errorf("server side restore initialization failed: %w", err)
 	}
 
-	if err := svc.StartRestore(cmd.Context(), ssbFlags.JobID); err != nil {
+	if err := svc.StartRestore(cmd.Context()); err != nil {
 		return fmt.Errorf("server side restore failed: %w", err)
 	}
 
