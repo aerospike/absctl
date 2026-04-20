@@ -121,7 +121,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
-	s.logger.Info("Server integrated backup started.")
+	s.logger.Info("Server integrated backup started")
 
 	return nil
 }
@@ -149,7 +149,7 @@ func (s *Service) StartRestore(ctx context.Context, jobID int64) error {
 	}
 
 	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
-	s.logger.Info("Server integrated restore started.", slog.Int64("job-id", jobID))
+	s.logger.Info("Server integrated restore started", slog.Int64("job-id", jobID))
 
 	return nil
 }
