@@ -108,7 +108,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 	err = client.StartBackup(
 		ctx,
-		0,
+		s.config.IntegratedBackup.JobID,
 		s.config.IntegratedBackup.Namespace,
 		s.config.IntegratedBackup.StorageType,
 		s.config.AwsS3.BucketName,
