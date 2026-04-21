@@ -19,7 +19,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"text/tabwriter"
 
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
@@ -51,6 +53,10 @@ func (l *Lister) ListBackups(ctx context.Context, path string) error {
 		return fmt.Errorf("failed to list objects: %w", err)
 	}
 
+	// Print Table Header
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
+	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
+
 	for _, object := range allObjects {
 		if filepath.Base(object) == metafileSSB {
 			mf, err := l.readMetafile(ctx, object)
@@ -58,9 +64,12 @@ func (l *Lister) ListBackups(ctx context.Context, path string) error {
 				return fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
 			}
 
-			logging.PrintMetadata(mf)
+			logging.PrintMetadata(w, mf)
 		}
 	}
+
+	// Flush the writer to output the buffered table
+	w.Flush()
 
 	return nil
 }

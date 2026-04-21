@@ -37,7 +37,7 @@ const (
 
 func NewCmd(shared *subcmd.SharedFlags, flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
 ) *cobra.Command {
-	ssbFlags := flags.NewServerSideBackup()
+	ssbFlags := flags.NewIntegratedBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
 
 	cmd := &cobra.Command{
@@ -66,7 +66,7 @@ func NewCmd(shared *subcmd.SharedFlags, flagsRoot *flags.Root, appVersion, commi
 func run(
 	cmd *cobra.Command,
 	shared *subcmd.SharedFlags,
-	ssbFlags *flags.ServerSideBackup,
+	ssbFlags *flags.IntegratedBackup,
 	flagsRoot *flags.Root,
 	appVersion, commitHash, buildTime string,
 ) error {
@@ -101,10 +101,10 @@ func run(
 func initService(
 	_ context.Context,
 	shared *subcmd.SharedFlags,
-	ssbFlags *flags.ServerSideBackup,
+	ssbFlags *flags.IntegratedBackup,
 ) (*config.IntegratedServiceConfig, *slog.Logger, func() error, error) {
 	cfg := config.NewIntegratedServiceConfig(
-		ssbFlags.GetServerSideBackup(),
+		ssbFlags.GetIntegratedBackup(),
 		shared.App.GetApp(),
 		shared.Aerospike.NewAerospikeConfig(),
 		shared.ClientPolicy.GetClientPolicy(),

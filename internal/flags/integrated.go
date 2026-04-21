@@ -19,26 +19,25 @@ import (
 	"github.com/spf13/pflag"
 )
 
-type ServerSideBackup struct {
+type IntegratedBackup struct {
 	models.IntegratedBackup
 }
 
-func NewServerSideBackup() *ServerSideBackup {
-	return &ServerSideBackup{}
+func NewIntegratedBackup() *IntegratedBackup {
+	return &IntegratedBackup{}
 }
 
-func (f *ServerSideBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
+func (f *IntegratedBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
 		"Example: aws-s3")
-	flagSet.StringVar(&f.JobID, "job-id", "", "Job id used for restore.")
 
 	return flagSet
 }
 
-func (f *ServerSideBackup) NewBackupListFlagSet() *pflag.FlagSet {
+func (f *IntegratedBackup) NewBackupListFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.ListPath, "path", "", "Path to list backups from.")
@@ -46,17 +45,17 @@ func (f *ServerSideBackup) NewBackupListFlagSet() *pflag.FlagSet {
 	return flagSet
 }
 
-func (f *ServerSideBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
+func (f *IntegratedBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
 		"Example: aws-s3")
-	flagSet.StringVar(&f.JobID, "job-id", "", "Job id used for restore.")
+	flagSet.StringVar(&f.JobID, "backup-id", "", "Job id used for restore.")
 
 	return flagSet
 }
 
-func (f *ServerSideBackup) GetServerSideBackup() *models.IntegratedBackup {
+func (f *IntegratedBackup) GetIntegratedBackup() *models.IntegratedBackup {
 	return &f.IntegratedBackup
 }

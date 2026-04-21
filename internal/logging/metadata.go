@@ -16,40 +16,46 @@ package logging
 
 import (
 	"fmt"
-	"os"
-	"strings"
-	"text/tabwriter"
+	"io"
+	"time"
 
 	"github.com/aerospike/absctl/internal/models"
 )
 
 // PrintMetadata displays the node data in a formatted table.
-func PrintMetadata(data models.Metadata) {
-	header := fmt.Sprintf("BACKUP ID: %s | NAMESPACE: %s | VERSION: %d",
-		data.BackupID, data.Namespace, data.FormatVersion)
-	line := strings.Repeat("-", len(header))
+func PrintMetadata(w io.Writer, data models.Metadata) {
+	// count totals.
+	var (
+		totalRecords int64
+		totalBytes   int64
+		minCreated   time.Time
+		maxFinished  time.Time
+	)
 
-	fmt.Println()
-	fmt.Println(header)
-	fmt.Println(line)
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-
-	// Print Table Header
-	fmt.Fprintln(w, "NODE ID\tRECORDS\tBYTES\tPARTITIONS\tCREATED\tFINISHED")
-
-	// Print Rows
-	for _, node := range data.Nodes {
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\t%s\n",
-			node.NodeID,
-			node.RecordCount,
-			node.ByteCount,
-			node.PartitionCount,
-			node.Created.Format("2006-01-02 15:04:05"),
-			node.Finished.Format("2006-01-02 15:04:05"),
-		)
+	// Initialize with the values of the first node
+	if len(data.Nodes) != 0 {
+		minCreated = data.Nodes[0].Created
+		maxFinished = data.Nodes[0].Finished
 	}
 
-	// Flush the writer to output the buffered table
-	w.Flush()
+	for _, node := range data.Nodes {
+		totalRecords += node.RecordCount
+		totalBytes += node.ByteCount
+
+		if node.Created.Before(minCreated) {
+			minCreated = node.Created
+		}
+		if node.Finished.After(maxFinished) {
+			maxFinished = node.Finished
+		}
+	}
+
+	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
+		data.BackupID,
+		data.Namespace,
+		totalRecords,
+		totalBytes,
+		minCreated.Format("2006-01-02 15:04:05"),
+		maxFinished.Format("2006-01-02 15:04:05"),
+	)
 }

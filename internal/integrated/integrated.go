@@ -106,9 +106,8 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	err = client.StartBackup(
+	JobID, err := client.StartBackup(
 		ctx,
-		s.config.IntegratedBackup.JobID,
 		s.config.IntegratedBackup.Namespace,
 		s.config.IntegratedBackup.StorageType,
 		s.config.AwsS3.BucketName,
@@ -121,7 +120,9 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
-	s.logger.Info("Server integrated backup started")
+	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
+	s.logger.Info("Server integrated backup started",
+		slog.String("backup-id", JobID))
 
 	return nil
 }
@@ -150,7 +151,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated restore started",
-		slog.String("job-id", s.config.IntegratedBackup.JobID))
+		slog.String("backup-id", s.config.IntegratedBackup.JobID))
 
 	return nil
 }
