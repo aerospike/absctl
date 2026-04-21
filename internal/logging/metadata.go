@@ -45,6 +45,7 @@ func PrintMetadata(w io.Writer, data models.Metadata) {
 		if node.Created.Before(minCreated) {
 			minCreated = node.Created
 		}
+
 		if node.Finished.After(maxFinished) {
 			maxFinished = node.Finished
 		}
