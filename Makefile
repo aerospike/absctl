@@ -155,3 +155,8 @@ vulnerability-scan-container:
 docs-generate:
 	@echo "Building documentation..."
 	$(GO) run docs/docgen/main.go
+
+.PHONY: api-generate
+api-generate:
+	@echo "Building ABS api client..."
+	$(GO) generate ./...
