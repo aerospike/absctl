@@ -60,11 +60,11 @@ const (
 )
 
 type AzureBlob struct {
-	operation int
+	operation Operation
 	models.AzureBlob
 }
 
-func NewAzureBlob(operation int) *AzureBlob {
+func NewAzureBlob(operation Operation) *AzureBlob {
 	return &AzureBlob{
 		operation: operation,
 	}

@@ -37,11 +37,11 @@ const (
 )
 
 type GcpStorage struct {
-	operation int
+	operation Operation
 	models.GcpStorage
 }
 
-func NewGcpStorage(operation int) *GcpStorage {
+func NewGcpStorage(operation Operation) *GcpStorage {
 	return &GcpStorage{
 		operation: operation,
 	}

@@ -20,11 +20,11 @@ import (
 )
 
 type Local struct {
-	operation int
+	operation Operation
 	models.Local
 }
 
-func NewLocal(operation int) *Local {
+func NewLocal(operation Operation) *Local {
 	return &Local{operation: operation}
 }
 

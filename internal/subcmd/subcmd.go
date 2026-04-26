@@ -17,7 +17,6 @@ package subcmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/flags"
@@ -73,7 +72,7 @@ type Runner interface {
 	PostRegistration(cmd *cobra.Command)
 
 	// SetHelpUsage sets custom help and usage functions on the command.
-	SetHelpUsage(cmd *cobra.Command, shared SharedFlagSets)
+	SetHelpUsage(cmd *cobra.Command, shared *SharedFlagSets)
 
 	// NewServiceConfig creates the service configuration from parsed flags.
 	NewServiceConfig(ctx context.Context, shared *SharedFlags) (ServiceConfig, error)
@@ -88,7 +87,7 @@ func BuildCommand(
 	name, short, long string,
 	flagsRoot *flags.Root,
 	appVersion, commitHash, buildTime string,
-	op int,
+	op flags.Operation,
 	runner Runner,
 ) *cobra.Command {
 	shared := &SharedFlags{
@@ -132,15 +131,15 @@ func BuildCommand(
 	}
 
 	runner.PostRegistration(cmd)
-	runner.SetHelpUsage(cmd, sharedSets)
+	runner.SetHelpUsage(cmd, &sharedSets)
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runCommand(cmd, runner, shared, flagsRoot, appVersion, commitHash, buildTime)
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		return runCommand(c, runner, shared, appVersion, commitHash, buildTime)
 	}
 
-	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
 		sa := shared.SecretAgent.GetSecretAgent()
-		return shared.App.PreRun(cmd, sa)
+		return shared.App.PreRun(c, sa)
 	}
 
 	return cmd
@@ -167,11 +166,11 @@ func runCommand(
 	cmd *cobra.Command,
 	runner Runner,
 	shared *SharedFlags,
-	flagsRoot *flags.Root,
 	appVersion, commitHash, buildTime string,
 ) error {
-	if flagsRoot.Version {
-		fmt.Printf("version: %s (%s) %s \n", appVersion, commitHash, buildTime)
+	if shared.Root.Version {
+		fmt.Fprintf(cmd.OutOrStdout(), "version: %s (%s) %s \n", appVersion, commitHash, buildTime)
+
 		return nil
 	}
 
@@ -202,7 +201,7 @@ func runCommand(
 
 	defer func() {
 		if err := loggerClose(); err != nil {
-			log.Printf("failed to close logger: %v", err)
+			fmt.Fprintf(cmd.ErrOrStderr(), "failed to close logger: %v", err)
 		}
 	}()
 
