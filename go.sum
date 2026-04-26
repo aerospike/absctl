@@ -50,8 +50,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/aerospike/aerospike-client-go/v8 v8.6.0 h1:EFSn94Mu1Et/hTIOIE4wsUgoaY7JGOdKj0zWKugu/GU=
 github.com/aerospike/aerospike-client-go/v8 v8.6.0/go.mod h1:nT+zujQ8DC8fjRY+naK4oa3IYF8QyELW3HjNYO0zYX0=
-github.com/aerospike/backup-go v0.10.1-0.20260406103213-33682513d595 h1:dV80R1hpG31XAKCFw9owThXBMsZ0hetRP2RvRAB5XA4=
-github.com/aerospike/backup-go v0.10.1-0.20260406103213-33682513d595/go.mod h1:s+7r0JGIGXkn5laSAnfp40eTsfUic92YtsB5rtZkc+I=
+github.com/aerospike/backup-go v0.10.1-0.20260421080714-ba7b620b1238 h1:vTNjIhg8VJMLCwODlu21yUxSo9QgCMFm2q+zHtKJiLQ=
+github.com/aerospike/backup-go v0.10.1-0.20260421080714-ba7b620b1238/go.mod h1:s+7r0JGIGXkn5laSAnfp40eTsfUic92YtsB5rtZkc+I=
 github.com/aerospike/tools-common-go v0.4.2-0.20260330202015-38fcb43831fa h1:QVzNVm7Xkfaydi5m0qzOQaNq71XhFXztptgpAYIzh2U=
 github.com/aerospike/tools-common-go v0.4.2-0.20260330202015-38fcb43831fa/go.mod h1:IOBrk/tr0VyxGlb5bNC3aIbXbUnVrAyoZWP1ekjiJS0=
 github.com/aws/aws-sdk-go-v2 v1.41.5 h1:dj5kopbwUsVUVFgO4Fi5BIT3t4WyqIDjGKCangnV/yY=

@@ -15,9 +15,16 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/aerospike/backup-go"
+)
+
+const (
+	encryptionNone   = "NONE"
+	encryptionAES128 = "AES128"
+	encryptionAES256 = "AES256"
 )
 
 // Encryption contains flags that will be mapped to EncryptionPolicy for backup and restore operations.
@@ -34,7 +41,7 @@ func (e *Encryption) Policy() *backup.EncryptionPolicy {
 		return nil
 	}
 
-	if e.Mode == "" || strings.EqualFold(e.Mode, noneVal) {
+	if e.Mode == "" || strings.EqualFold(e.Mode, encryptionNone) {
 		return nil
 	}
 
@@ -55,4 +62,41 @@ func (e *Encryption) Policy() *backup.EncryptionPolicy {
 	}
 
 	return p
+}
+
+func (e *Encryption) Validate() error {
+	if e.Mode != "" {
+		if !strings.EqualFold(e.Mode, encryptionAES128) &&
+			!strings.EqualFold(e.Mode, encryptionAES256) &&
+			!strings.EqualFold(e.Mode, encryptionNone) {
+			return fmt.Errorf("invalid encryption mode: %s", e.Mode)
+		}
+	}
+
+	if (e.KeyFile != "" || e.KeyEnv != "" || e.KeySecret != "") &&
+		(e.Mode == "" || strings.EqualFold(e.Mode, encryptionNone)) {
+		return fmt.Errorf("--encrypt must be specified when using " +
+			"--encryption-key-file, --encryption-key-env, or --encryption-key-secret")
+	}
+
+	var count int
+
+	if e.KeyFile != "" {
+		count++
+	}
+
+	if e.KeyEnv != "" {
+		count++
+	}
+
+	if e.KeySecret != "" {
+		count++
+	}
+
+	if count > 1 {
+		return fmt.Errorf("only one of --encryption-key-file, " +
+			"--encryption-key-env, or --encryption-key-secret can be specified")
+	}
+
+	return nil
 }

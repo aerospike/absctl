@@ -84,6 +84,14 @@ func (r *ServiceConfigCommon) Validate(isBackup bool) error {
 		return err
 	}
 
+	if err := r.Encryption.Validate(); err != nil {
+		return err
+	}
+
+	if err := r.Compression.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
