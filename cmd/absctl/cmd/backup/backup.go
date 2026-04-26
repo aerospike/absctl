@@ -44,7 +44,7 @@ type runner struct {
 	localFlagSet  *pflag.FlagSet
 }
 
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
+func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) (*cobra.Command, *subcmd.SharedFlags) {
 	r := &runner{
 		flagsBackup: flags.NewBackup(),
 		flagsLocal:  flags.NewLocal(flags.OperationBackup),

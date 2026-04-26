@@ -90,7 +90,7 @@ func BuildCommand(
 	appVersion, commitHash, buildTime string,
 	op int,
 	runner Runner,
-) *cobra.Command {
+) (*cobra.Command, *SharedFlags) {
 	shared := &SharedFlags{
 		Root:         flagsRoot,
 		App:          flags.NewApp(),
@@ -113,7 +113,7 @@ func BuildCommand(
 	cmd.PersistentFlags().SortFlags = false
 	cmd.SilenceUsage = true
 
-	sharedSets := newSharedFlagSets(shared)
+	sharedSets := NewSharedFlagSets(shared)
 
 	// Register shared flags as PersistentFlags.
 	cmd.PersistentFlags().AddFlagSet(sharedSets.App)
@@ -135,7 +135,7 @@ func BuildCommand(
 	runner.SetHelpUsage(cmd, sharedSets)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runCommand(cmd, runner, shared, flagsRoot, appVersion, commitHash, buildTime)
+		return RunCommand(cmd, runner, shared, flagsRoot, appVersion, commitHash, buildTime)
 	}
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
@@ -143,10 +143,10 @@ func BuildCommand(
 		return shared.App.PreRun(cmd, sa)
 	}
 
-	return cmd
+	return cmd, shared
 }
 
-func newSharedFlagSets(shared *SharedFlags) SharedFlagSets {
+func NewSharedFlagSets(shared *SharedFlags) SharedFlagSets {
 	aerospikeFlagSet := shared.Aerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
 	flags.WrapFlagsForSecrets(aerospikeFlagSet)
 
@@ -163,7 +163,7 @@ func newSharedFlagSets(shared *SharedFlags) SharedFlagSets {
 	}
 }
 
-func runCommand(
+func RunCommand(
 	cmd *cobra.Command,
 	runner Runner,
 	shared *SharedFlags,

@@ -43,7 +43,7 @@ type runner struct {
 	restoreFlagSet *pflag.FlagSet
 }
 
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
+func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) (*cobra.Command, *subcmd.SharedFlags) {
 	r := &runner{
 		flagsRestore: flags.NewRestore(),
 	}

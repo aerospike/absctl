@@ -3,18 +3,18 @@ module github.com/aerospike/absctl
 go 1.26
 
 require (
-	cloud.google.com/go/storage v1.62.0
+	cloud.google.com/go/storage v1.61.3
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
 	github.com/aerospike/aerospike-client-go/v8 v8.6.0
-	github.com/aerospike/backup-go v0.10.1-0.20260406103213-33682513d595
-	github.com/aerospike/tools-common-go v0.4.2-0.20260330202015-38fcb43831fa
+	github.com/aerospike/backup-go v0.10.1-0.20260421112002-210b15bbcd97
+	github.com/aerospike/tools-common-go v0.4.2-0.20260312090506-78fae82c5168
 	github.com/aws/aws-sdk-go-v2 v1.41.5
-	github.com/aws/aws-sdk-go-v2/config v1.32.14
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.14
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.98.0
-	github.com/googleapis/gax-go/v2 v2.21.0
+	github.com/aws/aws-sdk-go-v2/config v1.32.12
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.12
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.2
+	github.com/googleapis/gax-go/v2 v2.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
