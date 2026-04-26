@@ -12,27 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//nolint:dupl // Full, incremental backups look the same, but it should be different sub commands.
 package service
 
 import (
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/flags"
-	backupService "github.com/aerospike/absctl/internal/service"
 	"github.com/spf13/cobra"
 )
 
-func newBackupCmd(rc *runCtx) *cobra.Command {
+func newBackupIncrementalCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "backup",
-		Short: "Manage backups on the Aerospike Backup Service",
+		Use:   "incremental",
+		Short: "Manage incremental backups",
 	}
 
 	cmd.AddCommand(
-		newBackupCancelCmd(rc),
-		newBackupStatusCmd(rc),
-		newBackupFullCmd(rc),
-		newBackupIncrementalCmd(rc),
+		newBackupIncrementalListCmd(rc),
+		newBackupIncrementalStartCmd(rc),
 	)
 
 	setParentHelp(cmd)
@@ -40,23 +38,52 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-func newBackupCancelCmd(rc *runCtx) *cobra.Command {
-	f := flags.NewServiceBackupRoutine()
+func newBackupIncrementalListCmd(rc *runCtx) *cobra.Command {
+	f := flags.NewServiceBackupList()
 
 	cmd := &cobra.Command{
-		Use:   "cancel",
-		Short: "Cancel a currently running backup",
+		Use:   "list",
+		Short: "List available incremental backups",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc.conn)
 			if err != nil {
 				return err
 			}
 
-			if err := handler.Cancel(cmd.Context(), f.Name); err != nil {
+			data, err := handler.ListIncremental(cmd.Context(), f.Name, f.From, f.To)
+			if err != nil {
 				return err
 			}
 
-			rc.logger.Info("backup canceled successfully", slog.String("routine", f.Name))
+			rc.logger.Info("incremental backups", slog.Any("backups", data))
+
+			return nil
+		},
+	}
+
+	cmd.Flags().AddFlagSet(f.NewFlagSet())
+	setLeafHelp(cmd)
+
+	return cmd
+}
+
+func newBackupIncrementalStartCmd(rc *runCtx) *cobra.Command {
+	f := flags.NewServiceBackupTrigger()
+
+	cmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start an incremental backup for a routine",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			handler, err := newBackupHandler(rc.conn)
+			if err != nil {
+				return err
+			}
+
+			if err := handler.TriggerIncremental(cmd.Context(), f.Name, f.Delay); err != nil {
+				return err
+			}
+
+			rc.logger.Info("incremental backup started successfully", slog.String("routine", f.Name))
 
 			return nil
 		},
@@ -67,47 +94,4 @@ func newBackupCancelCmd(rc *runCtx) *cobra.Command {
 	setLeafHelp(cmd)
 
 	return cmd
-}
-
-func newBackupStatusCmd(rc *runCtx) *cobra.Command {
-	f := flags.NewServiceBackupRoutine()
-
-	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Get current backup statistics for a routine",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
-			if err != nil {
-				return err
-			}
-
-			data, err := handler.Status(cmd.Context(), f.Name)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("backup status",
-				slog.String("routine", f.Name),
-				slog.Any("status", data),
-			)
-
-			return nil
-		},
-	}
-
-	cmd.Flags().AddFlagSet(f.NewFlagSet())
-	_ = cmd.MarkFlagRequired("name")
-	setLeafHelp(cmd)
-
-	return cmd
-}
-
-// newBackupHandler validates the service connection and creates a BackupHandler.
-func newBackupHandler(connFlags *flags.ServiceConnection) (*backupService.BackupHandler, error) {
-	conn := connFlags.GetServiceConnection()
-	if err := conn.Validate(); err != nil {
-		return nil, err
-	}
-
-	return backupService.NewBackupHandler(conn.ServerURL())
 }

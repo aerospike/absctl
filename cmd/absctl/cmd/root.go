@@ -21,6 +21,7 @@ import (
 
 	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
 	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
+	"github.com/aerospike/absctl/internal/cli/service"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
@@ -77,8 +78,11 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	backupCmd := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	restoreCmd := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
+	serviceCmd := service.NewCmd()
+
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(serviceCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
@@ -122,6 +126,7 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nAvailable Commands:")
 		fmt.Println("  backup    Aerospike backup command")
 		fmt.Println("  restore   Aerospike restore command")
+		fmt.Println("  service   Interact with Aerospike Backup Service REST API")
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()
 		fmt.Println("\nUse \"absctl [command] --help\" for more information about a command.")
