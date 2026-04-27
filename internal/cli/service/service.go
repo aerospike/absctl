@@ -91,6 +91,7 @@ func NewCmd() *cobra.Command {
 
 	cmd.AddCommand(newBackupCmd(rc))
 	cmd.AddCommand(newRestoreCmd(rc))
+	cmd.AddCommand(newConfigCmd(rc))
 
 	setParentHelp(cmd, connFlagSet, appFlagSet)
 
