@@ -192,7 +192,7 @@ jobs:
             exit 1
           fi
           
-          make packages
+          make packages BUILD_MODE=release
           BUILD_RESULT=$?
           
           if [ $BUILD_RESULT -eq 0 ]; then

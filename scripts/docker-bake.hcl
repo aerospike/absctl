@@ -60,6 +60,10 @@ variable OUTPUT {
   default = "type=image,push=true"
 }
 
+variable BUILD_MODE {
+  default = "release"
+}
+
 function norm {
   params = [value]
 
@@ -93,6 +97,7 @@ target absctl {
     GO_VERSION = "${GO_VERSION}"
     REGISTRY   = "${REGISTRY}"
     VERSION    = "${VERSION}"
+    BUILD_MODE = "${BUILD_MODE}"
   }
 
   secret     = ["id=GOPROXY,env=GOPROXY"]

@@ -14,8 +14,21 @@ OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 REGISTRY ?= "docker.io"
 GIT_COMMIT:=$(shell git rev-parse --short HEAD)
-GOBUILD = GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 $(GO) build \
--ldflags="-s -w -X 'main.appVersion=$(VERSION)' -X 'main.commitHash=$(GIT_COMMIT)' -X 'main.buildTime=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')'"
+BUILD_MODE ?= release
+
+ifeq ($(filter debug release,$(BUILD_MODE)),)
+$(error BUILD_MODE must be 'debug' or 'release', got '$(BUILD_MODE)')
+endif
+
+LDFLAGS_COMMON = \
+-X 'main.appVersion=$(VERSION)' \
+-X 'main.commitHash=$(GIT_COMMIT)' \
+-X 'main.buildTime=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')'
+
+GOBUILD_debug   = GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 $(GO) build -tags debug -gcflags "all=-N -l" -ldflags="$(LDFLAGS_COMMON)"
+GOBUILD_release = GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w $(LDFLAGS_COMMON)"
+
+GOBUILD = $(GOBUILD_$(BUILD_MODE))
 GOTEST = $(GO) test
 NPROC := $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)
 ARCHS ?= linux/amd64 linux/arm64
@@ -65,6 +78,7 @@ docker-build:
  	--progress=plain \
  	--tag $(IMAGE_REPO):$(IMAGE_TAG) \
  	--build-arg REGISTRY=$(REGISTRY) \
+ 	--build-arg BUILD_MODE=$(BUILD_MODE) \
  	--file $(WORKSPACE)/Dockerfile .
 
 .PHONY: docker-buildx
@@ -77,7 +91,8 @@ docker-buildx:
     	--platforms "$(ARCHS)" \
     	--cache-to "$(IMAGE_CACHE_TO)" \
     	--cache-from "$(IMAGE_CACHE_FROM)" \
-    	--output "$(IMAGE_OUTPUT)"
+    	--output "$(IMAGE_OUTPUT)" \
+    	--build-mode "$(BUILD_MODE)"
 
 .PHONY: build
 build:
