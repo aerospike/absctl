@@ -75,6 +75,11 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+if [[ "$BUILD_MODE" != "debug" && "$BUILD_MODE" != "release" ]]; then
+	echo "BUILD_MODE must be 'debug' or 'release', got '$BUILD_MODE'"
+	exit 1
+fi
+
 set -- "${POSITIONAL_ARGS[@]}"
 
 docker login aerospike.jfrog.io -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
