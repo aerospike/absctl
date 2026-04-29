@@ -23,7 +23,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//nolint:dupl // resource scaffolding intentionally duplicated for type safety; see newConfigClustersCmd doc.
 func newConfigPoliciesCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "policies",

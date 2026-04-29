@@ -28,7 +28,7 @@ import (
 // method, and DTO. Sharing a generic helper would erase compile-time type
 // safety on the body fields, which is the whole point of the refactor.
 //
-//nolint:dupl // resource scaffolding intentionally duplicated for type safety; see comment above.
+
 func newConfigClustersCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clusters",

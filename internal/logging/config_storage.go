@@ -104,7 +104,7 @@ func printStorage(name string, s *api.DtoStorage) {
 
 // storageSummary returns the provider type, location (bucket/container/-),
 // and path for a storage entry.
-func storageSummary(s *api.DtoStorage) (string, string, string) {
+func storageSummary(s *api.DtoStorage) (storageType, location, path string) {
 	switch {
 	case s.LocalStorage != nil:
 		return "local", "-", s.LocalStorage.Path

@@ -74,7 +74,7 @@ func TestPrintMetric(t *testing.T) {
 }
 
 // newSampleBackupStats returns BackupStats populated with the same numbers
-// every backup-report test relies on. Centralising it keeps the test file
+// every backup-report test relies on. Centralizing it keeps the test file
 // short and the assertions easy to follow.
 func newSampleBackupStats() *bModels.BackupStats {
 	stats := bModels.NewBackupStats()

@@ -38,7 +38,7 @@ type RestoreHandler struct {
 
 // NewRestoreHandler creates a new RestoreHandler. The logger and json flag are
 // forwarded to the logging package which selects the appropriate renderer.
-func NewRestoreHandler(serverURL string, logger *slog.Logger, json bool) (*RestoreHandler, error) {
+func NewRestoreHandler(serverURL string, logger *slog.Logger, isJSON bool) (*RestoreHandler, error) {
 	client, err := api.NewClientWithResponses(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)
@@ -47,7 +47,7 @@ func NewRestoreHandler(serverURL string, logger *slog.Logger, json bool) (*Resto
 	return &RestoreHandler{
 		client: client,
 		logger: logger,
-		json:   json,
+		json:   isJSON,
 	}, nil
 }
 
