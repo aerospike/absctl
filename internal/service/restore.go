@@ -18,26 +18,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/aerospike/absctl/api"
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
 )
 
-// RestoreHandler handles restore-related REST API calls.
+// RestoreHandler handles restore-related REST API calls and renders
+// responses either as human-readable tables/sections or as structured slog
+// entries depending on the JSON output flag.
 type RestoreHandler struct {
 	client *api.ClientWithResponses
+	logger *slog.Logger
+	json   bool
 }
 
-// NewRestoreHandler creates a new RestoreHandler for the given server URL.
-func NewRestoreHandler(serverURL string) (*RestoreHandler, error) {
+// NewRestoreHandler creates a new RestoreHandler. The logger and json flag are
+// forwarded to the logging package which selects the appropriate renderer.
+func NewRestoreHandler(serverURL string, logger *slog.Logger, json bool) (*RestoreHandler, error) {
 	client, err := api.NewClientWithResponses(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)
 	}
 
-	return &RestoreHandler{client: client}, nil
+	return &RestoreHandler{
+		client: client,
+		logger: logger,
+		json:   json,
+	}, nil
 }
 
 // Cancel cancels a running restore operation by job ID.
@@ -58,28 +69,29 @@ func (h *RestoreHandler) Cancel(ctx context.Context, jobID int64) error {
 	return nil
 }
 
-// Status returns the status of a restore job by ID.
-func (h *RestoreHandler) Status(ctx context.Context, jobID int64) (*api.DtoRestoreJobStatus, error) {
+// Status fetches a restore job status by ID and prints it.
+func (h *RestoreHandler) Status(ctx context.Context, jobID int64) error {
 	if jobID <= 0 {
-		return nil, fmt.Errorf("job-id must be a positive integer")
+		return fmt.Errorf("job-id must be a positive integer")
 	}
 
 	resp, err := h.client.RestoreStatusWithResponse(ctx, jobID)
 	if err != nil {
-		return nil, fmt.Errorf("get restore status request failed: %w", err)
+		return fmt.Errorf("get restore status request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("get restore status failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("get restore status failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintRestoreStatus(resp.JSON200, jobID, h.json, h.logger)
+
+	return nil
 }
 
-// ListJobs returns restore jobs, optionally filtered by time range and status.
-func (h *RestoreHandler) ListJobs(
-	ctx context.Context, from, to int64, status string,
-) (map[string]api.DtoRestoreJobStatus, error) {
+// ListJobs fetches restore jobs (optionally filtered by time range and
+// status) and prints them.
+func (h *RestoreHandler) ListJobs(ctx context.Context, from, to int64, status string) error {
 	params := &api.RetrieveRestoreJobsParams{}
 
 	if from > 0 {
@@ -96,14 +108,16 @@ func (h *RestoreHandler) ListJobs(
 
 	resp, err := h.client.RetrieveRestoreJobsWithResponse(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list restore jobs request failed: %w", err)
+		return fmt.Errorf("list restore jobs request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("list restore jobs failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("list restore jobs failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return *resp.JSON200, nil
+	logging.PrintRestoreJobs(derefMap(resp.JSON200), h.json, h.logger)
+
+	return nil
 }
 
 // RestoreFull triggers an asynchronous full restore operation. Returns the new job ID

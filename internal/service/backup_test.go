@@ -15,7 +15,9 @@
 package service
 
 import (
+	"bytes"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -63,10 +65,19 @@ func newTestServer(t *testing.T, status int, body string) (*httptest.Server, *re
 	return srv, rec
 }
 
+// newSilentLogger returns a slog logger that writes to a byte buffer (the
+// buffer is also returned so tests can assert on JSON output).
+func newSilentLogger() (*slog.Logger, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+
+	return slog.New(slog.NewJSONHandler(buf, nil)), buf
+}
+
 func newTestHandler(t *testing.T, srv *httptest.Server) *BackupHandler {
 	t.Helper()
 
-	h, err := NewBackupHandler(srv.URL)
+	logger, _ := newSilentLogger()
+	h, err := NewBackupHandler(srv.URL, logger, true)
 	require.NoError(t, err)
 
 	return h
@@ -112,17 +123,19 @@ func TestBackupHandler_Status(t *testing.T) {
 
 	body := `{"full":{"done-records":100,"duration":42}}`
 	srv, rec := newTestServer(t, http.StatusOK, body)
-	h := newTestHandler(t, srv)
 
-	data, err := h.Status(t.Context(), "daily-backup")
+	logger, buf := newSilentLogger()
+	h, err := NewBackupHandler(srv.URL, logger, true)
 	require.NoError(t, err)
+
+	require.NoError(t, h.Status(t.Context(), "daily-backup"))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/backups/currentBackup/daily-backup", rec.path)
-	require.NotNil(t, data)
-	require.NotNil(t, data.Full)
-	require.NotNil(t, data.Full.DoneRecords)
-	assert.Equal(t, 100, *data.Full.DoneRecords)
+
+	out := buf.String()
+	assert.Contains(t, out, `"routine":"daily-backup"`)
+	assert.Contains(t, out, `"done-records":100`)
 }
 
 func TestBackupHandler_Status_EmptyName(t *testing.T) {
@@ -131,7 +144,7 @@ func TestBackupHandler_Status_EmptyName(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusOK, "{}")
 	h := newTestHandler(t, srv)
 
-	_, err := h.Status(t.Context(), "")
+	err := h.Status(t.Context(), "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "routine name is required")
 }
@@ -142,7 +155,7 @@ func TestBackupHandler_Status_BadRequest(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusBadRequest, `"invalid input"`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.Status(t.Context(), "bad")
+	err := h.Status(t.Context(), "bad")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid input")
 }
@@ -153,8 +166,7 @@ func TestBackupHandler_ListFull_AllRoutines(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `{"daily":[]}`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.ListFull(t.Context(), "", 0, 0)
-	require.NoError(t, err)
+	require.NoError(t, h.ListFull(t.Context(), "", 0, 0))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/backups/full", rec.path)
@@ -167,8 +179,7 @@ func TestBackupHandler_ListFull_AllRoutines_WithFilters(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `{}`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.ListFull(t.Context(), "", 100, 200)
-	require.NoError(t, err)
+	require.NoError(t, h.ListFull(t.Context(), "", 100, 200))
 
 	assert.Equal(t, "/v1/backups/full", rec.path)
 	assert.Equal(t, "100", rec.query.Get("from"))
@@ -181,8 +192,7 @@ func TestBackupHandler_ListFull_ForRoutine(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `[]`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.ListFull(t.Context(), "daily", 100, 0)
-	require.NoError(t, err)
+	require.NoError(t, h.ListFull(t.Context(), "daily", 100, 0))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/backups/full/daily", rec.path)
@@ -196,8 +206,7 @@ func TestBackupHandler_ListIncremental_AllRoutines(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `{}`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.ListIncremental(t.Context(), "", 0, 0)
-	require.NoError(t, err)
+	require.NoError(t, h.ListIncremental(t.Context(), "", 0, 0))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/backups/incremental", rec.path)
@@ -209,8 +218,7 @@ func TestBackupHandler_ListIncremental_ForRoutine(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `[]`)
 	h := newTestHandler(t, srv)
 
-	_, err := h.ListIncremental(t.Context(), "hourly", 0, 500)
-	require.NoError(t, err)
+	require.NoError(t, h.ListIncremental(t.Context(), "hourly", 0, 500))
 
 	assert.Equal(t, "/v1/backups/incremental/hourly", rec.path)
 	assert.Equal(t, "500", rec.query.Get("to"))
@@ -293,7 +301,8 @@ func TestBackupHandler_TriggerIncremental_EmptyName(t *testing.T) {
 func TestNewBackupHandler(t *testing.T) {
 	t.Parallel()
 
-	h, err := NewBackupHandler("http://localhost:8080")
+	logger, _ := newSilentLogger()
+	h, err := NewBackupHandler("http://localhost:8080", logger, false)
 	require.NoError(t, err)
 	require.NotNil(t, h)
 }

@@ -45,19 +45,12 @@ func newBackupIncrementalListCmd(rc *runCtx) *cobra.Command {
 		Use:   "list",
 		Short: "List available incremental backups",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.ListIncremental(cmd.Context(), f.Name, f.From, f.To)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("incremental backups", slog.Any("backups", data))
-
-			return nil
+			return handler.ListIncremental(cmd.Context(), f.Name, f.From, f.To)
 		},
 	}
 
@@ -74,7 +67,7 @@ func newBackupIncrementalStartCmd(rc *runCtx) *cobra.Command {
 		Use:   "start",
 		Short: "Start an incremental backup for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}

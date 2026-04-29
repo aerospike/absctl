@@ -33,12 +33,10 @@ func newConfigStorageCmd(rc *runCtx) *cobra.Command {
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "storage",
 		resourcePlural: "storage",
-		listKey:        "storage",
-		itemKey:        "storage",
-		list: func(ctx context.Context, h *configService.ConfigHandler) (any, error) {
+		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListStorage(ctx)
 		},
-		show: func(ctx context.Context, h *configService.ConfigHandler, name string) (any, error) {
+		show: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
 			return h.ReadStorage(ctx, name)
 		},
 		del: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
@@ -73,7 +71,7 @@ func newConfigStorageAddCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -112,7 +110,7 @@ func newConfigStorageUpdateCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}

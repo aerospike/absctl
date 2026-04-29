@@ -17,24 +17,35 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/aerospike/absctl/api"
+	"github.com/aerospike/absctl/internal/logging"
 )
 
-// BackupHandler handles backup-related REST API calls.
+// BackupHandler handles backup-related REST API calls and renders responses
+// either as human-readable tables/sections or as structured slog entries
+// depending on the JSON output flag.
 type BackupHandler struct {
 	client *api.ClientWithResponses
+	logger *slog.Logger
+	json   bool
 }
 
-// NewBackupHandler creates a new BackupHandler for the given server URL.
-func NewBackupHandler(serverURL string) (*BackupHandler, error) {
+// NewBackupHandler creates a new BackupHandler. The logger and json flag are
+// forwarded to the logging package which selects the appropriate renderer.
+func NewBackupHandler(serverURL string, logger *slog.Logger, json bool) (*BackupHandler, error) {
 	client, err := api.NewClientWithResponses(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)
 	}
 
-	return &BackupHandler{client: client}, nil
+	return &BackupHandler{
+		client: client,
+		logger: logger,
+		json:   json,
+	}, nil
 }
 
 // Cancel cancels a currently running backup for the given routine.
@@ -55,28 +66,29 @@ func (h *BackupHandler) Cancel(ctx context.Context, name string) error {
 	return nil
 }
 
-// Status returns the current backup state for the given routine.
-func (h *BackupHandler) Status(ctx context.Context, name string) (*api.DtoRoutineState, error) {
+// Status fetches the current backup state for the given routine and prints it.
+func (h *BackupHandler) Status(ctx context.Context, name string) error {
 	if name == "" {
-		return nil, fmt.Errorf("routine name is required")
+		return fmt.Errorf("routine name is required")
 	}
 
 	resp, err := h.client.GetCurrentBackupWithResponse(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("get backup status request failed: %w", err)
+		return fmt.Errorf("get backup status request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("get backup status failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("get backup status failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintBackupState(resp.JSON200, name, h.json, h.logger)
+
+	return nil
 }
 
-// ListFull returns full backups, optionally filtered by routine name and time range.
-// When name is set the result is a slice of DtoBackupDetails for that routine; otherwise
-// a map keyed by routine name with the per-routine slice.
-func (h *BackupHandler) ListFull(ctx context.Context, name string, from, to int64) (any, error) {
+// ListFull fetches full backups (optionally filtered by routine name and
+// time range) and prints them.
+func (h *BackupHandler) ListFull(ctx context.Context, name string, from, to int64) error {
 	if name != "" {
 		return h.listFullForRoutine(ctx, name, from, to)
 	}
@@ -84,41 +96,45 @@ func (h *BackupHandler) ListFull(ctx context.Context, name string, from, to int6
 	return h.listFullAll(ctx, from, to)
 }
 
-func (h *BackupHandler) listFullAll(ctx context.Context, from, to int64) (any, error) {
+func (h *BackupHandler) listFullAll(ctx context.Context, from, to int64) error {
 	params := &api.GetFullBackupsParams{}
 	applyTimestampFilters(params, from, to)
 
 	resp, err := h.client.GetFullBackupsWithResponse(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list full backups request failed: %w", err)
+		return fmt.Errorf("list full backups request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("list full backups failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("list full backups failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintBackupDetailsByRoutine(derefMap(resp.JSON200), false, h.json, h.logger)
+
+	return nil
 }
 
-func (h *BackupHandler) listFullForRoutine(ctx context.Context, name string, from, to int64) (any, error) {
+func (h *BackupHandler) listFullForRoutine(ctx context.Context, name string, from, to int64) error {
 	params := &api.GetFullBackupsForRoutineParams{}
 	applyTimestampFilters(params, from, to)
 
 	resp, err := h.client.GetFullBackupsForRoutineWithResponse(ctx, name, params)
 	if err != nil {
-		return nil, fmt.Errorf("list full backups for routine request failed: %w", err)
+		return fmt.Errorf("list full backups for routine request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("list full backups for routine failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("list full backups for routine failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintBackupDetailsForRoutine(derefSlice(resp.JSON200), name, false, h.json, h.logger)
+
+	return nil
 }
 
-// ListIncremental returns incremental backups, optionally filtered by routine name and time range.
-// Same return-shape semantics as ListFull.
-func (h *BackupHandler) ListIncremental(ctx context.Context, name string, from, to int64) (any, error) {
+// ListIncremental fetches incremental backups (optionally filtered by routine
+// name and time range) and prints them.
+func (h *BackupHandler) ListIncremental(ctx context.Context, name string, from, to int64) error {
 	if name != "" {
 		return h.listIncrementalForRoutine(ctx, name, from, to)
 	}
@@ -126,36 +142,40 @@ func (h *BackupHandler) ListIncremental(ctx context.Context, name string, from, 
 	return h.listIncrementalAll(ctx, from, to)
 }
 
-func (h *BackupHandler) listIncrementalAll(ctx context.Context, from, to int64) (any, error) {
+func (h *BackupHandler) listIncrementalAll(ctx context.Context, from, to int64) error {
 	params := &api.GetIncrementalBackupsParams{}
 	applyTimestampFilters(params, from, to)
 
 	resp, err := h.client.GetIncrementalBackupsWithResponse(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list incremental backups request failed: %w", err)
+		return fmt.Errorf("list incremental backups request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("list incremental backups failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("list incremental backups failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintBackupDetailsByRoutine(derefMap(resp.JSON200), true, h.json, h.logger)
+
+	return nil
 }
 
-func (h *BackupHandler) listIncrementalForRoutine(ctx context.Context, name string, from, to int64) (any, error) {
+func (h *BackupHandler) listIncrementalForRoutine(ctx context.Context, name string, from, to int64) error {
 	params := &api.GetIncrementalBackupsForRoutineParams{}
 	applyTimestampFilters(params, from, to)
 
 	resp, err := h.client.GetIncrementalBackupsForRoutineWithResponse(ctx, name, params)
 	if err != nil {
-		return nil, fmt.Errorf("list incremental backups for routine request failed: %w", err)
+		return fmt.Errorf("list incremental backups for routine request failed: %w", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("list incremental backups for routine failed: %s", extractErrorBody(resp.Body))
+		return fmt.Errorf("list incremental backups for routine failed: %s", extractErrorBody(resp.Body))
 	}
 
-	return resp.JSON200, nil
+	logging.PrintBackupDetailsForRoutine(derefSlice(resp.JSON200), name, true, h.json, h.logger)
+
+	return nil
 }
 
 // TriggerFull triggers a full backup for the given routine.

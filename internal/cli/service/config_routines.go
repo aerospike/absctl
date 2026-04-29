@@ -32,12 +32,10 @@ func newConfigRoutinesCmd(rc *runCtx) *cobra.Command {
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "routine",
 		resourcePlural: "routines",
-		listKey:        "routines",
-		itemKey:        "routine",
-		list: func(ctx context.Context, h *configService.ConfigHandler) (any, error) {
+		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListRoutines(ctx)
 		},
-		show: func(ctx context.Context, h *configService.ConfigHandler, name string) (any, error) {
+		show: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
 			return h.ReadRoutine(ctx, name)
 		},
 		del: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
@@ -73,7 +71,7 @@ func newConfigRoutineAddCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -111,7 +109,7 @@ func newConfigRoutineUpdateCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -144,7 +142,7 @@ func newConfigRoutineEnableCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -177,7 +175,7 @@ func newConfigRoutineDisableCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}

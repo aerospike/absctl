@@ -49,7 +49,7 @@ func newRestoreCancelCmd(rc *runCtx) *cobra.Command {
 		Use:   "cancel",
 		Short: "Cancel a running restore operation",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newRestoreHandler(rc.conn)
+			handler, err := newRestoreHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -78,22 +78,12 @@ func newRestoreStatusCmd(rc *runCtx) *cobra.Command {
 		Use:   "status",
 		Short: "Get the status of a restore job",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newRestoreHandler(rc.conn)
+			handler, err := newRestoreHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.Status(cmd.Context(), f.JobID)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("restore status",
-				slog.Int64("jobId", f.JobID),
-				slog.Any("status", data),
-			)
-
-			return nil
+			return handler.Status(cmd.Context(), f.JobID)
 		},
 	}
 
@@ -111,19 +101,12 @@ func newRestoreJobsCmd(rc *runCtx) *cobra.Command {
 		Use:   "jobs",
 		Short: "List restore jobs",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newRestoreHandler(rc.conn)
+			handler, err := newRestoreHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.ListJobs(cmd.Context(), f.From, f.To, f.Status)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("restore jobs", slog.Any("jobs", data))
-
-			return nil
+			return handler.ListJobs(cmd.Context(), f.From, f.To, f.Status)
 		},
 	}
 
@@ -133,12 +116,13 @@ func newRestoreJobsCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-// newRestoreHandler validates the service connection and creates a RestoreHandler.
-func newRestoreHandler(connFlags *flags.ServiceConnection) (*restoreService.RestoreHandler, error) {
-	conn := connFlags.GetServiceConnection()
+// newRestoreHandler validates the service connection and creates a
+// RestoreHandler configured with the shared logger and JSON output flag.
+func newRestoreHandler(rc *runCtx) (*restoreService.RestoreHandler, error) {
+	conn := rc.conn.GetServiceConnection()
 	if err := conn.Validate(); err != nil {
 		return nil, err
 	}
 
-	return restoreService.NewRestoreHandler(conn.ServerURL())
+	return restoreService.NewRestoreHandler(conn.ServerURL(), rc.logger, rc.app.GetApp().LogJSON)
 }

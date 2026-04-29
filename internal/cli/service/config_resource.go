@@ -23,10 +23,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resourceOps groups the resource-agnostic list/show/delete handler methods so
-// the generic CLI builder can produce these subcommands without duplication.
-// Per-resource add/update commands are defined alongside each resource because
-// they bind a resource-specific flag struct.
+// resourceOps groups the resource-agnostic list/show/delete handler methods
+// so the generic CLI builder can produce these subcommands without
+// duplication. Per-resource add/update commands are defined alongside each
+// resource because they bind a resource-specific flag struct.
+//
+// Note: list and show no longer return data because the handler now prints
+// the result through the logging package directly.
 type resourceOps struct {
 	// resource is a singular human-readable name used in command short
 	// descriptions and log messages (e.g. "cluster", "policy", "routine",
@@ -37,14 +40,8 @@ type resourceOps struct {
 	// "policies").
 	resourcePlural string
 
-	// listKey is the slog attribute key under which the listing result is logged.
-	listKey string
-
-	// itemKey is the slog attribute key under which a single resource is logged.
-	itemKey string
-
-	list func(ctx context.Context, h *configService.ConfigHandler) (any, error)
-	show func(ctx context.Context, h *configService.ConfigHandler, name string) (any, error)
+	list func(ctx context.Context, h *configService.ConfigHandler) error
+	show func(ctx context.Context, h *configService.ConfigHandler, name string) error
 	del  func(ctx context.Context, h *configService.ConfigHandler, name string) error
 }
 
@@ -64,19 +61,12 @@ func newResourceListCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 		Use:   "list",
 		Short: "List configured " + ops.resourcePlural,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := ops.list(cmd.Context(), handler)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info(ops.resourcePlural, slog.Any(ops.listKey, data))
-
-			return nil
+			return ops.list(cmd.Context(), handler)
 		},
 	}
 
@@ -96,22 +86,12 @@ func newResourceShowCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := ops.show(cmd.Context(), handler, f.Name)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info(ops.resource,
-				slog.String("name", f.Name),
-				slog.Any(ops.itemKey, data),
-			)
-
-			return nil
+			return ops.show(cmd.Context(), handler, f.Name)
 		},
 	}
 
@@ -133,7 +113,7 @@ func newResourceDeleteCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}

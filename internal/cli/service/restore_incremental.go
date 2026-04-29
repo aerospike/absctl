@@ -44,7 +44,7 @@ func newRestoreIncrementalStartCmd(rc *runCtx) *cobra.Command {
 		Use:   "start",
 		Short: "Trigger an asynchronous incremental restore operation",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newRestoreHandler(rc.conn)
+			handler, err := newRestoreHandler(rc)
 			if err != nil {
 				return err
 			}

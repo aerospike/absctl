@@ -44,7 +44,7 @@ func newRestoreTimestampStartCmd(rc *runCtx) *cobra.Command {
 		Use:   "start",
 		Short: "Trigger an asynchronous restore operation to a specific point in time",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newRestoreHandler(rc.conn)
+			handler, err := newRestoreHandler(rc)
 			if err != nil {
 				return err
 			}

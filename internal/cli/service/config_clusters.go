@@ -38,12 +38,10 @@ func newConfigClustersCmd(rc *runCtx) *cobra.Command {
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "cluster",
 		resourcePlural: "clusters",
-		listKey:        "clusters",
-		itemKey:        "cluster",
-		list: func(ctx context.Context, h *configService.ConfigHandler) (any, error) {
+		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListClusters(ctx)
 		},
-		show: func(ctx context.Context, h *configService.ConfigHandler, name string) (any, error) {
+		show: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
 			return h.ReadCluster(ctx, name)
 		},
 		del: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
@@ -77,7 +75,7 @@ func newConfigClusterAddCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -115,7 +113,7 @@ func newConfigClusterUpdateCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}

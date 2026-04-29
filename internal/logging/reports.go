@@ -17,7 +17,6 @@ package logging
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -199,14 +198,16 @@ func logEstimateReport(estimate uint64, logger *slog.Logger) {
 }
 
 func printMetric(key string, value any) {
-	_, _ = fmt.Fprintf(os.Stderr, "%s%v\n", indent(key), value)
+	_, _ = fmt.Fprintf(outWriter, "%s%v\n", indent(key), value)
 }
 
 func indent(key string) string {
 	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", 21-len(key)))
 }
 
-// printToStderr prints the string to stderr.
+// printToStderr prints the string to the configured output writer (stderr by
+// default). The name is preserved for backwards compatibility with the
+// existing reports_test.go expectations.
 func printToStderr(s string) {
-	_, _ = fmt.Fprintln(os.Stderr, s)
+	_, _ = fmt.Fprintln(outWriter, s)
 }

@@ -48,19 +48,12 @@ func newConfigShowCmd(rc *runCtx) *cobra.Command {
 		Use:   "show",
 		Short: "Show the full service configuration",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.Read(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("config", slog.Any("config", data))
-
-			return nil
+			return handler.Read(cmd.Context())
 		},
 	}
 
@@ -80,7 +73,7 @@ func newConfigUpdateCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -107,7 +100,7 @@ func newConfigApplyCmd(rc *runCtx) *cobra.Command {
 		Use:   "apply",
 		Short: "Apply the pending configuration on the service",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -127,12 +120,13 @@ func newConfigApplyCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-// newConfigHandler validates the service connection and creates a ConfigHandler.
-func newConfigHandler(connFlags *flags.ServiceConnection) (*configService.ConfigHandler, error) {
-	conn := connFlags.GetServiceConnection()
+// newConfigHandler validates the service connection and creates a
+// ConfigHandler configured with the shared logger and JSON output flag.
+func newConfigHandler(rc *runCtx) (*configService.ConfigHandler, error) {
+	conn := rc.conn.GetServiceConnection()
 	if err := conn.Validate(); err != nil {
 		return nil, err
 	}
 
-	return configService.NewConfigHandler(conn.ServerURL())
+	return configService.NewConfigHandler(conn.ServerURL(), rc.logger, rc.app.GetApp().LogJSON)
 }

@@ -17,39 +17,53 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/aerospike/absctl/api"
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
 )
 
-// ConfigHandler handles configuration-related REST API calls under /v1/config.
+// ConfigHandler handles configuration-related REST API calls under
+// /v1/config and renders responses either as human-readable
+// tables/sections or as structured slog entries depending on the JSON
+// output flag.
 type ConfigHandler struct {
 	client *api.ClientWithResponses
+	logger *slog.Logger
+	json   bool
 }
 
-// NewConfigHandler creates a new ConfigHandler for the given server URL.
-func NewConfigHandler(serverURL string) (*ConfigHandler, error) {
+// NewConfigHandler creates a new ConfigHandler. The logger and json flag are
+// forwarded to the logging package which selects the appropriate renderer.
+func NewConfigHandler(serverURL string, logger *slog.Logger, json bool) (*ConfigHandler, error) {
 	client, err := api.NewClientWithResponses(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)
 	}
 
-	return &ConfigHandler{client: client}, nil
+	return &ConfigHandler{
+		client: client,
+		logger: logger,
+		json:   json,
+	}, nil
 }
 
-// Read returns the full service configuration.
-func (h *ConfigHandler) Read(ctx context.Context) (*api.DtoConfig, error) {
+// Read fetches the full service configuration and prints it.
+func (h *ConfigHandler) Read(ctx context.Context) error {
 	resp, err := h.client.ReadConfigWithResponse(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read config request failed: %w", err)
+		return fmt.Errorf("read config request failed: %w", err)
 	}
 
 	if err := ensureStatus("read config", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp.JSON200, nil
+	logging.PrintConfig(resp.JSON200, h.json, h.logger)
+
+	return nil
 }
 
 // Update replaces the full service configuration with the body loaded from file.
@@ -83,36 +97,40 @@ func (h *ConfigHandler) Apply(ctx context.Context) error {
 
 // Clusters
 
-// ListClusters returns all configured Aerospike clusters keyed by name.
-func (h *ConfigHandler) ListClusters(ctx context.Context) (map[string]api.DtoAerospikeCluster, error) {
+// ListClusters fetches all configured Aerospike clusters and prints them.
+func (h *ConfigHandler) ListClusters(ctx context.Context) error {
 	resp, err := h.client.ReadAllClustersWithResponse(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list clusters request failed: %w", err)
+		return fmt.Errorf("list clusters request failed: %w", err)
 	}
 
 	if err := ensureStatus("list clusters", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return derefMap(resp.JSON200), nil
+	logging.PrintClusters(derefMap(resp.JSON200), h.json, h.logger)
+
+	return nil
 }
 
-// ReadCluster returns a single configured cluster by name.
-func (h *ConfigHandler) ReadCluster(ctx context.Context, name string) (*api.DtoAerospikeCluster, error) {
+// ReadCluster fetches a single configured cluster by name and prints it.
+func (h *ConfigHandler) ReadCluster(ctx context.Context, name string) error {
 	if name == "" {
-		return nil, fmt.Errorf("--name is required")
+		return fmt.Errorf("--name is required")
 	}
 
 	resp, err := h.client.ReadClusterWithResponse(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("read cluster request failed: %w", err)
+		return fmt.Errorf("read cluster request failed: %w", err)
 	}
 
 	if err := ensureStatus("read cluster", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp.JSON200, nil
+	logging.PrintCluster(name, resp.JSON200, h.json, h.logger)
+
+	return nil
 }
 
 // AddCluster adds a new cluster definition built from individual flag fields
@@ -171,36 +189,40 @@ func (h *ConfigHandler) DeleteCluster(ctx context.Context, name string) error {
 
 // Policies
 
-// ListPolicies returns all configured backup policies keyed by name.
-func (h *ConfigHandler) ListPolicies(ctx context.Context) (map[string]api.DtoBackupPolicy, error) {
+// ListPolicies fetches all configured backup policies and prints them.
+func (h *ConfigHandler) ListPolicies(ctx context.Context) error {
 	resp, err := h.client.ReadPoliciesWithResponse(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list policies request failed: %w", err)
+		return fmt.Errorf("list policies request failed: %w", err)
 	}
 
 	if err := ensureStatus("list policies", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return derefMap(resp.JSON200), nil
+	logging.PrintPolicies(derefMap(resp.JSON200), h.json, h.logger)
+
+	return nil
 }
 
-// ReadPolicy returns a single backup policy by name.
-func (h *ConfigHandler) ReadPolicy(ctx context.Context, name string) (*api.DtoBackupPolicy, error) {
+// ReadPolicy fetches a single backup policy by name and prints it.
+func (h *ConfigHandler) ReadPolicy(ctx context.Context, name string) error {
 	if name == "" {
-		return nil, fmt.Errorf("--name is required")
+		return fmt.Errorf("--name is required")
 	}
 
 	resp, err := h.client.ReadPolicyWithResponse(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("read policy request failed: %w", err)
+		return fmt.Errorf("read policy request failed: %w", err)
 	}
 
 	if err := ensureStatus("read policy", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp.JSON200, nil
+	logging.PrintPolicy(name, resp.JSON200, h.json, h.logger)
+
+	return nil
 }
 
 // AddPolicy adds a new backup policy built from individual flag fields.
@@ -258,36 +280,40 @@ func (h *ConfigHandler) DeletePolicy(ctx context.Context, name string) error {
 
 // Routines
 
-// ListRoutines returns all configured backup routines keyed by name.
-func (h *ConfigHandler) ListRoutines(ctx context.Context) (map[string]api.DtoBackupRoutine, error) {
+// ListRoutines fetches all configured backup routines and prints them.
+func (h *ConfigHandler) ListRoutines(ctx context.Context) error {
 	resp, err := h.client.ReadRoutinesWithResponse(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list routines request failed: %w", err)
+		return fmt.Errorf("list routines request failed: %w", err)
 	}
 
 	if err := ensureStatus("list routines", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return derefMap(resp.JSON200), nil
+	logging.PrintRoutines(derefMap(resp.JSON200), h.json, h.logger)
+
+	return nil
 }
 
-// ReadRoutine returns a single backup routine by name.
-func (h *ConfigHandler) ReadRoutine(ctx context.Context, name string) (*api.DtoBackupRoutine, error) {
+// ReadRoutine fetches a single backup routine by name and prints it.
+func (h *ConfigHandler) ReadRoutine(ctx context.Context, name string) error {
 	if name == "" {
-		return nil, fmt.Errorf("--name is required")
+		return fmt.Errorf("--name is required")
 	}
 
 	resp, err := h.client.ReadRoutineWithResponse(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("read routine request failed: %w", err)
+		return fmt.Errorf("read routine request failed: %w", err)
 	}
 
 	if err := ensureStatus("read routine", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp.JSON200, nil
+	logging.PrintRoutine(name, resp.JSON200, h.json, h.logger)
+
+	return nil
 }
 
 // AddRoutine adds a new backup routine built from individual flag fields.
@@ -373,36 +399,40 @@ func (h *ConfigHandler) DisableRoutine(ctx context.Context, name string) error {
 
 // Storage
 
-// ListStorage returns all configured storage entries keyed by name.
-func (h *ConfigHandler) ListStorage(ctx context.Context) (map[string]api.DtoStorage, error) {
+// ListStorage fetches all configured storage entries and prints them.
+func (h *ConfigHandler) ListStorage(ctx context.Context) error {
 	resp, err := h.client.ReadAllStorageWithResponse(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list storage request failed: %w", err)
+		return fmt.Errorf("list storage request failed: %w", err)
 	}
 
 	if err := ensureStatus("list storage", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return derefMap(resp.JSON200), nil
+	logging.PrintStorageList(derefMap(resp.JSON200), h.json, h.logger)
+
+	return nil
 }
 
-// ReadStorage returns a single storage entry by name.
-func (h *ConfigHandler) ReadStorage(ctx context.Context, name string) (*api.DtoStorage, error) {
+// ReadStorage fetches a single storage entry by name and prints it.
+func (h *ConfigHandler) ReadStorage(ctx context.Context, name string) error {
 	if name == "" {
-		return nil, fmt.Errorf("--name is required")
+		return fmt.Errorf("--name is required")
 	}
 
 	resp, err := h.client.ReadStorageWithResponse(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("read storage request failed: %w", err)
+		return fmt.Errorf("read storage request failed: %w", err)
 	}
 
 	if err := ensureStatus("read storage", resp.StatusCode(), http.StatusOK, resp.Body); err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp.JSON200, nil
+	logging.PrintStorage(name, resp.JSON200, h.json, h.logger)
+
+	return nil
 }
 
 // AddStorage adds a new storage entry built from individual flag fields.
@@ -480,4 +510,15 @@ func derefMap[K comparable, V any](m *map[K]V) map[K]V {
 	}
 
 	return *m
+}
+
+// derefSlice safely dereferences a slice pointer returned by the generated
+// client, returning a nil slice when the pointer is nil. Same rationale as
+// derefMap: oapi-codegen emits *[]T for inline slice response schemas.
+func derefSlice[T any](s *[]T) []T {
+	if s == nil {
+		return nil
+	}
+
+	return *s
 }

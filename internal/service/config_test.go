@@ -31,7 +31,8 @@ import (
 func newTestConfigHandler(t *testing.T, srv *httptest.Server) *ConfigHandler {
 	t.Helper()
 
-	h, err := NewConfigHandler(srv.URL)
+	logger, _ := newSilentLogger()
+	h, err := NewConfigHandler(srv.URL, logger, true)
 	require.NoError(t, err)
 
 	return h
@@ -54,7 +55,8 @@ func writeJSONFile(t *testing.T, v any) string {
 func TestNewConfigHandler(t *testing.T) {
 	t.Parallel()
 
-	h, err := NewConfigHandler("http://localhost:8080")
+	logger, _ := newSilentLogger()
+	h, err := NewConfigHandler("http://localhost:8080", logger, false)
 	require.NoError(t, err)
 	require.NotNil(t, h)
 }
@@ -64,14 +66,16 @@ func TestConfigHandler_Read(t *testing.T) {
 
 	body := `{"service":{"http":{"address":"127.0.0.1"}}}`
 	srv, rec := newTestServer(t, http.StatusOK, body)
-	h := newTestConfigHandler(t, srv)
 
-	data, err := h.Read(t.Context())
+	logger, buf := newSilentLogger()
+	h, err := NewConfigHandler(srv.URL, logger, true)
 	require.NoError(t, err)
+
+	require.NoError(t, h.Read(t.Context()))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/config", rec.path)
-	require.NotNil(t, data)
+	assert.Contains(t, buf.String(), `"address":"127.0.0.1"`)
 }
 
 func TestConfigHandler_Read_BadStatus(t *testing.T) {
@@ -80,7 +84,7 @@ func TestConfigHandler_Read_BadStatus(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusInternalServerError, "boom")
 	h := newTestConfigHandler(t, srv)
 
-	_, err := h.Read(t.Context())
+	err := h.Read(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "boom")
 }
@@ -165,32 +169,28 @@ func TestConfigHandler_Lists(t *testing.T) {
 			name: "clusters",
 			path: "/v1/config/clusters",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ListClusters(t.Context())
-				return err
+				return h.ListClusters(t.Context())
 			},
 		},
 		{
 			name: "policies",
 			path: "/v1/config/policies",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ListPolicies(t.Context())
-				return err
+				return h.ListPolicies(t.Context())
 			},
 		},
 		{
 			name: "routines",
 			path: "/v1/config/routines",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ListRoutines(t.Context())
-				return err
+				return h.ListRoutines(t.Context())
 			},
 		},
 		{
 			name: "storage",
 			path: "/v1/config/storage",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ListStorage(t.Context())
-				return err
+				return h.ListStorage(t.Context())
 			},
 		},
 	}
@@ -221,32 +221,28 @@ func TestConfigHandler_Reads(t *testing.T) {
 			name: "cluster",
 			path: "/v1/config/clusters/primary",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ReadCluster(t.Context(), "primary")
-				return err
+				return h.ReadCluster(t.Context(), "primary")
 			},
 		},
 		{
 			name: "policy",
 			path: "/v1/config/policies/daily",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ReadPolicy(t.Context(), "daily")
-				return err
+				return h.ReadPolicy(t.Context(), "daily")
 			},
 		},
 		{
 			name: "routine",
 			path: "/v1/config/routines/hourly",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ReadRoutine(t.Context(), "hourly")
-				return err
+				return h.ReadRoutine(t.Context(), "hourly")
 			},
 		},
 		{
 			name: "storage",
 			path: "/v1/config/storage/local",
 			fn: func(h *ConfigHandler) error {
-				_, err := h.ReadStorage(t.Context(), "local")
-				return err
+				return h.ReadStorage(t.Context(), "local")
 			},
 		},
 	}
@@ -271,7 +267,7 @@ func TestConfigHandler_Reads_EmptyName(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusOK, "{}")
 	h := newTestConfigHandler(t, srv)
 
-	_, err := h.ReadCluster(t.Context(), "")
+	err := h.ReadCluster(t.Context(), "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--name is required")
 }
@@ -282,7 +278,7 @@ func TestConfigHandler_Reads_NotFound(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusNotFound, `"missing"`)
 	h := newTestConfigHandler(t, srv)
 
-	_, err := h.ReadPolicy(t.Context(), "missing")
+	err := h.ReadPolicy(t.Context(), "missing")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing")
 }

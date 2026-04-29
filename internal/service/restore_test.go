@@ -31,7 +31,8 @@ import (
 func newTestRestoreHandler(t *testing.T, srv *httptest.Server) *RestoreHandler {
 	t.Helper()
 
-	h, err := NewRestoreHandler(srv.URL)
+	logger, _ := newSilentLogger()
+	h, err := NewRestoreHandler(srv.URL, logger, true)
 	require.NoError(t, err)
 
 	return h
@@ -40,7 +41,8 @@ func newTestRestoreHandler(t *testing.T, srv *httptest.Server) *RestoreHandler {
 func TestNewRestoreHandler(t *testing.T) {
 	t.Parallel()
 
-	h, err := NewRestoreHandler("http://localhost:8080")
+	logger, _ := newSilentLogger()
+	h, err := NewRestoreHandler("http://localhost:8080", logger, false)
 	require.NoError(t, err)
 	require.NotNil(t, h)
 }
@@ -85,16 +87,19 @@ func TestRestoreHandler_Status(t *testing.T) {
 
 	body := `{"status":"Running","read-records":100}`
 	srv, rec := newTestServer(t, http.StatusOK, body)
-	h := newTestRestoreHandler(t, srv)
 
-	data, err := h.Status(t.Context(), 42)
+	logger, buf := newSilentLogger()
+	h, err := NewRestoreHandler(srv.URL, logger, true)
 	require.NoError(t, err)
+
+	require.NoError(t, h.Status(t.Context(), 42))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/restore/status/42", rec.path)
-	require.NotNil(t, data)
-	require.NotNil(t, data.ReadRecords)
-	assert.Equal(t, int64(100), *data.ReadRecords)
+
+	out := buf.String()
+	assert.Contains(t, out, `"jobId":42`)
+	assert.Contains(t, out, `"read-records":100`)
 }
 
 func TestRestoreHandler_Status_InvalidJobID(t *testing.T) {
@@ -103,7 +108,7 @@ func TestRestoreHandler_Status_InvalidJobID(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusOK, "{}")
 	h := newTestRestoreHandler(t, srv)
 
-	_, err := h.Status(t.Context(), -1)
+	err := h.Status(t.Context(), -1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "job-id must be a positive integer")
 }
@@ -114,7 +119,7 @@ func TestRestoreHandler_Status_NotFound(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusNotFound, `"job missing"`)
 	h := newTestRestoreHandler(t, srv)
 
-	_, err := h.Status(t.Context(), 7)
+	err := h.Status(t.Context(), 7)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "job missing")
 }
@@ -125,8 +130,7 @@ func TestRestoreHandler_ListJobs_NoFilters(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `{}`)
 	h := newTestRestoreHandler(t, srv)
 
-	_, err := h.ListJobs(t.Context(), 0, 0, "")
-	require.NoError(t, err)
+	require.NoError(t, h.ListJobs(t.Context(), 0, 0, ""))
 
 	assert.Equal(t, http.MethodGet, rec.method)
 	assert.Equal(t, "/v1/restore/jobs", rec.path)
@@ -139,8 +143,7 @@ func TestRestoreHandler_ListJobs_WithFilters(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK, `{}`)
 	h := newTestRestoreHandler(t, srv)
 
-	_, err := h.ListJobs(t.Context(), 100, 200, "Running,Done")
-	require.NoError(t, err)
+	require.NoError(t, h.ListJobs(t.Context(), 100, 200, "Running,Done"))
 
 	assert.Equal(t, "/v1/restore/jobs", rec.path)
 	assert.Equal(t, "100", rec.query.Get("from"))
@@ -154,7 +157,7 @@ func TestRestoreHandler_ListJobs_BadRequest(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusBadRequest, `"invalid status filter"`)
 	h := newTestRestoreHandler(t, srv)
 
-	_, err := h.ListJobs(t.Context(), 0, 0, "Bogus")
+	err := h.ListJobs(t.Context(), 0, 0, "Bogus")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid status filter")
 }

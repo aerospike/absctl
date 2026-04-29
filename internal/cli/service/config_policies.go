@@ -33,12 +33,10 @@ func newConfigPoliciesCmd(rc *runCtx) *cobra.Command {
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "policy",
 		resourcePlural: "policies",
-		listKey:        "policies",
-		itemKey:        "policy",
-		list: func(ctx context.Context, h *configService.ConfigHandler) (any, error) {
+		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListPolicies(ctx)
 		},
-		show: func(ctx context.Context, h *configService.ConfigHandler, name string) (any, error) {
+		show: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
 			return h.ReadPolicy(ctx, name)
 		},
 		del: func(ctx context.Context, h *configService.ConfigHandler, name string) error {
@@ -72,7 +70,7 @@ func newConfigPolicyAddCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -110,7 +108,7 @@ func newConfigPolicyUpdateCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			handler, err := newConfigHandler(rc.conn)
+			handler, err := newConfigHandler(rc)
 			if err != nil {
 				return err
 			}

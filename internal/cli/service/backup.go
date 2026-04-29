@@ -47,7 +47,7 @@ func newBackupCancelCmd(rc *runCtx) *cobra.Command {
 		Use:   "cancel",
 		Short: "Cancel a currently running backup",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}
@@ -76,22 +76,12 @@ func newBackupStatusCmd(rc *runCtx) *cobra.Command {
 		Use:   "status",
 		Short: "Get current backup statistics for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.Status(cmd.Context(), f.Name)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("backup status",
-				slog.String("routine", f.Name),
-				slog.Any("status", data),
-			)
-
-			return nil
+			return handler.Status(cmd.Context(), f.Name)
 		},
 	}
 
@@ -102,12 +92,13 @@ func newBackupStatusCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-// newBackupHandler validates the service connection and creates a BackupHandler.
-func newBackupHandler(connFlags *flags.ServiceConnection) (*backupService.BackupHandler, error) {
-	conn := connFlags.GetServiceConnection()
+// newBackupHandler validates the service connection and creates a BackupHandler
+// configured with the shared logger and JSON output flag.
+func newBackupHandler(rc *runCtx) (*backupService.BackupHandler, error) {
+	conn := rc.conn.GetServiceConnection()
 	if err := conn.Validate(); err != nil {
 		return nil, err
 	}
 
-	return backupService.NewBackupHandler(conn.ServerURL())
+	return backupService.NewBackupHandler(conn.ServerURL(), rc.logger, rc.app.GetApp().LogJSON)
 }

@@ -45,19 +45,12 @@ func newBackupFullListCmd(rc *runCtx) *cobra.Command {
 		Use:   "list",
 		Short: "List available full backups",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}
 
-			data, err := handler.ListFull(cmd.Context(), f.Name, f.From, f.To)
-			if err != nil {
-				return err
-			}
-
-			rc.logger.Info("full backups", slog.Any("backups", data))
-
-			return nil
+			return handler.ListFull(cmd.Context(), f.Name, f.From, f.To)
 		},
 	}
 
@@ -74,7 +67,7 @@ func newBackupFullStartCmd(rc *runCtx) *cobra.Command {
 		Use:   "start",
 		Short: "Start a full backup for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			handler, err := newBackupHandler(rc.conn)
+			handler, err := newBackupHandler(rc)
 			if err != nil {
 				return err
 			}
