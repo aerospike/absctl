@@ -56,7 +56,7 @@ func PrintPolicy(name string, policy *api.DtoBackupPolicy, toLog bool, logger *s
 
 func printPoliciesTable(policies map[string]api.DtoBackupPolicy) {
 	if len(policies) == 0 {
-		printToStderr("No policies configured.")
+		printToOutWriter("No policies configured.")
 		return
 	}
 

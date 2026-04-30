@@ -69,7 +69,7 @@ func printBackupDetailsByRoutine(data map[string][]api.DtoBackupDetails, isIncre
 	printSection(header)
 
 	if len(data) == 0 {
-		printToStderr("No backups found.")
+		printToOutWriter("No backups found.")
 		return
 	}
 
@@ -93,10 +93,10 @@ func printBackupDetailsForRoutine(data []api.DtoBackupDetails, name string, isIn
 
 	printSection(header)
 	printMetric("Routine", name)
-	printToStderr("")
+	printToOutWriter("")
 
 	if len(data) == 0 {
-		printToStderr("No backups found.")
+		printToOutWriter("No backups found.")
 		return
 	}
 

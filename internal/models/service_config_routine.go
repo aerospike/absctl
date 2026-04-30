@@ -23,9 +23,6 @@ type ConfigRoutineFields struct {
 	// Name is the routine name (URL path parameter).
 	Name string
 
-	// File is an optional path to a JSON file with a DtoBackupRoutine body.
-	File string
-
 	BackupPolicy     string
 	SourceCluster    string
 	Storage          string

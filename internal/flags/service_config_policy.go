@@ -21,7 +21,7 @@ import (
 
 // ServiceConfigPolicy holds flags for the `service config policies add|update`
 // commands. Each leaf field of DtoBackupPolicy is exposed as an individual
-// flag; --file may be used as a base body that flags then override.
+// flag;
 type ServiceConfigPolicy struct {
 	models.ConfigPolicyFields
 }
@@ -35,10 +35,6 @@ func (f *ServiceConfigPolicy) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Name, "name", "",
 		"Policy name (used as the URL path parameter).")
-
-	flagSet.StringVar(&f.File, "file", "",
-		"Path to a JSON file with a DtoBackupPolicy body. "+
-			"Other flags override fields loaded from this file.")
 
 	flagSet.IntVar(&f.Bandwidth, "bandwidth", 0,
 		"Throttle backup write speed (MiB/s). 0 means no limit.")

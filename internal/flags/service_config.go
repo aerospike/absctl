@@ -50,7 +50,7 @@ func (f *ServiceConfigFile) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.File, "file", "",
-		"Path to a JSON file with the full service configuration body (DtoConfig).")
+		"Path to a YAML file with the full service configuration body (DtoConfig).")
 
 	return flagSet
 }

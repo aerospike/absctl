@@ -56,7 +56,7 @@ func PrintStorage(name string, storage *api.DtoStorage, toLog bool, logger *slog
 
 func printStorageTable(storage map[string]api.DtoStorage) {
 	if len(storage) == 0 {
-		printToStderr("No storage configured.")
+		printToOutWriter("No storage configured.")
 		return
 	}
 

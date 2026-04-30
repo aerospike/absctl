@@ -53,7 +53,6 @@ func newConfigPoliciesCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigPolicyAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigPolicy()
 
@@ -61,9 +60,7 @@ func newConfigPolicyAddCmd(rc *runCtx) *cobra.Command {
 		Use:   "add",
 		Short: "Add a new backup policy definition",
 		Long: "Add a new backup policy definition. Body fields can be supplied as " +
-			"individual flags or via --file (a JSON DtoBackupPolicy body). When both " +
-			"are provided, flag values override the corresponding fields loaded from " +
-			"the file.",
+			"individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err
@@ -91,7 +88,6 @@ func newConfigPolicyAddCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigPolicyUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigPolicy()
 
@@ -99,9 +95,7 @@ func newConfigPolicyUpdateCmd(rc *runCtx) *cobra.Command {
 		Use:   "update",
 		Short: "Replace an existing backup policy definition",
 		Long: "Replace an existing backup policy definition. Body fields can be " +
-			"supplied as individual flags or via --file (a JSON DtoBackupPolicy body). " +
-			"When both are provided, flag values override the corresponding fields " +
-			"loaded from the file.",
+			"supplied as individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err

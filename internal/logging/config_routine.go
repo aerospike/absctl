@@ -57,7 +57,7 @@ func PrintRoutine(name string, routine *api.DtoBackupRoutine, toLog bool, logger
 
 func printRoutinesTable(routines map[string]api.DtoBackupRoutine) {
 	if len(routines) == 0 {
-		printToStderr("No routines configured.")
+		printToOutWriter("No routines configured.")
 		return
 	}
 

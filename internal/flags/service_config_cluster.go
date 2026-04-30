@@ -21,7 +21,7 @@ import (
 
 // ServiceConfigCluster holds flags for the `service config clusters add|update`
 // commands. Each leaf field of DtoAerospikeCluster is exposed as an individual
-// flag; --file may be used as a base body that flags then override.
+// flag;
 type ServiceConfigCluster struct {
 	models.ConfigClusterFields
 }
@@ -35,10 +35,6 @@ func (f *ServiceConfigCluster) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Name, "name", "",
 		"Cluster name (used as the URL path parameter).")
-
-	flagSet.StringVar(&f.File, "file", "",
-		"Path to a JSON file with a DtoAerospikeCluster body. "+
-			"Other flags override fields loaded from this file.")
 
 	flagSet.StringArrayVar(&f.SeedNodes, "seed-node", nil,
 		"Seed node entry in the form host:port[/tls-name]. Repeatable.")

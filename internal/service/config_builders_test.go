@@ -149,39 +149,6 @@ func TestBuildClusterBody_FromFlagsOnly(t *testing.T) {
 	assert.Equal(t, "tls-1", *body.Tls.Name)
 }
 
-func TestBuildClusterBody_FileBaseFlagOverride(t *testing.T) {
-	t.Parallel()
-
-	file := writeJSONFile(t, map[string]any{
-		"label":        "from-file",
-		"conn-timeout": 1000,
-		"seed-nodes":   []map[string]any{{"host-name": "10.0.0.1", "port": 3000}},
-		"prefer-racks": []int{9},
-	})
-
-	f := &models.ConfigClusterFields{
-		Name:        "primary",
-		File:        file,
-		Label:       "from-flag",
-		ConnTimeout: 0,
-	}
-
-	body, err := buildClusterBody(f)
-	require.NoError(t, err)
-
-	require.NotNil(t, body.Label)
-	assert.Equal(t, "from-flag", *body.Label, "flag should override file")
-
-	require.NotNil(t, body.ConnTimeout)
-	assert.Equal(t, 1000, *body.ConnTimeout, "unset flag must keep file value")
-
-	require.Len(t, body.SeedNodes, 1)
-	assert.Equal(t, "10.0.0.1", body.SeedNodes[0].HostName)
-
-	require.NotNil(t, body.PreferRacks)
-	assert.Equal(t, []int{9}, *body.PreferRacks)
-}
-
 func TestBuildClusterBody_BadSeedNode(t *testing.T) {
 	t.Parallel()
 
@@ -213,8 +180,7 @@ func TestBuildPolicyBody(t *testing.T) {
 		RetryMultiplier:      2.0,
 	}
 
-	body, err := buildPolicyBody(f)
-	require.NoError(t, err)
+	body := buildPolicyBody(f)
 
 	require.NotNil(t, body.Parallel)
 	assert.Equal(t, 4, *body.Parallel)
@@ -267,8 +233,7 @@ func TestBuildRoutineBody(t *testing.T) {
 		SecretAgent:      "agent",
 	}
 
-	body, err := buildRoutineBody(f)
-	require.NoError(t, err)
+	body := buildRoutineBody(f)
 
 	require.NotNil(t, body.BackupPolicy)
 	assert.Equal(t, "daily", *body.BackupPolicy)
@@ -301,12 +266,11 @@ func TestBuildRoutineBody(t *testing.T) {
 func TestBuildStorageBody_Local(t *testing.T) {
 	t.Parallel()
 
-	body, err := buildStorageBody(&models.ConfigStorageFields{
+	body := buildStorageBody(&models.ConfigStorageFields{
 		Name:             "local",
 		LocalPath:        "/tmp/backup",
 		LocalMinPartSize: 1024,
 	})
-	require.NoError(t, err)
 
 	require.NotNil(t, body.LocalStorage)
 	assert.Equal(t, "/tmp/backup", body.LocalStorage.Path)
@@ -321,7 +285,7 @@ func TestBuildStorageBody_Local(t *testing.T) {
 func TestBuildStorageBody_S3(t *testing.T) {
 	t.Parallel()
 
-	body, err := buildStorageBody(&models.ConfigStorageFields{
+	body := buildStorageBody(&models.ConfigStorageFields{
 		Name:                  "remote",
 		S3Bucket:              "my-bucket",
 		S3Region:              "us-east-1",
@@ -332,7 +296,6 @@ func TestBuildStorageBody_S3(t *testing.T) {
 		S3MaxAsyncConnections: 10,
 		S3SecretAgentName:     "agent",
 	})
-	require.NoError(t, err)
 
 	require.NotNil(t, body.S3Storage)
 	assert.Equal(t, "my-bucket", body.S3Storage.Bucket)
@@ -354,26 +317,25 @@ func TestBuildStorageBody_S3(t *testing.T) {
 func TestBuildStorageBody_GcpAndAzure(t *testing.T) {
 	t.Parallel()
 
-	gcp, err := buildStorageBody(&models.ConfigStorageFields{
+	gcp := buildStorageBody(&models.ConfigStorageFields{
 		Name:                "gcp",
 		GcpBucketName:       "bk",
 		GcpStorageClassData: "STANDARD",
 	})
-	require.NoError(t, err)
+
 	require.NotNil(t, gcp.GcpStorage)
 	assert.Equal(t, "bk", gcp.GcpStorage.BucketName)
 	require.NotNil(t, gcp.GcpStorage.StorageClass)
 	require.NotNil(t, gcp.GcpStorage.StorageClass.Data)
 	assert.Equal(t, "STANDARD", string(*gcp.GcpStorage.StorageClass.Data))
 
-	az, err := buildStorageBody(&models.ConfigStorageFields{
+	az := buildStorageBody(&models.ConfigStorageFields{
 		Name:                  "azure",
 		AzureContainerName:    "container",
 		AzureEndpoint:         "https://az.example",
 		AzureStorageClassData: "Hot",
 		AzureStorageClassMeta: "Cool",
 	})
-	require.NoError(t, err)
 	require.NotNil(t, az.AzureStorage)
 	assert.Equal(t, "container", az.AzureStorage.ContainerName)
 	assert.Equal(t, "https://az.example", az.AzureStorage.Endpoint)
@@ -382,12 +344,4 @@ func TestBuildStorageBody_GcpAndAzure(t *testing.T) {
 	assert.Equal(t, "Hot", string(*az.AzureStorage.StorageClass.Data))
 	require.NotNil(t, az.AzureStorage.StorageClass.Metadata)
 	assert.Equal(t, "Cool", string(*az.AzureStorage.StorageClass.Metadata))
-}
-
-func TestBuildBody_FileNotFound(t *testing.T) {
-	t.Parallel()
-
-	_, err := buildClusterBody(&models.ConfigClusterFields{Name: "p", File: "/no/such.json"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to read request file")
 }

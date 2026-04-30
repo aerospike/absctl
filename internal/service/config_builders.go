@@ -31,12 +31,6 @@ import (
 func buildClusterBody(f *models.ConfigClusterFields) (*api.DtoAerospikeCluster, error) {
 	body := &api.DtoAerospikeCluster{}
 
-	if f.File != "" {
-		if err := loadJSONFile(f.File, body); err != nil {
-			return nil, err
-		}
-	}
-
 	if len(f.SeedNodes) > 0 {
 		nodes, err := parseSeedNodes(f.SeedNodes)
 		if err != nil {
@@ -227,14 +221,8 @@ func parseSeedNodes(entries []string) ([]api.DtoSeedNode, error) {
 	return nodes, nil
 }
 
-func buildPolicyBody(f *models.ConfigPolicyFields) (*api.DtoBackupPolicy, error) {
+func buildPolicyBody(f *models.ConfigPolicyFields) *api.DtoBackupPolicy {
 	body := &api.DtoBackupPolicy{}
-
-	if f.File != "" {
-		if err := loadJSONFile(f.File, body); err != nil {
-			return nil, err
-		}
-	}
 
 	setIntPtr(&body.Bandwidth, f.Bandwidth)
 	setIntPtr(&body.FileLimit, f.FileLimit)
@@ -307,17 +295,11 @@ func buildPolicyBody(f *models.ConfigPolicyFields) (*api.DtoBackupPolicy, error)
 		}
 	}
 
-	return body, nil
+	return body
 }
 
-func buildRoutineBody(f *models.ConfigRoutineFields) (*api.DtoBackupRoutine, error) {
+func buildRoutineBody(f *models.ConfigRoutineFields) *api.DtoBackupRoutine {
 	body := &api.DtoBackupRoutine{}
-
-	if f.File != "" {
-		if err := loadJSONFile(f.File, body); err != nil {
-			return nil, err
-		}
-	}
 
 	if f.BackupPolicy != "" {
 		v := f.BackupPolicy
@@ -380,17 +362,11 @@ func buildRoutineBody(f *models.ConfigRoutineFields) (*api.DtoBackupRoutine, err
 		body.RackList = &v
 	}
 
-	return body, nil
+	return body
 }
 
-func buildStorageBody(f *models.ConfigStorageFields) (*api.DtoStorage, error) {
+func buildStorageBody(f *models.ConfigStorageFields) *api.DtoStorage {
 	body := &api.DtoStorage{}
-
-	if f.File != "" {
-		if err := loadJSONFile(f.File, body); err != nil {
-			return nil, err
-		}
-	}
 
 	if f.LocalPath != "" || f.LocalMinPartSize > 0 {
 		if body.LocalStorage == nil {
@@ -428,7 +404,7 @@ func buildStorageBody(f *models.ConfigStorageFields) (*api.DtoStorage, error) {
 		applyAzureStorage(body.AzureStorage, f)
 	}
 
-	return body, nil
+	return body
 }
 
 func anyS3Set(f *models.ConfigStorageFields) bool {

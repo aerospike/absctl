@@ -27,9 +27,6 @@ type ConfigStorageFields struct {
 	// Name is the storage name (URL path parameter).
 	Name string
 
-	// File is an optional path to a JSON file with a DtoStorage body.
-	File string
-
 	// LocalStorage.*
 	LocalPath        string
 	LocalMinPartSize int

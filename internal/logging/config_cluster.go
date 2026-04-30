@@ -58,7 +58,7 @@ func PrintCluster(name string, cluster *api.DtoAerospikeCluster, toLog bool, log
 
 func printClustersTable(clusters map[string]api.DtoAerospikeCluster) {
 	if len(clusters) == 0 {
-		printToStderr("No clusters configured.")
+		printToOutWriter("No clusters configured.")
 		return
 	}
 

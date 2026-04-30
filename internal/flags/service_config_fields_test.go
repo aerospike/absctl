@@ -29,7 +29,6 @@ func TestServiceConfigCluster_NewFlagSet(t *testing.T) {
 
 	args := []string{
 		"--name", "primary",
-		"--file", "/tmp/cluster.json",
 		"--seed-node", "127.0.0.1:3000",
 		"--seed-node", "node2.example:3000/edge",
 		"--prefer-racks", "1,2,3",
@@ -47,7 +46,6 @@ func TestServiceConfigCluster_NewFlagSet(t *testing.T) {
 	require.NoError(t, flagSet.Parse(args))
 
 	assert.Equal(t, "primary", f.Name)
-	assert.Equal(t, "/tmp/cluster.json", f.File)
 	assert.Equal(t, []string{"127.0.0.1:3000", "node2.example:3000/edge"}, f.SeedNodes)
 	assert.Equal(t, []int{1, 2, 3}, f.PreferRacks)
 	assert.Equal(t, 5000, f.ConnTimeout)
@@ -70,7 +68,6 @@ func TestServiceConfigCluster_Defaults(t *testing.T) {
 	require.NoError(t, flagSet.Parse([]string{}))
 
 	assert.Empty(t, f.Name)
-	assert.Empty(t, f.File)
 	assert.Empty(t, f.SeedNodes)
 	assert.Empty(t, f.PreferRacks)
 	assert.Zero(t, f.ConnTimeout)

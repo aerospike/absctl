@@ -23,9 +23,6 @@ type ConfigPolicyFields struct {
 	// Name is the policy name (URL path parameter).
 	Name string
 
-	// File is an optional path to a JSON file with a DtoBackupPolicy body.
-	File string
-
 	Bandwidth                int
 	FileLimit                int
 	MaxConcurrentNodes       int

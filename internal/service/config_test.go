@@ -366,30 +366,6 @@ func TestConfigHandler_Adds(t *testing.T) {
 	}
 }
 
-func TestConfigHandler_Adds_FlagsOverrideFile(t *testing.T) {
-	t.Parallel()
-
-	file := writeJSONFile(t, map[string]any{
-		"label":      "loaded-from-file",
-		"seed-nodes": []map[string]any{{"host-name": "10.0.0.1", "port": 3000}},
-	})
-
-	srv, rec := newTestServer(t, http.StatusCreated, "")
-	h := newTestConfigHandler(t, srv)
-
-	err := h.AddCluster(t.Context(), &models.ConfigClusterFields{
-		Name:  "primary",
-		File:  file,
-		Label: "from-flag",
-	})
-	require.NoError(t, err)
-
-	body := string(rec.body)
-	assert.Contains(t, body, `"label":"from-flag"`)
-	assert.Contains(t, body, `"host-name":"10.0.0.1"`,
-		"unrelated fields from --file should remain")
-}
-
 func TestConfigHandler_Adds_ValidationErrors(t *testing.T) {
 	t.Parallel()
 

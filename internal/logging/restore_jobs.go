@@ -39,7 +39,7 @@ func printRestoreJobs(jobs map[string]api.DtoRestoreJobStatus) {
 	printSection(headerRestoreJobs)
 
 	if len(jobs) == 0 {
-		printToStderr("No restore jobs found.")
+		printToOutWriter("No restore jobs found.")
 		return
 	}
 

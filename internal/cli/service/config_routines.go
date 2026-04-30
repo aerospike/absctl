@@ -55,7 +55,6 @@ func newConfigRoutinesCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigRoutineAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigRoutine()
 
@@ -63,9 +62,7 @@ func newConfigRoutineAddCmd(rc *runCtx) *cobra.Command {
 		Use:   "add",
 		Short: "Add a new backup routine definition",
 		Long: "Add a new backup routine definition. Body fields can be supplied as " +
-			"individual flags or via --file (a JSON DtoBackupRoutine body). When both " +
-			"are provided, flag values override the corresponding fields loaded from " +
-			"the file.",
+			"individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err
@@ -93,7 +90,6 @@ func newConfigRoutineAddCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigRoutineUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigRoutine()
 
@@ -101,9 +97,7 @@ func newConfigRoutineUpdateCmd(rc *runCtx) *cobra.Command {
 		Use:   "update",
 		Short: "Replace an existing backup routine definition",
 		Long: "Replace an existing backup routine definition. Body fields can be " +
-			"supplied as individual flags or via --file (a JSON DtoBackupRoutine body). " +
-			"When both are provided, flag values override the corresponding fields " +
-			"loaded from the file.",
+			"supplied as individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err

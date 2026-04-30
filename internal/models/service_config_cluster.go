@@ -18,16 +18,9 @@ import "fmt"
 
 // ConfigClusterFields holds CLI inputs for adding or updating a single
 // Aerospike cluster definition (DtoAerospikeCluster).
-//
-// File can be used to load a base body; non-zero/non-empty flag values then
-// override the corresponding fields. Boolean and zero-int fields cannot be
-// turned off from flags — use File for that.
 type ConfigClusterFields struct {
 	// Name is the cluster name (URL path parameter).
 	Name string
-
-	// File is an optional path to a JSON file with a DtoAerospikeCluster body.
-	File string
 
 	// SeedNodes is a list of seed-node entries in the form host:port[/tls-name].
 	// Repeatable flag (--seed-node host:port).

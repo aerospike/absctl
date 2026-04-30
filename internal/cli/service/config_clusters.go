@@ -59,7 +59,6 @@ func newConfigClustersCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigClusterAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigCluster()
 
@@ -67,9 +66,7 @@ func newConfigClusterAddCmd(rc *runCtx) *cobra.Command {
 		Use:   "add",
 		Short: "Add a new Aerospike cluster definition",
 		Long: "Add a new Aerospike cluster definition. Body fields can be supplied " +
-			"as individual flags or via --file (a JSON DtoAerospikeCluster body). " +
-			"When both are provided, flag values override the corresponding fields " +
-			"loaded from the file.",
+			"as individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err
@@ -97,7 +94,6 @@ func newConfigClusterAddCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // add/update commands are intentionally symmetric per resource; see newConfigClustersCmd doc.
 func newConfigClusterUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigCluster()
 
@@ -105,9 +101,7 @@ func newConfigClusterUpdateCmd(rc *runCtx) *cobra.Command {
 		Use:   "update",
 		Short: "Replace an existing Aerospike cluster definition",
 		Long: "Replace an existing Aerospike cluster definition. Body fields can be " +
-			"supplied as individual flags or via --file (a JSON DtoAerospikeCluster " +
-			"body). When both are provided, flag values override the corresponding " +
-			"fields loaded from the file.",
+			"supplied as individual flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err

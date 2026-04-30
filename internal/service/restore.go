@@ -16,7 +16,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,6 +24,7 @@ import (
 	"github.com/aerospike/absctl/api"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
+	"gopkg.in/yaml.v3"
 )
 
 // RestoreHandler handles restore-related REST API calls and renders
@@ -199,7 +199,7 @@ func buildRestoreRequest(req *models.RestoreRequest) (*api.DtoRestoreRequest, er
 	body := &api.DtoRestoreRequest{}
 
 	if req.RequestFile != "" {
-		if err := loadJSONFile(req.RequestFile, body); err != nil {
+		if err := loadYAMLFile(req.RequestFile, body); err != nil {
 			return nil, err
 		}
 	}
@@ -238,7 +238,7 @@ func buildRestoreTimestampRequest(req *models.RestoreTimestampRequest) (*api.Dto
 	body := &api.DtoRestoreTimestampRequest{}
 
 	if req.RequestFile != "" {
-		if err := loadJSONFile(req.RequestFile, body); err != nil {
+		if err := loadYAMLFile(req.RequestFile, body); err != nil {
 			return nil, err
 		}
 	}
@@ -279,13 +279,13 @@ func buildRestoreTimestampRequest(req *models.RestoreTimestampRequest) (*api.Dto
 	return body, nil
 }
 
-func loadJSONFile(path string, v any) error {
+func loadYAMLFile(path string, v any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read request file %q: %w", path, err)
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
+	if err := yaml.Unmarshal(data, v); err != nil {
 		return fmt.Errorf("failed to parse request file %q: %w", path, err)
 	}
 

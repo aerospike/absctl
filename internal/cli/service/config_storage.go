@@ -63,8 +63,7 @@ func newConfigStorageAddCmd(rc *runCtx) *cobra.Command {
 		Long: "Add a new storage definition. Storage wraps exactly one of " +
 			"local/s3/gcp/azure provider blocks; populating any field of a provider " +
 			"group selects that provider. Body fields can be supplied as individual " +
-			"flags or via --file (a JSON DtoStorage body). When both are provided, " +
-			"flag values override the corresponding fields loaded from the file.",
+			"flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err
@@ -102,8 +101,7 @@ func newConfigStorageUpdateCmd(rc *runCtx) *cobra.Command {
 		Long: "Replace an existing storage definition. Storage wraps exactly one of " +
 			"local/s3/gcp/azure provider blocks; populating any field of a provider " +
 			"group selects that provider. Body fields can be supplied as individual " +
-			"flags or via --file (a JSON DtoStorage body). When both are provided, " +
-			"flag values override the corresponding fields loaded from the file.",
+			"flags.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err

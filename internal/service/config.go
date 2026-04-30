@@ -73,7 +73,7 @@ func (h *ConfigHandler) Update(ctx context.Context, file string) error {
 	}
 
 	var body api.UpdateConfigJSONRequestBody
-	if err := loadJSONFile(file, &body); err != nil {
+	if err := loadYAMLFile(file, &body); err != nil {
 		return err
 	}
 
@@ -133,8 +133,7 @@ func (h *ConfigHandler) ReadCluster(ctx context.Context, name string) error {
 	return nil
 }
 
-// AddCluster adds a new cluster definition built from individual flag fields
-// (and optionally a JSON base file).
+// AddCluster adds a new cluster definition built from individual flag fields.
 func (h *ConfigHandler) AddCluster(ctx context.Context, fields *models.ConfigClusterFields) error {
 	if err := fields.Validate(); err != nil {
 		return err
@@ -154,7 +153,7 @@ func (h *ConfigHandler) AddCluster(ctx context.Context, fields *models.ConfigClu
 }
 
 // UpdateCluster replaces an existing cluster definition with a body built from
-// individual flag fields (and optionally a JSON base file).
+// individual flag fields.
 func (h *ConfigHandler) UpdateCluster(ctx context.Context, fields *models.ConfigClusterFields) error {
 	if err := fields.Validate(); err != nil {
 		return err
@@ -231,10 +230,7 @@ func (h *ConfigHandler) AddPolicy(ctx context.Context, fields *models.ConfigPoli
 		return err
 	}
 
-	body, err := buildPolicyBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildPolicyBody(fields)
 
 	resp, err := h.client.AddPolicyWithResponse(ctx, fields.Name, *body)
 	if err != nil {
@@ -251,10 +247,7 @@ func (h *ConfigHandler) UpdatePolicy(ctx context.Context, fields *models.ConfigP
 		return err
 	}
 
-	body, err := buildPolicyBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildPolicyBody(fields)
 
 	resp, err := h.client.UpdatePolicyWithResponse(ctx, fields.Name, *body)
 	if err != nil {
@@ -322,10 +315,7 @@ func (h *ConfigHandler) AddRoutine(ctx context.Context, fields *models.ConfigRou
 		return err
 	}
 
-	body, err := buildRoutineBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildRoutineBody(fields)
 
 	resp, err := h.client.AddRoutineWithResponse(ctx, fields.Name, *body)
 	if err != nil {
@@ -342,10 +332,7 @@ func (h *ConfigHandler) UpdateRoutine(ctx context.Context, fields *models.Config
 		return err
 	}
 
-	body, err := buildRoutineBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildRoutineBody(fields)
 
 	resp, err := h.client.UpdateRoutineWithResponse(ctx, fields.Name, *body)
 	if err != nil {
@@ -441,10 +428,7 @@ func (h *ConfigHandler) AddStorage(ctx context.Context, fields *models.ConfigSto
 		return err
 	}
 
-	body, err := buildStorageBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildStorageBody(fields)
 
 	resp, err := h.client.AddStorageWithResponse(ctx, fields.Name, *body)
 	if err != nil {
@@ -461,10 +445,7 @@ func (h *ConfigHandler) UpdateStorage(ctx context.Context, fields *models.Config
 		return err
 	}
 
-	body, err := buildStorageBody(fields)
-	if err != nil {
-		return err
-	}
+	body := buildStorageBody(fields)
 
 	resp, err := h.client.UpdateStorageWithResponse(ctx, fields.Name, *body)
 	if err != nil {

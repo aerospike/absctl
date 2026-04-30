@@ -38,21 +38,29 @@ func printConfig(cfg *api.DtoConfig) {
 	printSection(headerConfig)
 
 	if cfg == nil {
-		printToStderr("No configuration available.")
+		printToOutWriter("No configuration available.")
 		return
 	}
+
+	printSubSection("Clusters")
 
 	if cfg.AerospikeClusters != nil {
 		printClustersTable(*cfg.AerospikeClusters)
 	}
 
+	printSubSection("Policies")
+
 	if cfg.BackupPolicies != nil {
 		printPoliciesTable(*cfg.BackupPolicies)
 	}
 
+	printSubSection("Routines")
+
 	if cfg.BackupRoutines != nil {
 		printRoutinesTable(*cfg.BackupRoutines)
 	}
+
+	printSubSection("Storage")
 
 	if cfg.Storage != nil {
 		printStorageTable(*cfg.Storage)

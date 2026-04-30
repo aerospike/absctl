@@ -21,8 +21,7 @@ import (
 
 // ServiceConfigStorage holds flags for the `service config storage add|update`
 // commands. Storage wraps exactly one of local/s3/gcp/azure provider blocks;
-// populating any field of a provider group selects that provider. --file may
-// be used as a base body that flags then override.
+// populating any field of a provider group selects that provider.
 type ServiceConfigStorage struct {
 	models.ConfigStorageFields
 }
@@ -36,10 +35,6 @@ func (f *ServiceConfigStorage) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Name, "name", "",
 		"Storage name (used as the URL path parameter).")
-
-	flagSet.StringVar(&f.File, "file", "",
-		"Path to a JSON file with a DtoStorage body. "+
-			"Other flags override fields loaded from this file.")
 
 	flagSet.StringVar(&f.LocalPath, "local-storage-path", "",
 		"Local storage: root path of the backup repository.")

@@ -24,7 +24,7 @@ import (
 
 // outWriter is a package-level reference to stderr that tests may override
 // when capturing pretty-printed output is impractical via os.Pipe.
-var outWriter io.Writer = os.Stderr
+var outWriter io.Writer = os.Stdout
 
 // SetOutWriter replaces the package-level output writer used by all
 // pretty-printers. It returns the previous writer so callers (typically
@@ -39,16 +39,16 @@ func SetOutWriter(w io.Writer) io.Writer {
 // printSection writes a header followed by a dashed underline of the same length.
 // Use it to delimit logical sections in non-JSON output.
 func printSection(header string) {
-	printToStderr("")
-	printToStderr(header)
-	printToStderr(strings.Repeat("-", len(header)))
+	printToOutWriter("")
+	printToOutWriter(header)
+	printToOutWriter(strings.Repeat("-", len(header)))
 }
 
 // printSubSection prints a sub-header inside a section without a dashed
 // underline; reserved for grouped key/value blocks.
 func printSubSection(header string) {
-	printToStderr("")
-	printToStderr(header + ":")
+	printToOutWriter("")
+	printToOutWriter("::" + header + "::")
 }
 
 // newTabWriter returns a tabwriter writing to outWriter. The format is tuned

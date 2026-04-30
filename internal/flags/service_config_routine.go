@@ -21,7 +21,7 @@ import (
 
 // ServiceConfigRoutine holds flags for the `service config routines add|update`
 // commands. Each leaf field of DtoBackupRoutine is exposed as an individual
-// flag; --file may be used as a base body that flags then override.
+// flag;
 type ServiceConfigRoutine struct {
 	models.ConfigRoutineFields
 }
@@ -35,10 +35,6 @@ func (f *ServiceConfigRoutine) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Name, "name", "",
 		"Routine name (used as the URL path parameter).")
-
-	flagSet.StringVar(&f.File, "file", "",
-		"Path to a JSON file with a DtoBackupRoutine body. "+
-			"Other flags override fields loaded from this file.")
 
 	flagSet.StringVar(&f.BackupPolicy, "backup-policy", "",
 		"Name of the backup policy to use.")
