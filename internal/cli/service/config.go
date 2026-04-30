@@ -67,7 +67,7 @@ func newConfigUpdateCmd(rc *runCtx) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Replace the full service configuration from a JSON file",
+		Short: "Replace the full service configuration from a YAML file",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
 				return err
