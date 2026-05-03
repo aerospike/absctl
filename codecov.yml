@@ -3,3 +3,4 @@ ignore:
   - "internal/backup"
   - "internal/restore"
   - "docs"
+  - "api"
