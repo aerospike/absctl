@@ -24,7 +24,7 @@ import (
 
 // outWriter is a package-level reference to stderr that tests may override
 // when capturing pretty-printed output is impractical via os.Pipe.
-var outWriter io.Writer = os.Stdout
+var outWriter io.Writer = os.Stderr
 
 // SetOutWriter replaces the package-level output writer used by all
 // pretty-printers. It returns the previous writer so callers (typically
