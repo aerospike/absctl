@@ -1,6 +1,4 @@
 ignore:
   - "cmd"
-  - "internal/backup"
-  - "internal/restore"
   - "docs"
   - "api"
