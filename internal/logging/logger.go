@@ -133,7 +133,16 @@ func newCloseFun(file *os.File) func() error {
 
 // newHandlerOptions creates a new handler options based on the given configuration.
 func newHandlerOptions(cfg *Config) (*slog.HandlerOptions, error) {
-	loggerOpt := &slog.HandlerOptions{}
+	loggerOpt := &slog.HandlerOptions{
+		// Print all durations same way, in human-readable format.
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Value.Kind() == slog.KindDuration {
+				a.Value = slog.StringValue(a.Value.Duration().String())
+			}
+
+			return a
+		},
+	}
 
 	if cfg.Verbose {
 		var logLvl slog.Level
