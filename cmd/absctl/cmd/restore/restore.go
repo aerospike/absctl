@@ -74,7 +74,7 @@ func (r *runner) PostRegistration(cmd *cobra.Command) {
 	cmd.Flags().Lookup("nice").Hidden = false
 }
 
-func (r *runner) SetHelpUsage(cmd *cobra.Command, shared subcmd.SharedFlagSets) {
+func (r *runner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets) {
 	helpFunc := newHelpFunction(
 		shared.App,
 		shared.Aerospike,

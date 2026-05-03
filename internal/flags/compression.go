@@ -27,11 +27,11 @@ const (
 
 type Compression struct {
 	// operation: backup or restore, to form correct documentation.
-	operation int
+	operation Operation
 	models.Compression
 }
 
-func NewCompression(operation int) *Compression {
+func NewCompression(operation Operation) *Compression {
 	return &Compression{operation: operation}
 }
 

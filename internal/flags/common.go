@@ -19,9 +19,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
+type Operation int
+
 const (
 	// OperationBackup is used to generate proper documentation for backup.
-	OperationBackup = iota
+	OperationBackup Operation = iota
 	// OperationRestore is used to generate proper documentation for restore.
 	OperationRestore
 )
@@ -72,11 +74,11 @@ const (
 
 type Common struct {
 	// operation: backup or restore, to form correct documentation.
-	operation int
+	operation Operation
 	fields    *models.Common
 }
 
-func NewCommon(fields *models.Common, operation int) *Common {
+func NewCommon(fields *models.Common, operation Operation) *Common {
 	return &Common{
 		fields:    fields,
 		operation: operation,

@@ -55,11 +55,11 @@ const (
 )
 
 type AwsS3 struct {
-	operation int
+	operation Operation
 	models.AwsS3
 }
 
-func NewAwsS3(operation int) *AwsS3 {
+func NewAwsS3(operation Operation) *AwsS3 {
 	return &AwsS3{
 		operation: operation,
 	}

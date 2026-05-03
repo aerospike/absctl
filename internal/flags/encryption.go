@@ -34,11 +34,11 @@ const (
 
 type Encryption struct {
 	// operation: backup or restore, to form correct documentation.
-	operation int
+	operation Operation
 	models.Encryption
 }
 
-func NewEncryption(operation int) *Encryption {
+func NewEncryption(operation Operation) *Encryption {
 	return &Encryption{operation: operation}
 }
 
