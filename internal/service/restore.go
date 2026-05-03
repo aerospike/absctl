@@ -198,12 +198,6 @@ func (h *RestoreHandler) RestoreTimestamp(ctx context.Context, req *models.Resto
 func buildRestoreRequest(req *models.RestoreRequest) (*api.DtoRestoreRequest, error) {
 	body := &api.DtoRestoreRequest{}
 
-	if req.RequestFile != "" {
-		if err := loadYAMLFile(req.RequestFile, body); err != nil {
-			return nil, err
-		}
-	}
-
 	if req.BackupDataPath != "" {
 		body.BackupDataPath = req.BackupDataPath
 	}
@@ -236,12 +230,6 @@ func buildRestoreRequest(req *models.RestoreRequest) (*api.DtoRestoreRequest, er
 // buildRestoreTimestampRequest constructs an api.DtoRestoreTimestampRequest from model inputs.
 func buildRestoreTimestampRequest(req *models.RestoreTimestampRequest) (*api.DtoRestoreTimestampRequest, error) {
 	body := &api.DtoRestoreTimestampRequest{}
-
-	if req.RequestFile != "" {
-		if err := loadYAMLFile(req.RequestFile, body); err != nil {
-			return nil, err
-		}
-	}
 
 	if req.Routine != "" {
 		body.Routine = req.Routine

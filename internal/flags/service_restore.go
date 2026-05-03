@@ -74,10 +74,6 @@ func NewServiceRestoreRequest() *ServiceRestoreRequest {
 func (f *ServiceRestoreRequest) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.RequestFile, "request-file", "",
-		"Path to a JSON file containing the full restore request body. "+
-			"Other flags override fields loaded from this file.")
-
 	flagSet.StringVar(&f.BackupDataPath, "backup-data-path", "",
 		"Path to the backup data inside the storage root. "+
 			"Required when --request-file is not provided.")
@@ -105,10 +101,6 @@ func NewServiceRestoreTimestamp() *ServiceRestoreTimestamp {
 
 func (f *ServiceRestoreTimestamp) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
-
-	flagSet.StringVar(&f.RequestFile, "request-file", "",
-		"Path to a JSON file containing the full restore-by-timestamp request body. "+
-			"Other flags override fields loaded from this file.")
 
 	flagSet.StringVar(&f.Routine, "routine", "",
 		"Backup routine name. Required when --request-file is not provided.")

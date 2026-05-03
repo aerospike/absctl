@@ -34,7 +34,7 @@ type ConfigClusterFields struct {
 	MaxParallelScans     int
 	UseServicesAlternate bool
 
-	// Credentials.* override fields under the credentials object.
+	// Credentials.* override fields under the credential object.
 	CredentialsUser            string
 	CredentialsPassword        string
 	CredentialsPasswordPath    string

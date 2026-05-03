@@ -40,9 +40,6 @@ type RestoreJobsFilter struct {
 // Either RequestFile or BackupDataPath must be set.
 // Flag values override fields loaded from RequestFile when both are provided.
 type RestoreRequest struct {
-	// RequestFile is a path to a JSON file containing the full DtoRestoreRequest body.
-	RequestFile string
-
 	// BackupDataPath is the path to the backup data inside the storage root.
 	BackupDataPath string
 
@@ -57,8 +54,8 @@ type RestoreRequest struct {
 }
 
 func (r *RestoreRequest) Validate() error {
-	if r.RequestFile == "" && r.BackupDataPath == "" {
-		return fmt.Errorf("either --request-file or --backup-data-path must be provided")
+	if r.BackupDataPath == "" {
+		return fmt.Errorf("--backup-data-path must be provided")
 	}
 
 	return nil
@@ -67,9 +64,6 @@ func (r *RestoreRequest) Validate() error {
 // RestoreTimestampRequest holds inputs for the timestamp-based restore operation.
 // Either RequestFile or both Routine and Time must be set.
 type RestoreTimestampRequest struct {
-	// RequestFile is a path to a JSON file containing the full DtoRestoreTimestampRequest body.
-	RequestFile string
-
 	// Routine is the backup routine name to restore from.
 	Routine string
 
@@ -87,10 +81,6 @@ type RestoreTimestampRequest struct {
 }
 
 func (r *RestoreTimestampRequest) Validate() error {
-	if r.RequestFile != "" {
-		return nil
-	}
-
 	if r.Routine == "" {
 		return fmt.Errorf("--routine is required when --request-file is not provided")
 	}

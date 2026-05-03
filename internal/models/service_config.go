@@ -33,7 +33,7 @@ func (c *ConfigResourceName) Validate() error {
 // ConfigUpdate holds inputs for replacing the full service configuration in a
 // single PUT request.
 type ConfigUpdate struct {
-	// File is a path to a JSON file with the full DtoConfig body.
+	// File is a path to a YAML file with the full DtoConfig body.
 	File string
 }
 

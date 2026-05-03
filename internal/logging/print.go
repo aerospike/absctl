@@ -98,3 +98,16 @@ func boolVal(p *bool) bool {
 
 	return *p
 }
+
+// printToOutWriter prints the string to the configured output writer (stdout by default).
+func printToOutWriter(s string) {
+	_, _ = fmt.Fprintln(outWriter, s)
+}
+
+func printMetric(key string, value any) {
+	_, _ = fmt.Fprintf(outWriter, "%s%v\n", indent(key), value)
+}
+
+func indent(key string) string {
+	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", 21-len(key)))
+}

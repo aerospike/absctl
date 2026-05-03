@@ -18,8 +18,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/aerospike/absctl/api"
@@ -193,64 +191,6 @@ func TestRestoreHandler_RestoreFull_FlagsOnly(t *testing.T) {
 	assert.Equal(t, "agent", *got.SecretAgentName)
 }
 
-func TestRestoreHandler_RestoreFull_RequestFile(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{
-		"backup-data-path": "data/from-file",
-		"destination-name": "file-dest",
-		"source-name":      "file-src",
-	})
-
-	srv, rec := newTestServer(t, http.StatusAccepted, "555")
-	h := newTestRestoreHandler(t, srv)
-
-	req := &models.RestoreRequest{RequestFile: file}
-
-	jobID, err := h.RestoreFull(t.Context(), req)
-	require.NoError(t, err)
-
-	assert.Equal(t, "555", jobID)
-
-	var got api.DtoRestoreRequest
-	require.NoError(t, json.Unmarshal(rec.body, &got))
-	assert.Equal(t, "data/from-file", got.BackupDataPath)
-	require.NotNil(t, got.DestinationName)
-	assert.Equal(t, "file-dest", *got.DestinationName)
-	require.NotNil(t, got.SourceName)
-	assert.Equal(t, "file-src", *got.SourceName)
-}
-
-func TestRestoreHandler_RestoreFull_RequestFileWithFlagOverrides(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{
-		"backup-data-path": "data/from-file",
-		"destination-name": "file-dest",
-		"source-name":      "file-src",
-	})
-
-	srv, rec := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	req := &models.RestoreRequest{
-		RequestFile:     file,
-		BackupDataPath:  "data/from-flag",
-		DestinationName: "flag-dest",
-	}
-
-	_, err := h.RestoreFull(t.Context(), req)
-	require.NoError(t, err)
-
-	var got api.DtoRestoreRequest
-	require.NoError(t, json.Unmarshal(rec.body, &got))
-	assert.Equal(t, "data/from-flag", got.BackupDataPath, "flag should override file")
-	require.NotNil(t, got.DestinationName)
-	assert.Equal(t, "flag-dest", *got.DestinationName)
-	require.NotNil(t, got.SourceName)
-	assert.Equal(t, "file-src", *got.SourceName, "file value preserved when no flag override")
-}
-
 func TestRestoreHandler_RestoreFull_ValidationError(t *testing.T) {
 	t.Parallel()
 
@@ -260,21 +200,6 @@ func TestRestoreHandler_RestoreFull_ValidationError(t *testing.T) {
 	_, err := h.RestoreFull(t.Context(), &models.RestoreRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "either --request-file or --backup-data-path")
-}
-
-func TestRestoreHandler_RestoreFull_MissingBackupDataPath(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{
-		"destination-name": "dest",
-	})
-
-	srv, _ := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	_, err := h.RestoreFull(t.Context(), &models.RestoreRequest{RequestFile: file})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "backup-data-path is required")
 }
 
 func TestRestoreHandler_RestoreFull_BadRequest(t *testing.T) {
@@ -357,55 +282,6 @@ func TestRestoreHandler_RestoreTimestamp_FlagsOnly(t *testing.T) {
 	assert.True(t, *got.DisableReordering)
 }
 
-func TestRestoreHandler_RestoreTimestamp_RequestFile(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{
-		"routine":          "weekly",
-		"time":             1234567890,
-		"destination-name": "file-dest",
-	})
-
-	srv, rec := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	_, err := h.RestoreTimestamp(t.Context(), &models.RestoreTimestampRequest{RequestFile: file})
-	require.NoError(t, err)
-
-	var got api.DtoRestoreTimestampRequest
-	require.NoError(t, json.Unmarshal(rec.body, &got))
-	assert.Equal(t, "weekly", got.Routine)
-	assert.Equal(t, int64(1234567890), got.Time)
-	require.NotNil(t, got.DestinationName)
-	assert.Equal(t, "file-dest", *got.DestinationName)
-}
-
-func TestRestoreHandler_RestoreTimestamp_FlagsOverrideFile(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{
-		"routine": "weekly",
-		"time":    1000,
-	})
-
-	srv, rec := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	req := &models.RestoreTimestampRequest{
-		RequestFile: file,
-		Routine:     "daily",
-		Time:        2000,
-	}
-
-	_, err := h.RestoreTimestamp(t.Context(), req)
-	require.NoError(t, err)
-
-	var got api.DtoRestoreTimestampRequest
-	require.NoError(t, json.Unmarshal(rec.body, &got))
-	assert.Equal(t, "daily", got.Routine)
-	assert.Equal(t, int64(2000), got.Time)
-}
-
 func TestRestoreHandler_RestoreTimestamp_ValidationError(t *testing.T) {
 	t.Parallel()
 
@@ -415,74 +291,4 @@ func TestRestoreHandler_RestoreTimestamp_ValidationError(t *testing.T) {
 	_, err := h.RestoreTimestamp(t.Context(), &models.RestoreTimestampRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--routine is required")
-}
-
-func TestRestoreHandler_RestoreTimestamp_FileMissingRoutine(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{"time": 1000})
-
-	srv, _ := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	_, err := h.RestoreTimestamp(t.Context(), &models.RestoreTimestampRequest{RequestFile: file})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "routine is required")
-}
-
-func TestRestoreHandler_RestoreTimestamp_FileMissingTime(t *testing.T) {
-	t.Parallel()
-
-	file := writeTempJSON(t, map[string]any{"routine": "daily"})
-
-	srv, _ := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	_, err := h.RestoreTimestamp(t.Context(), &models.RestoreTimestampRequest{RequestFile: file})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "time is required")
-}
-
-func TestRestoreHandler_RequestFile_NotFound(t *testing.T) {
-	t.Parallel()
-
-	srv, _ := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	req := &models.RestoreRequest{RequestFile: "/no/such/file.json"}
-
-	_, err := h.RestoreFull(t.Context(), req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to read request file")
-}
-
-func TestRestoreHandler_RequestFile_InvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "bad.json")
-	require.NoError(t, os.WriteFile(path, []byte("{not valid"), 0o600))
-
-	srv, _ := newTestServer(t, http.StatusAccepted, "1")
-	h := newTestRestoreHandler(t, srv)
-
-	req := &models.RestoreRequest{RequestFile: path}
-
-	_, err := h.RestoreFull(t.Context(), req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to parse request file")
-}
-
-func writeTempJSON(t *testing.T, v any) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "request.json")
-
-	data, err := json.Marshal(v)
-	require.NoError(t, err)
-
-	require.NoError(t, os.WriteFile(path, data, 0o600))
-
-	return path
 }

@@ -86,7 +86,6 @@ func TestServiceRestoreRequest_NewFlagSet(t *testing.T) {
 	flagSet := f.NewFlagSet()
 
 	args := []string{
-		"--request-file", "request.json",
 		"--backup-data-path", "data/backup-1",
 		"--destination-name", "dest-cluster",
 		"--source-name", "src-storage",
@@ -96,7 +95,6 @@ func TestServiceRestoreRequest_NewFlagSet(t *testing.T) {
 	err := flagSet.Parse(args)
 	require.NoError(t, err)
 
-	assert.Equal(t, "request.json", f.RequestFile)
 	assert.Equal(t, "data/backup-1", f.BackupDataPath)
 	assert.Equal(t, "dest-cluster", f.DestinationName)
 	assert.Equal(t, "src-storage", f.SourceName)
@@ -112,7 +110,6 @@ func TestServiceRestoreRequest_NewFlagSet_Defaults(t *testing.T) {
 	err := flagSet.Parse([]string{})
 	require.NoError(t, err)
 
-	assert.Empty(t, f.RequestFile)
 	assert.Empty(t, f.BackupDataPath)
 	assert.Empty(t, f.DestinationName)
 	assert.Empty(t, f.SourceName)
@@ -126,7 +123,6 @@ func TestServiceRestoreTimestamp_NewFlagSet(t *testing.T) {
 	flagSet := f.NewFlagSet()
 
 	args := []string{
-		"--request-file", "ts.json",
 		"--routine", "daily",
 		"--time", "1700000000000",
 		"--destination-name", "dest-cluster",
@@ -137,7 +133,6 @@ func TestServiceRestoreTimestamp_NewFlagSet(t *testing.T) {
 	err := flagSet.Parse(args)
 	require.NoError(t, err)
 
-	assert.Equal(t, "ts.json", f.RequestFile)
 	assert.Equal(t, "daily", f.Routine)
 	assert.Equal(t, int64(1700000000000), f.Time)
 	assert.Equal(t, "dest-cluster", f.DestinationName)
@@ -154,7 +149,6 @@ func TestServiceRestoreTimestamp_NewFlagSet_Defaults(t *testing.T) {
 	err := flagSet.Parse([]string{})
 	require.NoError(t, err)
 
-	assert.Empty(t, f.RequestFile)
 	assert.Empty(t, f.Routine)
 	assert.Equal(t, int64(0), f.Time)
 	assert.Empty(t, f.DestinationName)

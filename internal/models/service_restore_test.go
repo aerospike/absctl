@@ -79,28 +79,15 @@ func TestRestoreRequest_Validate(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name:    "request file only",
-			req:     RestoreRequest{RequestFile: "request.json"},
-			wantErr: false,
-		},
-		{
 			name:    "backup data path only",
 			req:     RestoreRequest{BackupDataPath: "data/backup-1"},
-			wantErr: false,
-		},
-		{
-			name: "both request file and backup data path",
-			req: RestoreRequest{
-				RequestFile:    "request.json",
-				BackupDataPath: "data/backup-1",
-			},
 			wantErr: false,
 		},
 		{
 			name:    "neither set",
 			req:     RestoreRequest{},
 			wantErr: true,
-			errMsg:  "either --request-file or --backup-data-path must be provided",
+			errMsg:  "--backup-data-path must be provided",
 		},
 		{
 			name: "destination/source/secret without backup-data-path is still invalid",
@@ -110,7 +97,7 @@ func TestRestoreRequest_Validate(t *testing.T) {
 				SecretAgentName: "agent",
 			},
 			wantErr: true,
-			errMsg:  "either --request-file or --backup-data-path must be provided",
+			errMsg:  "--backup-data-path must be provided",
 		},
 	}
 
@@ -139,11 +126,6 @@ func TestRestoreTimestampRequest_Validate(t *testing.T) {
 		wantErr bool
 		errMsg  string
 	}{
-		{
-			name:    "request file only",
-			req:     RestoreTimestampRequest{RequestFile: "ts.json"},
-			wantErr: false,
-		},
 		{
 			name: "routine and time set",
 			req: RestoreTimestampRequest{
