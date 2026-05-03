@@ -221,7 +221,7 @@ func buildRestoreRequest(req *models.RestoreRequest) (*api.DtoRestoreRequest, er
 	}
 
 	if body.BackupDataPath == "" {
-		return nil, fmt.Errorf("backup-data-path is required (set via --backup-data-path or in --request-file)")
+		return nil, fmt.Errorf("backupbackup-data-path is required")
 	}
 
 	return body, nil
@@ -257,11 +257,11 @@ func buildRestoreTimestampRequest(req *models.RestoreTimestampRequest) (*api.Dto
 	}
 
 	if body.Routine == "" {
-		return nil, fmt.Errorf("routine is required (set via --routine or in --request-file)")
+		return nil, fmt.Errorf("--routine is required")
 	}
 
 	if body.Time <= 0 {
-		return nil, fmt.Errorf("time is required (set via --time or in --request-file)")
+		return nil, fmt.Errorf("--time is required")
 	}
 
 	return body, nil

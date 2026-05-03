@@ -75,8 +75,7 @@ func (f *ServiceRestoreRequest) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.BackupDataPath, "backup-data-path", "",
-		"Path to the backup data inside the storage root. "+
-			"Required when --request-file is not provided.")
+		"Path to the backup data inside the storage root.")
 
 	flagSet.StringVar(&f.DestinationName, "destination-name", "",
 		"Name of a preconfigured destination Aerospike cluster.")
@@ -103,11 +102,10 @@ func (f *ServiceRestoreTimestamp) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.Routine, "routine", "",
-		"Backup routine name. Required when --request-file is not provided.")
+		"Backup routine name.")
 
 	flagSet.Int64Var(&f.Time, "time", 0,
-		"Epoch time in milliseconds for point-in-time recovery. "+
-			"Required when --request-file is not provided.")
+		"Epoch time in milliseconds for point-in-time recovery.")
 
 	flagSet.StringVar(&f.DestinationName, "destination-name", "",
 		"Name of a preconfigured destination Aerospike cluster.")

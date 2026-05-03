@@ -82,11 +82,11 @@ type RestoreTimestampRequest struct {
 
 func (r *RestoreTimestampRequest) Validate() error {
 	if r.Routine == "" {
-		return fmt.Errorf("--routine is required when --request-file is not provided")
+		return fmt.Errorf("--routine is required")
 	}
 
 	if r.Time <= 0 {
-		return fmt.Errorf("--time must be a positive epoch in milliseconds when --request-file is not provided")
+		return fmt.Errorf("--time must be a positive epoch in milliseconds")
 	}
 
 	return nil
