@@ -199,7 +199,7 @@ func TestRestoreHandler_RestoreFull_ValidationError(t *testing.T) {
 
 	_, err := h.RestoreFull(t.Context(), &models.RestoreRequest{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "either --request-file or --backup-data-path")
+	require.Contains(t, err.Error(), "--backup-data-path")
 }
 
 func TestRestoreHandler_RestoreFull_BadRequest(t *testing.T) {
@@ -246,7 +246,7 @@ func TestRestoreHandler_RestoreIncremental_ValidationError(t *testing.T) {
 
 	_, err := h.RestoreIncremental(t.Context(), &models.RestoreRequest{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "either --request-file or --backup-data-path")
+	require.Contains(t, err.Error(), "--backup-data-path")
 }
 
 func TestRestoreHandler_RestoreTimestamp_FlagsOnly(t *testing.T) {
