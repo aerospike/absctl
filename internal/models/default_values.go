@@ -195,6 +195,12 @@ const (
 	DefaultRestoreApplyMetadataLast = false
 )
 
+// Service connection.
+const (
+	DefaultServiceHost = "localhost"
+	DefaultServicePort = 8080
+)
+
 const (
 	DefaultBackupXDRDirectory             = ""
 	DefaultBackupXDRFileLimit             = 250

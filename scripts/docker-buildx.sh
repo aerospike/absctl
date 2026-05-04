@@ -9,6 +9,7 @@ CACHE_TO=""
 CACHE_FROM=""
 OUTPUT="type=image,push=true"
 PLATFORMS="linux/amd64,linux/arm64"
+BUILD_MODE="release"
 
 POSITIONAL_ARGS=()
 
@@ -58,6 +59,11 @@ while [[ $# -gt 0 ]]; do
 		shift
 		shift
 		;;
+	--build-mode)
+		BUILD_MODE="$2"
+		shift
+		shift
+		;;
 	-* | --*)
 		echo "Unknown option $1"
 		exit 1
@@ -68,6 +74,11 @@ while [[ $# -gt 0 ]]; do
 		;;
 	esac
 done
+
+if [[ "$BUILD_MODE" != "debug" && "$BUILD_MODE" != "release" ]]; then
+	echo "BUILD_MODE must be 'debug' or 'release', got '$BUILD_MODE'"
+	exit 1
+fi
 
 set -- "${POSITIONAL_ARGS[@]}"
 
@@ -87,6 +98,7 @@ PLATFORMS="$PLATFORMS" \
 	REGISTRY="$REGISTRY" \
 	GOPROXY="$GOPROXY" \
 	LATEST="$TAG_LATEST" \
+	BUILD_MODE="$BUILD_MODE" \
 	GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)" \
 	GIT_COMMIT_SHA="$(git rev-parse HEAD)" \
 	VERSION="$VERSION" \

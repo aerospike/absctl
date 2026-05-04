@@ -55,3 +55,78 @@ func TestMapCompressionPolicy_CaseInsensitiveMode(t *testing.T) {
 	assert.Equal(t, "ZSTD", compressionPolicy.Mode, "Compression mode should be converted to uppercase")
 	assert.Equal(t, 3, compressionPolicy.Level)
 }
+
+func TestCompression_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		comp    Compression
+		wantErr string
+	}{
+		{
+			name: "empty compression is valid",
+			comp: Compression{},
+		},
+		{
+			name: "ZSTD mode is valid",
+			comp: Compression{Mode: "ZSTD"},
+		},
+		{
+			name: "ZSTD mode with level",
+			comp: Compression{Mode: "ZSTD", Level: 3},
+		},
+		{
+			name: "lowercase zstd is valid",
+			comp: Compression{Mode: "zstd"},
+		},
+		{
+			name: "mixed case Zstd is valid",
+			comp: Compression{Mode: "Zstd"},
+		},
+		{
+			name: "NONE mode is valid",
+			comp: Compression{Mode: "NONE"},
+		},
+		{
+			name: "lowercase none is valid",
+			comp: Compression{Mode: "none"},
+		},
+		{
+			name: "mode with zero level is valid",
+			comp: Compression{Mode: "ZSTD", Level: 0},
+		},
+		{
+			name:    "invalid mode",
+			comp:    Compression{Mode: "LZ4"},
+			wantErr: "invalid compression mode: LZ4",
+		},
+		{
+			name:    "another invalid mode",
+			comp:    Compression{Mode: "GZIP"},
+			wantErr: "invalid compression mode: GZIP",
+		},
+		{
+			name:    "level without mode",
+			comp:    Compression{Level: 5},
+			wantErr: "--compress is required when --compression-level is set",
+		},
+		{
+			name: "negative level without mode is valid",
+			comp: Compression{Level: -1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.comp.Validate()
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

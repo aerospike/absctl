@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
@@ -32,13 +32,13 @@ jobs:
 
       - name: Import GPG key
         id: import-gpg
-        uses: step-security/ghaction-import-gpg@69c854a83c7f79463f8bdf46772ab09826c560cd # v6.3.1
+        uses: step-security/ghaction-import-gpg@c0b4a334b9b72bfaaebec86ef022a78a5b17f828 # v7.0.0
         with:
           gpg_private_key: ${{ secrets.GPG_SECRET_KEY }}
           passphrase: ${{ secrets.GPG_PASS }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
+        uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
@@ -87,7 +87,7 @@ jobs:
       - name: Create new release if it does not exist
         if: ${{ steps.check-release.outputs.release-exists == 'false' }}
         id: create-release
-        uses: step-security/release-action@03a57407052f15d1537fd5469a6fbbc536aba326 # v1.20.0
+        uses: step-security/release-action@a0d8e0f90f554c15366ca2c9046bf4090d24adbe # v1.21.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -105,7 +105,7 @@ jobs:
       package_version: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
@@ -122,7 +122,7 @@ jobs:
           cache: false
 
       - name: setup GPG
-        uses: aerospike/shared-workflows/.github/actions/setup-gpg@07c958ca4c5cea494dc8790949c08e3fb28c55e1 # v3.3.0
+        uses: aerospike/shared-workflows/.github/actions/setup-gpg@f6bb565e7d31fa3013a1a75c5f80aed44c3bde5c # v3.4.1
         with:
           gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
           gpg-public-key: ${{ secrets.GPG_PUBLIC_KEY }}
@@ -177,7 +177,7 @@ jobs:
           echo "Metadata extraction completed successfully."
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@893a92f96c7727242adf0e603c77b1f2a22390e1 # v4.9.1
+        uses: step-security/setup-jfrog-cli@3054b554c0fb4915b3d58847fb7730c593dbb934 # v5.0.0
         env:
           JF_URL: ${{ vars.ARTIFACTORY_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
@@ -192,7 +192,7 @@ jobs:
             exit 1
           fi
           
-          make packages
+          make packages BUILD_MODE=release
           BUILD_RESULT=$?
           
           if [ $BUILD_RESULT -eq 0 ]; then
@@ -493,7 +493,7 @@ jobs:
       image_version: ${{ steps.metadata.outputs.IMAGE_VERSION }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
@@ -552,7 +552,7 @@ jobs:
           echo "Metadata extraction completed."
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@893a92f96c7727242adf0e603c77b1f2a22390e1 # v4.9.1
+        uses: step-security/setup-jfrog-cli@3054b554c0fb4915b3d58847fb7730c593dbb934 # v5.0.0
         env:
           JF_URL: ${{ vars.ARTIFACTORY_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
@@ -655,12 +655,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@893a92f96c7727242adf0e603c77b1f2a22390e1 # v4.9.1
+        uses: step-security/setup-jfrog-cli@3054b554c0fb4915b3d58847fb7730c593dbb934 # v5.0.0
         env:
           JF_URL: ${{ vars.ARTIFACTORY_URL }}
           JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}

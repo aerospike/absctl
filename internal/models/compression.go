@@ -15,12 +15,16 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/aerospike/backup-go"
 )
 
-const noneVal = "NONE"
+const (
+	compressionModeNone = "NONE"
+	compressionModeZstd = "ZSTD"
+)
 
 // Compression contains flags that will be mapped to CompressionPolicy for backup and restore operations.
 type Compression struct {
@@ -34,9 +38,24 @@ func (c *Compression) Policy() *backup.CompressionPolicy {
 		return nil
 	}
 
-	if c.Mode == "" || strings.EqualFold(c.Mode, noneVal) {
+	if c.Mode == "" || strings.EqualFold(c.Mode, compressionModeNone) {
 		return nil
 	}
 
 	return backup.NewCompressionPolicy(strings.ToUpper(c.Mode), c.Level)
+}
+
+func (c *Compression) Validate() error {
+	if c.Mode != "" {
+		if !strings.EqualFold(c.Mode, compressionModeNone) &&
+			!strings.EqualFold(c.Mode, compressionModeZstd) {
+			return fmt.Errorf("invalid compression mode: %s", c.Mode)
+		}
+	}
+
+	if c.Level > 0 && (c.Mode == "") {
+		return fmt.Errorf("--compress is required when --compression-level is set")
+	}
+
+	return nil
 }

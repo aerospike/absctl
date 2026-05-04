@@ -9,6 +9,7 @@ FROM --platform=$BUILDPLATFORM ${REGISTRY}/golang:${GO_VERSION} AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
+ARG BUILD_MODE=release
 
 COPY --from=xx / /
 
@@ -28,7 +29,7 @@ RUN --mount=type=secret,id=GOPROXY <<-EOF
     if [ -s /run/secrets/GOPROXY ]; then
         export GOPROXY="$(cat /run/secrets/GOPROXY)"
     fi
-    OS=${TARGETOS} ARCH=${TARGETARCH} VERSION=${VERSION} make build
+    OS="${TARGETOS}" ARCH="${TARGETARCH}" VERSION="${VERSION}" make build BUILD_MODE="${BUILD_MODE}"
     xx-verify /app/absctl/dist/absctl_${TARGETOS}_${TARGETARCH}
 EOF
 

@@ -15,9 +15,7 @@
 package logging
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -43,14 +41,14 @@ func ReportBackup(stats *bModels.BackupStats, isXdr, toLog bool, logger *slog.Lo
 }
 
 func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
-	printToStderr("")
-	printToStderr(headerBackupReport)
-	printToStderr(strings.Repeat("-", len(headerBackupReport)))
+	printToOutWriter("")
+	printToOutWriter(headerBackupReport)
+	printToOutWriter(strings.Repeat("-", len(headerBackupReport)))
 
 	printMetric("Start Time", stats.StartTime.Format(time.RFC1123))
 	printMetric("Duration", stats.GetDuration())
 
-	printToStderr("")
+	printToOutWriter("")
 
 	recordsMetric := "Records Read"
 	if isXdr {
@@ -62,7 +60,7 @@ func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
 	printMetric("sIndex Read", stats.GetSIndexes())
 	printMetric("UDFs Read", stats.GetUDFs())
 
-	printToStderr("")
+	printToOutWriter("")
 
 	printMetric("Bytes Written", stats.GetBytesWritten())
 	printMetric("Files Written", stats.GetFileCount())
@@ -103,20 +101,20 @@ func printRestoreReport(stats *bModels.RestoreStats, isValidation bool) {
 		header = headerValidationReport
 	}
 
-	printToStderr("")
-	printToStderr(header)
-	printToStderr(strings.Repeat("-", len(header)))
+	printToOutWriter("")
+	printToOutWriter(header)
+	printToOutWriter(strings.Repeat("-", len(header)))
 
 	printMetric("Start Time", stats.StartTime.Format(time.RFC1123))
 	printMetric("Duration", stats.GetDuration())
 
-	printToStderr("")
+	printToOutWriter("")
 
 	printMetric("Records Read", stats.GetReadRecords())
 	printMetric("sIndex Read", stats.GetSIndexes())
 	printMetric("UDFs Read", stats.GetUDFs())
 
-	printToStderr("")
+	printToOutWriter("")
 
 	// For validation, we don't print the following metrics'
 	if !isValidation {
@@ -126,7 +124,7 @@ func printRestoreReport(stats *bModels.RestoreStats, isValidation bool) {
 		printMetric("Fresher Records", stats.GetRecordsFresher())
 		printMetric("Existed Records", stats.GetRecordsExisted())
 
-		printToStderr("")
+		printToOutWriter("")
 
 		printMetric("Inserted Records", stats.GetRecordsInserted())
 		printMetric("In Doubt Errors", stats.GetErrorsInDoubt())
@@ -185,8 +183,8 @@ func ReportEstimate(estimate uint64, toLog bool, logger *slog.Logger) {
 }
 
 func printEstimateReport(estimate uint64) {
-	printToStderr(headerEstimateReport)
-	printToStderr(strings.Repeat("-", len(headerEstimateReport)))
+	printToOutWriter(headerEstimateReport)
+	printToOutWriter(strings.Repeat("-", len(headerEstimateReport)))
 
 	printMetric("File size (bytes)", estimate)
 }
@@ -196,17 +194,4 @@ func logEstimateReport(estimate uint64, logger *slog.Logger) {
 		//nolint:sloglint // Changing key names is a breaking change. Postponed for now, it will be renamed to camelcase.
 		slog.Uint64("file_size_bytes", estimate),
 	)
-}
-
-func printMetric(key string, value any) {
-	_, _ = fmt.Fprintf(os.Stderr, "%s%v\n", indent(key), value)
-}
-
-func indent(key string) string {
-	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", 21-len(key)))
-}
-
-// printToStderr prints the string to stderr.
-func printToStderr(s string) {
-	_, _ = fmt.Fprintln(os.Stderr, s)
 }

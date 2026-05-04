@@ -24,6 +24,7 @@ import (
 	backupcreate "github.com/aerospike/absctl/cmd/absctl/cmd/backup/create"
 	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
 	restorestart "github.com/aerospike/absctl/cmd/absctl/cmd/restore/start"
+	"github.com/aerospike/absctl/internal/cli/service"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
@@ -85,8 +86,11 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	backupCmd.AddCommand(backuplist.NewCmd(backupShared, c.flagsRoot, appVersion, commitHash, buildTime))
 	restoreCmd.AddCommand(restorestart.NewCmd(restoreShared, c.flagsRoot, appVersion, commitHash, buildTime))
 
+	serviceCmd := service.NewCmd()
+
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(serviceCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
@@ -129,10 +133,11 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
 		fmt.Println("  backup          Aerospike backup command")
+		fmt.Println("  restore         Aerospike restore command")
 		fmt.Println("  backup create   Create a server-integrated backup")
 		fmt.Println("  backup list     List server-integrated backups")
-		fmt.Println("  restore         Aerospike restore command")
 		fmt.Println("  restore start   Start a server-integrated restore")
+		fmt.Println("  service   Interact with Aerospike Backup Service REST API")
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()
 		fmt.Println("\nUse \"absctl [command] --help\" for more information about a command.")

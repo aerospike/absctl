@@ -132,7 +132,7 @@ func generate(operation string) error {
 }
 
 // buildSections constructs all FlagSets and associates them with their markdown headers and YAML mappings.
-func buildSections(operation string, opID int) []docSection {
+func buildSections(operation string, opID flags.Operation) []docSection {
 	var sections []docSection
 
 	// 1. Usage Text
@@ -158,7 +158,7 @@ func buildSections(operation string, opID int) []docSection {
 	// 3. Aerospike Client Flags
 	aeroFlags := asFlags.NewDefaultAerospikeFlags()
 	aeroFS := aeroFlags.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapCertFlagsForSecrets(aeroFS)
+	flags.WrapFlagsForSecrets(aeroFS)
 	sections = append(sections, docSection{
 		TextContent: flags.SectionTextAerospike,
 		FS:          aeroFS,

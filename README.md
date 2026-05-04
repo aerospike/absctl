@@ -33,8 +33,11 @@ Binaries for various platforms are released alongside the library and can be fou
 
 ## Build from Source
 ```bash
-# Build binaries
+# Build release binaries (default)
 make build
+
+# Build debug binaries (includes pprof profiler on localhost:6060)
+make build BUILD_MODE=debug
 
 # Install to /usr/bin (Linux only)
 make install
