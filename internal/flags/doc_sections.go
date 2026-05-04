@@ -17,11 +17,8 @@ package flags
 // Text for usage pretty-print.
 
 const (
-	SectionTextUsageBackup       = "\nUsage:\n  absctl backup [flags]\n  absctl backup [command]"
-	SectionTextUsageBackupCreate = "\nUsage:\n  absctl backup create [flags]"
-	SectionTextUsageBackupList   = "\nUsage:\n  absctl backup list [flags]"
-	SectionTextUsageRestore      = "\nUsage:\n  absctl restore [flags]\n  absctl restore [command]"
-	SectionTextUsageRestoreStart = "\nUsage:\n  absctl restore start [flags]"
+	SectionTextUsageBackup  = "\nUsage:\n  absctl backup [flags]"
+	SectionTextUsageRestore = "\nUsage:\n  absctl restore [flags]"
 
 	SectionTextSecretAgentBackup = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
@@ -40,7 +37,6 @@ const (
 
 	SectionTextBackup  = "\nBackup Flags:"
 	SectionTextRestore = "\nBackup Flags:"
-	SectionTextSSB     = "\nServer Side Backup Flags:"
 
 	SectionTextGeneral     = "\nGeneral Flags:"
 	SectionTextAerospike   = "\nAerospike Client Flags:"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package lister
+package server
 
 import (
 	"context"
@@ -46,8 +46,8 @@ func NewLister(
 	}
 }
 
-// ListBackups lists all backups in the given path.
-func (l *Lister) ListBackups(ctx context.Context, path string) error {
+// listBackups lists all backups in the given path.
+func (l *Lister) listBackups(ctx context.Context, path string) error {
 	allObjects, err := l.reader.ListObjects(ctx, path)
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)

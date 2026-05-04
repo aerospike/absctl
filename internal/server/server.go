@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package integrated
+package server
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/config"
-	"github.com/aerospike/absctl/internal/lister"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
@@ -85,13 +84,13 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) ListBackups(ctx context.Context) error {
-	l := lister.NewLister(s.reader)
+	l := NewLister(s.reader)
 
 	if s.config.IntegratedBackup.ListPath == "/" || s.config.IntegratedBackup.ListPath == "\\" {
 		s.config.IntegratedBackup.ListPath = ""
 	}
 
-	if err := l.ListBackups(ctx, s.config.IntegratedBackup.ListPath); err != nil {
+	if err := l.listBackups(ctx, s.config.IntegratedBackup.ListPath); err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
 

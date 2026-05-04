@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package cli
 
 import (
 	"fmt"
 	"log/slog"
 	"strings"
 
-	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
-	backuplist "github.com/aerospike/absctl/cmd/absctl/cmd/backup/blist"
-	backupcreate "github.com/aerospike/absctl/cmd/absctl/cmd/backup/create"
-	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
-	restorestart "github.com/aerospike/absctl/cmd/absctl/cmd/restore/start"
+	"github.com/aerospike/absctl/internal/cli/scan"
+	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/cli/service"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
@@ -78,18 +75,15 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	rootCmd.PersistentFlags().AddFlagSet(rootFlagSet)
 
 	// Add subcommands - they will initialize their own operation-specific flags
-	backupCmd, backupShared := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	restoreCmd, restoreShared := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	backupCmd, _ := scan.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	restoreCmd, _ := scan.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	// server-integrated backup subcommands under backup and restore.
-	backupCmd.AddCommand(backupcreate.NewCmd(backupShared, c.flagsRoot, appVersion, commitHash, buildTime))
-	backupCmd.AddCommand(backuplist.NewCmd(backupShared, c.flagsRoot, appVersion, commitHash, buildTime))
-	restoreCmd.AddCommand(restorestart.NewCmd(restoreShared, c.flagsRoot, appVersion, commitHash, buildTime))
-
+	serverCmd := server.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	serviceCmd := service.NewCmd()
 
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(serviceCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
@@ -132,11 +126,9 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
-		fmt.Println("  backup          Aerospike backup command")
-		fmt.Println("  restore         Aerospike restore command")
-		fmt.Println("  backup create   Create a server-integrated backup")
-		fmt.Println("  backup list     List server-integrated backups")
-		fmt.Println("  restore start   Start a server-integrated restore")
+		fmt.Println("  backup    Aerospike backup command")
+		fmt.Println("  restore   Aerospike restore command")
+		fmt.Println("  server    Manage server-integrated backups and restores")
 		fmt.Println("  service   Interact with Aerospike Backup Service REST API")
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()

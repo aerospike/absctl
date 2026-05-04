@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package restore
+package scan
 
 import (
 	"context"
@@ -31,11 +31,11 @@ import (
 )
 
 const (
-	welcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
-	welcomeMessageShort = "Aerospike restore CLI tool"
+	restoreWelcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
+	restoreWelcomeMessageShort = "Aerospike restore CLI tool"
 )
 
-type runner struct {
+type restoreRunner struct {
 	flagsRestore *flags.Restore
 	flagsCommon  *flags.Common
 
@@ -43,20 +43,23 @@ type runner struct {
 	restoreFlagSet *pflag.FlagSet
 }
 
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) (*cobra.Command, *subcmd.SharedFlags) {
-	r := &runner{
+// NewRestoreCmd builds the top-level "restore" command for scan-based restores.
+func NewRestoreCmd(
+	flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
+) (*cobra.Command, *subcmd.SharedFlags) {
+	r := &restoreRunner{
 		flagsRestore: flags.NewRestore(),
 	}
 	r.flagsCommon = flags.NewCommon(&r.flagsRestore.Common, flags.OperationRestore)
 
 	return subcmd.BuildCommand(
-		"restore", welcomeMessageShort, welcomeMessage,
+		"restore", restoreWelcomeMessageShort, restoreWelcomeMessage,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationRestore, r,
 	)
 }
 
-func (r *runner) FlagSets() []*pflag.FlagSet {
+func (r *restoreRunner) FlagSets() []*pflag.FlagSet {
 	r.commonFlagSet = r.flagsCommon.NewFlagSet()
 	r.restoreFlagSet = r.flagsRestore.NewFlagSet()
 
@@ -66,7 +69,7 @@ func (r *runner) FlagSets() []*pflag.FlagSet {
 	}
 }
 
-func (r *runner) PostRegistration(cmd *cobra.Command) {
+func (r *restoreRunner) PostRegistration(cmd *cobra.Command) {
 	if err := cmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
@@ -74,8 +77,8 @@ func (r *runner) PostRegistration(cmd *cobra.Command) {
 	cmd.Flags().Lookup("nice").Hidden = false
 }
 
-func (r *runner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets) {
-	helpFunc := newHelpFunction(
+func (r *restoreRunner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets) {
+	helpFunc := newRestoreHelpFunction(
 		shared.App,
 		shared.Aerospike,
 		shared.ClientPolicy,
@@ -98,7 +101,8 @@ func (r *runner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets)
 	})
 }
 
-func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags) (subcmd.ServiceConfig, error) {
+func (r *restoreRunner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags,
+) (subcmd.ServiceConfig, error) {
 	var (
 		cfg *config.RestoreServiceConfig
 		err error
@@ -135,7 +139,7 @@ func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlag
 	return cfg, nil
 }
 
-func (r *runner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
+func (r *restoreRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
 	restoreCfg := cfg.(*config.RestoreServiceConfig)
 
 	logMsg := "restore"
@@ -155,7 +159,7 @@ func (r *runner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logge
 	return nil
 }
 
-func newHelpFunction(
+func newRestoreHelpFunction(
 	appFlagSet,
 	aerospikeFlagSet,
 	clientPolicyFlagSet,
@@ -169,8 +173,8 @@ func newHelpFunction(
 	azureFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
-		fmt.Println(welcomeMessage)
-		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
+		fmt.Println(restoreWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(restoreWelcomeMessage)))
 		fmt.Println(flags.SectionTextUsageRestore)
 
 		// Print section: App Flags

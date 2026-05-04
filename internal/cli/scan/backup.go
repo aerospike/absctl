@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backup
+package scan
 
 import (
 	"context"
@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	welcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
-	welcomeMessageShort = "Aerospike backup CLI tool"
+	backupWelcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
+	backupWelcomeMessageShort = "Aerospike backup CLI tool"
 )
 
-type runner struct {
+type backupRunner struct {
 	flagsBackup *flags.Backup
 	flagsCommon *flags.Common
 	flagsLocal  *flags.Local
@@ -44,21 +44,24 @@ type runner struct {
 	localFlagSet  *pflag.FlagSet
 }
 
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) (*cobra.Command, *subcmd.SharedFlags) {
-	r := &runner{
+// NewBackupCmd builds the top-level "backup" command for scan-based backups.
+func NewBackupCmd(
+	flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
+) (*cobra.Command, *subcmd.SharedFlags) {
+	r := &backupRunner{
 		flagsBackup: flags.NewBackup(),
 		flagsLocal:  flags.NewLocal(flags.OperationBackup),
 	}
 	r.flagsCommon = flags.NewCommon(&r.flagsBackup.Common, flags.OperationBackup)
 
 	return subcmd.BuildCommand(
-		"backup", welcomeMessageShort, welcomeMessage,
+		"backup", backupWelcomeMessageShort, backupWelcomeMessage,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationBackup, r,
 	)
 }
 
-func (r *runner) FlagSets() []*pflag.FlagSet {
+func (r *backupRunner) FlagSets() []*pflag.FlagSet {
 	r.commonFlagSet = r.flagsCommon.NewFlagSet()
 	r.backupFlagSet = r.flagsBackup.NewFlagSet()
 	r.localFlagSet = r.flagsLocal.NewFlagSet()
@@ -70,7 +73,7 @@ func (r *runner) FlagSets() []*pflag.FlagSet {
 	}
 }
 
-func (r *runner) PostRegistration(cmd *cobra.Command) {
+func (r *backupRunner) PostRegistration(cmd *cobra.Command) {
 	if err := cmd.Flags().MarkDeprecated("nice", "use --bandwidth instead"); err != nil {
 		log.Fatal(err)
 	}
@@ -78,8 +81,8 @@ func (r *runner) PostRegistration(cmd *cobra.Command) {
 	cmd.Flags().Lookup("nice").Hidden = false
 }
 
-func (r *runner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets) {
-	helpFunc := newHelpFunction(
+func (r *backupRunner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets) {
+	helpFunc := newBackupHelpFunction(
 		shared.App,
 		shared.Aerospike,
 		shared.ClientPolicy,
@@ -103,7 +106,7 @@ func (r *runner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFlagSets)
 	})
 }
 
-func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags) (subcmd.ServiceConfig, error) {
+func (r *backupRunner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags) (subcmd.ServiceConfig, error) {
 	app := shared.App.GetApp()
 	if app != nil && app.ConfigFilePath != "" {
 		cfg, err := config.DecodeBackupServiceConfig(ctx, app.ConfigFilePath)
@@ -135,7 +138,7 @@ func (r *runner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlag
 	return cfg, nil
 }
 
-func (r *runner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
+func (r *backupRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
 	backupCfg := cfg.(*config.BackupServiceConfig)
 
 	asb, err := backup.NewService(ctx, backupCfg, logger)
@@ -150,7 +153,7 @@ func (r *runner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logge
 	return nil
 }
 
-func newHelpFunction(
+func newBackupHelpFunction(
 	appFlagSet,
 	aerospikeFlagSet,
 	clientPolicyFlagSet,
@@ -165,8 +168,8 @@ func newHelpFunction(
 	localFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
-		fmt.Println(welcomeMessage)
-		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
 		fmt.Println(flags.SectionTextUsageBackup)
 
 		// Print section: App Flags
