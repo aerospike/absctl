@@ -19,15 +19,15 @@ import (
 	"github.com/spf13/pflag"
 )
 
-type IntegratedBackup struct {
-	models.IntegratedBackup
+type ServerBackup struct {
+	models.ServerBackup
 }
 
-func NewIntegratedBackup() *IntegratedBackup {
-	return &IntegratedBackup{}
+func NewServerBackup() *ServerBackup {
+	return &ServerBackup{}
 }
 
-func (f *IntegratedBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
+func (f *ServerBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
@@ -37,7 +37,7 @@ func (f *IntegratedBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
 	return flagSet
 }
 
-func (f *IntegratedBackup) NewBackupListFlagSet() *pflag.FlagSet {
+func (f *ServerBackup) NewBackupListFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.ListPath, "path", "", "Path to list backups from.")
@@ -45,7 +45,7 @@ func (f *IntegratedBackup) NewBackupListFlagSet() *pflag.FlagSet {
 	return flagSet
 }
 
-func (f *IntegratedBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
+func (f *ServerBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
@@ -56,6 +56,6 @@ func (f *IntegratedBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
 	return flagSet
 }
 
-func (f *IntegratedBackup) GetIntegratedBackup() *models.IntegratedBackup {
-	return &f.IntegratedBackup
+func (f *ServerBackup) GetIntegratedBackup() *models.ServerBackup {
+	return &f.ServerBackup
 }

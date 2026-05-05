@@ -29,7 +29,7 @@ import (
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
-	config *config.IntegratedServiceConfig
+	config *config.ServerBackupServiceConfig
 	reader backup.StreamingReader
 
 	// reportToLog bool
@@ -40,7 +40,7 @@ type Service struct {
 // NewService initializes and returns a new Service instance.
 func NewService(
 	ctx context.Context,
-	cfg *config.IntegratedServiceConfig,
+	cfg *config.ServerBackupServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	var (
@@ -49,11 +49,11 @@ func NewService(
 	)
 
 	// If list path is set, init reader.
-	if cfg.IntegratedBackup.ListPath != "" {
+	if cfg.ServerBackup.ListPath != "" {
 		reader, err = storage.NewReader(
 			ctx,
 			&cfg.ServiceConfigCommon,
-			cfg.IntegratedBackup.ListPath,
+			cfg.ServerBackup.ListPath,
 			"",
 			"",
 			"",
@@ -76,7 +76,7 @@ func NewService(
 
 func (s *Service) Run(ctx context.Context) error {
 	switch {
-	case s.config.IntegratedBackup.ListPath != "":
+	case s.config.ServerBackup.ListPath != "":
 		return s.ListBackups(ctx)
 	default:
 		return s.StartBackup(ctx)
@@ -86,11 +86,11 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) ListBackups(ctx context.Context) error {
 	l := NewLister(s.reader)
 
-	if s.config.IntegratedBackup.ListPath == "/" || s.config.IntegratedBackup.ListPath == "\\" {
-		s.config.IntegratedBackup.ListPath = ""
+	if s.config.ServerBackup.ListPath == "/" || s.config.ServerBackup.ListPath == "\\" {
+		s.config.ServerBackup.ListPath = ""
 	}
 
-	if err := l.listBackups(ctx, s.config.IntegratedBackup.ListPath); err != nil {
+	if err := l.listBackups(ctx, s.config.ServerBackup.ListPath); err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
 
@@ -107,8 +107,8 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 	JobID, err := client.StartBackup(
 		ctx,
-		s.config.IntegratedBackup.Namespace,
-		s.config.IntegratedBackup.StorageType,
+		s.config.ServerBackup.Namespace,
+		s.config.ServerBackup.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
@@ -135,9 +135,9 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	err = client.StartRestore(
 		ctx,
-		s.config.IntegratedBackup.JobID,
-		s.config.IntegratedBackup.Namespace,
-		s.config.IntegratedBackup.StorageType,
+		s.config.ServerBackup.JobID,
+		s.config.ServerBackup.Namespace,
+		s.config.ServerBackup.StorageType,
 		s.config.AwsS3.BucketName,
 		s.config.AwsS3.Region,
 		s.config.AwsS3.Profile,
@@ -150,7 +150,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated restore started",
-		slog.String("backup-id", s.config.IntegratedBackup.JobID))
+		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil
 }

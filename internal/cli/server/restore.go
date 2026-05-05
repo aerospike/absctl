@@ -74,7 +74,7 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 
 //nolint:dupl // Sub commands are intentionally symmetric per operation.
 func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
-	ssbFlags := flags.NewIntegratedBackup()
+	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
 
 	cmd := &cobra.Command{
@@ -112,9 +112,9 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 func newIntegratedRestoreConfig(
 	rc *runCtx,
 	rf *restoreFlags,
-	ssbFlags *flags.IntegratedBackup,
-) *config.IntegratedServiceConfig {
-	return config.NewIntegratedServiceConfig(
+	ssbFlags *flags.ServerBackup,
+) *config.ServerBackupServiceConfig {
+	return config.NewServerBackupServiceConfig(
 		ssbFlags.GetIntegratedBackup(),
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),

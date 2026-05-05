@@ -77,7 +77,7 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 
 //nolint:dupl // Sub commands are intentionally symmetric per operation.
 func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
-	ssbFlags := flags.NewIntegratedBackup()
+	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewBackupCreateFlagSet()
 
 	cmd := &cobra.Command{
@@ -111,7 +111,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 }
 
 func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
-	ssbFlags := flags.NewIntegratedBackup()
+	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewBackupListFlagSet()
 
 	cmd := &cobra.Command{
@@ -122,8 +122,8 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 			cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
 
 			// Mock.
-			if cfg.IntegratedBackup.ListPath == "" {
-				cfg.IntegratedBackup.ListPath = "/"
+			if cfg.ServerBackup.ListPath == "" {
+				cfg.ServerBackup.ListPath = "/"
 			}
 
 			if err := cfg.Validate(true); err != nil {
@@ -154,9 +154,9 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 func newIntegratedBackupConfig(
 	rc *runCtx,
 	bf *backupFlags,
-	ssbFlags *flags.IntegratedBackup,
-) *config.IntegratedServiceConfig {
-	return config.NewIntegratedServiceConfig(
+	ssbFlags *flags.ServerBackup,
+) *config.ServerBackupServiceConfig {
+	return config.NewServerBackupServiceConfig(
 		ssbFlags.GetIntegratedBackup(),
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),

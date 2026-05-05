@@ -19,17 +19,17 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
-// IntegratedServiceConfig holds the configuration for the server-integrated Backup (SSB) service.
-type IntegratedServiceConfig struct {
-	IntegratedBackup *models.IntegratedBackup
+// ServerBackupServiceConfig holds the configuration for the server-integrated Backup service.
+type ServerBackupServiceConfig struct {
+	ServerBackup *models.ServerBackup
 
 	ServiceConfigCommon
 }
 
-// NewIntegratedServiceConfig initializes a new IntegratedServiceConfig
+// NewServerBackupServiceConfig initializes a new ServerBackupServiceConfig
 // using the provided parameters for backup service configuration.
-func NewIntegratedServiceConfig(
-	integratedBackup *models.IntegratedBackup,
+func NewServerBackupServiceConfig(
+	integratedBackup *models.ServerBackup,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -40,9 +40,9 @@ func NewIntegratedServiceConfig(
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 	local *models.Local,
-) *IntegratedServiceConfig {
-	return &IntegratedServiceConfig{
-		IntegratedBackup: integratedBackup,
+) *ServerBackupServiceConfig {
+	return &ServerBackupServiceConfig{
+		ServerBackup: integratedBackup,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -58,8 +58,8 @@ func NewIntegratedServiceConfig(
 	}
 }
 
-// Validate checks if the IntegratedServiceConfig and its embedded ServiceConfigCommon are correctly configured.
-func (s *IntegratedServiceConfig) Validate(isBackup bool) error {
+// Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
+func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
