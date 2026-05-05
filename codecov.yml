@@ -2,3 +2,4 @@ ignore:
   - "cmd"
   - "docs"
   - "api"
+  - "internal/cli"

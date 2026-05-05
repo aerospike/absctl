@@ -22,12 +22,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aerospike/absctl/cmd/absctl/cmd"
+	"github.com/aerospike/absctl/internal/cli"
 )
 
 var (
-	appVersion = cmd.VersionDev
-	commitHash = cmd.VersionDev
+	appVersion = cli.VersionDev
+	commitHash = cli.VersionDev
 	buildTime  = ""
 )
 
@@ -44,7 +44,7 @@ func main() {
 	}()
 
 	// Return c to log errors properly.
-	rootCmd, c := cmd.NewCmd(appVersion, commitHash, buildTime)
+	rootCmd, c := cli.NewCmd(appVersion, commitHash, buildTime)
 	rootCmd.SilenceErrors = true
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {

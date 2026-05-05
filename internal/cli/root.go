@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package cli
 
 import (
 	"fmt"
 	"log/slog"
 	"strings"
 
-	"github.com/aerospike/absctl/cmd/absctl/cmd/backup"
-	"github.com/aerospike/absctl/cmd/absctl/cmd/restore"
+	"github.com/aerospike/absctl/internal/cli/scan"
+	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/cli/service"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
@@ -75,13 +75,15 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	rootCmd.PersistentFlags().AddFlagSet(rootFlagSet)
 
 	// Add subcommands - they will initialize their own operation-specific flags
-	backupCmd := backup.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	restoreCmd := restore.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	backupCmd, _ := scan.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	restoreCmd, _ := scan.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
+	serverCmd := server.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	serviceCmd := service.NewCmd()
 
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(serviceCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
@@ -126,6 +128,7 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nAvailable Commands:")
 		fmt.Println("  backup    Aerospike backup command")
 		fmt.Println("  restore   Aerospike restore command")
+		fmt.Println("  server    Manage server-integrated backups and restores")
 		fmt.Println("  service   Interact with Aerospike Backup Service REST API")
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()

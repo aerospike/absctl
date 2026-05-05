@@ -3,12 +3,12 @@ module github.com/aerospike/absctl
 go 1.26
 
 require (
-	cloud.google.com/go/storage v1.62.0
+	cloud.google.com/go/storage v1.61.3
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
-	github.com/aerospike/aerospike-client-go/v8 v8.6.0
-	github.com/aerospike/backup-go v0.10.1-0.20260421080714-ba7b620b1238
+	github.com/aerospike/aerospike-client-go/v8 v8.7.0
+	github.com/aerospike/backup-go v0.10.1-0.20260504074422-98c3708a9758
 	github.com/aerospike/tools-common-go v0.4.2-0.20260330202015-38fcb43831fa
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
@@ -99,7 +99,7 @@ require (
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
-	github.com/yuin/gopher-lua v1.1.1 // indirect
+	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.39.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.63.0 // indirect
