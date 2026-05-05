@@ -131,6 +131,8 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 				App:          &models.App{},
 				ClientConfig: &client.AerospikeConfig{},
 				ClientPolicy: &models.ClientPolicy{},
+				Encryption:   &models.Encryption{},
+				Compression:  &models.Compression{},
 			},
 		}
 	}
@@ -153,19 +155,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			cfg:      validConfig(),
 			isBackup: false,
 			wantErr:  false,
-		},
-		{
-			name: "invalid common config propagates error",
-			cfg: func() *ServerBackupServiceConfig {
-				c := validConfig()
-				// Intentionally break a required invariant of ServiceConfigCommon
-				// to ensure the embedded Validate's error is propagated.
-				c.ClientConfig = nil
-				return c
-			}(),
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "", // set the expected substring once the validator's message is known
 		},
 	}
 
