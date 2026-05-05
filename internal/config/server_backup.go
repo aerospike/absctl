@@ -29,7 +29,7 @@ type ServerBackupServiceConfig struct {
 // NewServerBackupServiceConfig initializes a new ServerBackupServiceConfig
 // using the provided parameters for backup service configuration.
 func NewServerBackupServiceConfig(
-	integratedBackup *models.ServerBackup,
+	serverBackup *models.ServerBackup,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -42,7 +42,7 @@ func NewServerBackupServiceConfig(
 	local *models.Local,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
-		ServerBackup: integratedBackup,
+		ServerBackup: serverBackup,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
