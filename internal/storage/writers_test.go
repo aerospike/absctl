@@ -338,6 +338,261 @@ func createAzureContainer() error {
 	return nil
 }
 
+func TestNewBackupWriter_LocalSuccess(t *testing.T) {
+	t.Parallel()
+
+	params := &config.BackupServiceConfig{
+		Backup: &models.Backup{
+			RemoveFiles: true,
+			Common: models.Common{
+				Directory: t.TempDir(),
+			},
+		},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
+	}
+
+	writer, err := NewBackupWriter(t.Context(), params, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, writer)
+	assert.Equal(t, testLocalType, writer.GetType())
+}
+
+func TestNewBackupWriter_RemoveArtifactsReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	params := &config.BackupServiceConfig{
+		Backup: &models.Backup{
+			RemoveArtifacts: true,
+			Common: models.Common{
+				Directory: t.TempDir(),
+			},
+		},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
+	}
+
+	writer, err := NewBackupWriter(t.Context(), params, slog.Default())
+	require.NoError(t, err)
+	assert.Nil(t, writer)
+}
+
+func TestNewBackupWriter_WrapsInnerError(t *testing.T) {
+	t.Parallel()
+
+	// Passing nil params triggers an error in newWriter; NewBackupWriter must
+	// wrap it with the "failed to create backup writer" prefix.
+	writer, err := NewBackupWriter(t.Context(), nil, slog.Default())
+	require.Error(t, err)
+	assert.Nil(t, writer)
+	assert.Contains(t, err.Error(), "failed to create backup writer")
+	assert.Contains(t, err.Error(), "params cannot be nil")
+}
+
+func TestNewWriter_NilParams(t *testing.T) {
+	t.Parallel()
+
+	writer, err := newWriter(t.Context(), nil, slog.Default())
+	require.Error(t, err)
+	assert.Nil(t, writer)
+	assert.Contains(t, err.Error(), "params cannot be nil")
+}
+
+func TestNewWriter_NilLogger(t *testing.T) {
+	t.Parallel()
+
+	params := &config.BackupServiceConfig{
+		Backup: &models.Backup{Common: models.Common{Directory: t.TempDir()}},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
+	}
+
+	writer, err := newWriter(t.Context(), params, nil)
+	require.Error(t, err)
+	assert.Nil(t, writer)
+	assert.Contains(t, err.Error(), "logger cannot be nil")
+}
+
+// TestNewWriter_XDRLocal exercises the BackupXDR branch in newWriter,
+// getDirectoryOutputFile and getShouldCleanContinue, plus the isXDR branch in newWriterOpts.
+func TestNewWriter_XDRLocal(t *testing.T) {
+	t.Parallel()
+
+	params := &config.BackupServiceConfig{
+		BackupXDR: &models.BackupXDR{
+			Directory:   t.TempDir(),
+			Namespace:   "test",
+			RemoveFiles: true,
+		},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
+	}
+
+	writer, err := newWriter(t.Context(), params, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, writer)
+	assert.Equal(t, testLocalType, writer.GetType())
+}
+
+// TestNewWriter_ContinueBackup hits the continueBackup branch in newWriterOpts.
+// When Continue is set, ShouldClearTarget must be false, so only the
+// continueBackup option (WithSkipDirCheck) is appended on top of the directory.
+func TestNewWriter_ContinueBackup(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	params := &config.BackupServiceConfig{
+		Backup: &models.Backup{
+			Continue: "state-file",
+			Common: models.Common{
+				Directory: dir,
+			},
+		},
+		ServiceConfigCommon: config.ServiceConfigCommon{
+			AwsS3:      &models.AwsS3{},
+			GcpStorage: &models.GcpStorage{},
+			AzureBlob:  &models.AzureBlob{},
+			Local:      &models.Local{},
+		},
+	}
+
+	writer, err := newWriter(t.Context(), params, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, writer)
+	assert.Equal(t, testLocalType, writer.GetType())
+}
+
+func TestGetDirectoryOutputFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("backup populates directory and output file", func(t *testing.T) {
+		t.Parallel()
+		params := &config.BackupServiceConfig{
+			Backup: &models.Backup{
+				OutputFile: "out.bak",
+				Common:     models.Common{Directory: "/tmp/dir"},
+			},
+		}
+		dir, out := getDirectoryOutputFile(params)
+		assert.Equal(t, "/tmp/dir", dir)
+		assert.Equal(t, "out.bak", out)
+	})
+
+	t.Run("xdr falls back to xdr directory and empty output file", func(t *testing.T) {
+		t.Parallel()
+		params := &config.BackupServiceConfig{
+			BackupXDR: &models.BackupXDR{Directory: "/tmp/xdr"},
+		}
+		dir, out := getDirectoryOutputFile(params)
+		assert.Equal(t, "/tmp/xdr", dir)
+		assert.Empty(t, out)
+	})
+}
+
+func TestGetShouldCleanContinue(t *testing.T) {
+	t.Parallel()
+
+	t.Run("backup with remove-files and no continue", func(t *testing.T) {
+		t.Parallel()
+		params := &config.BackupServiceConfig{
+			Backup: &models.Backup{RemoveFiles: true},
+		}
+		clean, cont := getShouldCleanContinue(params)
+		assert.True(t, clean)
+		assert.False(t, cont)
+	})
+
+	t.Run("backup with continue suppresses clean", func(t *testing.T) {
+		t.Parallel()
+		params := &config.BackupServiceConfig{
+			Backup: &models.Backup{RemoveFiles: true, Continue: "abc"},
+		}
+		clean, cont := getShouldCleanContinue(params)
+		assert.False(t, clean, "ShouldClearTarget must be false when Continue is set")
+		assert.True(t, cont)
+	})
+
+	t.Run("xdr uses RemoveFiles directly and never continues", func(t *testing.T) {
+		t.Parallel()
+		params := &config.BackupServiceConfig{
+			BackupXDR: &models.BackupXDR{RemoveFiles: true},
+		}
+		clean, cont := getShouldCleanContinue(params)
+		assert.True(t, clean)
+		assert.False(t, cont)
+	})
+}
+
+func TestNewWriterOpts_OptionCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		directory         string
+		outputFile        string
+		shouldClearTarget bool
+		continueBackup    bool
+		isXDR             bool
+		// Expected minimum options: validator + logger plus the dir/file/clear/continue flags.
+		minLen int
+	}{
+		{
+			name:      "directory only",
+			directory: "/tmp/d",
+			minLen:    3,
+		},
+		{
+			name:       "output file only",
+			outputFile: "/tmp/d/file.bak",
+			minLen:     3,
+		},
+		{
+			name:              "directory with clear and continue and xdr",
+			directory:         "/tmp/d",
+			shouldClearTarget: true,
+			continueBackup:    true,
+			isXDR:             true,
+			minLen:            5,
+		},
+		{
+			name:   "neither directory nor output file",
+			minLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts := newWriterOpts(
+				tt.directory,
+				tt.outputFile,
+				tt.shouldClearTarget,
+				tt.continueBackup,
+				tt.isXDR,
+				slog.Default(),
+			)
+			assert.GreaterOrEqual(t, len(opts), tt.minLen)
+		})
+	}
+}
+
 func TestNewStdWriter(t *testing.T) {
 	t.Parallel()
 
