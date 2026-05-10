@@ -75,7 +75,7 @@ func TestNewCmd_Structure(t *testing.T) {
 
 	cmd := NewCmd()
 	require.NotNil(t, cmd)
-	assert.Equal(t, "service", cmd.Use)
+	assert.Equal(t, useService, cmd.Use)
 	assert.Equal(t, serviceShort, cmd.Short)
 	assert.Equal(t, serviceLong, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
@@ -87,46 +87,46 @@ func TestNewCmd_Subcommands(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmd()
-	assert.ElementsMatch(t, []string{"backup", "restore", "config"}, subcommandNames(cmd))
+	assert.ElementsMatch(t, []string{useBackup, useRestore, useConfig}, subcommandNames(cmd))
 }
 
 func TestNewCmd_BackupSubcommandTree(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmd()
-	backup := findSubcommand(cmd, "backup")
+	backup := findSubcommand(cmd, useBackup)
 	require.NotNil(t, backup)
 
 	assert.ElementsMatch(t,
-		[]string{"cancel", "status", "full", "incremental"},
+		[]string{useCancel, useStatus, useFull, useIncremental},
 		subcommandNames(backup),
 	)
 
-	full := findSubcommand(backup, "full")
+	full := findSubcommand(backup, useFull)
 	require.NotNil(t, full)
-	assert.ElementsMatch(t, []string{"list", "start"}, subcommandNames(full))
+	assert.ElementsMatch(t, []string{useList, useStart}, subcommandNames(full))
 
-	incr := findSubcommand(backup, "incremental")
+	incr := findSubcommand(backup, useIncremental)
 	require.NotNil(t, incr)
-	assert.ElementsMatch(t, []string{"list", "start"}, subcommandNames(incr))
+	assert.ElementsMatch(t, []string{useList, useStart}, subcommandNames(incr))
 }
 
 func TestNewCmd_RestoreSubcommandTree(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmd()
-	restore := findSubcommand(cmd, "restore")
+	restore := findSubcommand(cmd, useRestore)
 	require.NotNil(t, restore)
 
 	assert.ElementsMatch(t,
-		[]string{"cancel", "status", "jobs", "full", "incremental", "timestamp"},
+		[]string{useCancel, useStatus, useJobs, useFull, useIncremental, useTimestamp},
 		subcommandNames(restore),
 	)
 
-	for _, name := range []string{"full", "incremental", "timestamp"} {
+	for _, name := range []string{useFull, useIncremental, useTimestamp} {
 		sub := findSubcommand(restore, name)
 		require.NotNilf(t, sub, "expected %q under restore", name)
-		assert.ElementsMatch(t, []string{"start"}, subcommandNames(sub))
+		assert.ElementsMatch(t, []string{useStart}, subcommandNames(sub))
 	}
 }
 
@@ -134,11 +134,11 @@ func TestNewCmd_ConfigSubcommandTree(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmd()
-	cfgCmd := findSubcommand(cmd, "config")
+	cfgCmd := findSubcommand(cmd, useConfig)
 	require.NotNil(t, cfgCmd)
 
 	assert.ElementsMatch(t,
-		[]string{"show", "update", "apply", "clusters", "policies", "routines", "storage"},
+		[]string{useShow, useUpdate, useApply, useClusters, usePolicies, useRoutines, useStorage},
 		subcommandNames(cfgCmd),
 	)
 }
@@ -149,19 +149,19 @@ func TestNewCmd_ConfigResourceCommandsSurface(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmd()
-	cfgCmd := findSubcommand(cmd, "config")
+	cfgCmd := findSubcommand(cmd, useConfig)
 	require.NotNil(t, cfgCmd)
 
-	for _, resource := range []string{"clusters", "policies", "routines", "storage"} {
+	for _, resource := range []string{useClusters, usePolicies, useRoutines, useStorage} {
 		sub := findSubcommand(cfgCmd, resource)
 		require.NotNilf(t, sub, "expected resource %q", resource)
 
 		got := subcommandNames(sub)
-		expected := []string{"list", "show", "delete", "add", "update"}
+		expected := []string{useList, useShow, useDelete, useAdd, useUpdate}
 
 		// Routines additionally expose enable/disable.
-		if resource == "routines" {
-			expected = append(expected, "enable", "disable")
+		if resource == useRoutines {
+			expected = append(expected, useEnable, useDisable)
 		}
 
 		assert.ElementsMatchf(t, expected, got, "subcommands of %q", resource)
@@ -177,20 +177,20 @@ func TestNewCmd_RequiredFlags(t *testing.T) {
 		path     []string
 		required string
 	}{
-		"backup cancel":          {[]string{"backup", "cancel"}, "name"},
-		"backup status":          {[]string{"backup", "status"}, "name"},
-		"backup full start":      {[]string{"backup", "full", "start"}, "name"},
-		"backup incr start":      {[]string{"backup", "incremental", "start"}, "name"},
-		"restore cancel":         {[]string{"restore", "cancel"}, "job-id"},
-		"restore status":         {[]string{"restore", "status"}, "job-id"},
-		"config update":          {[]string{"config", "update"}, "file"},
-		"config clusters add":    {[]string{"config", "clusters", "add"}, "name"},
-		"config clusters update": {[]string{"config", "clusters", "update"}, "name"},
-		"config clusters show":   {[]string{"config", "clusters", "show"}, "name"},
-		"config clusters delete": {[]string{"config", "clusters", "delete"}, "name"},
-		"config storage add":     {[]string{"config", "storage", "add"}, "name"},
-		"config policies add":    {[]string{"config", "policies", "add"}, "name"},
-		"config routines add":    {[]string{"config", "routines", "add"}, "name"},
+		"backup cancel":          {[]string{useBackup, useCancel}, "name"},
+		"backup status":          {[]string{useBackup, useStatus}, "name"},
+		"backup full start":      {[]string{useBackup, useFull, useStart}, "name"},
+		"backup incr start":      {[]string{useBackup, useIncremental, useStart}, "name"},
+		"restore cancel":         {[]string{useRestore, useCancel}, "job-id"},
+		"restore status":         {[]string{useRestore, useStatus}, "job-id"},
+		"config update":          {[]string{useConfig, useUpdate}, "file"},
+		"config clusters add":    {[]string{useConfig, useClusters, useAdd}, "name"},
+		"config clusters update": {[]string{useConfig, useClusters, useUpdate}, "name"},
+		"config clusters show":   {[]string{useConfig, useClusters, useShow}, "name"},
+		"config clusters delete": {[]string{useConfig, useClusters, useDelete}, "name"},
+		"config storage add":     {[]string{useConfig, useStorage, useAdd}, "name"},
+		"config policies add":    {[]string{useConfig, usePolicies, useAdd}, "name"},
+		"config routines add":    {[]string{useConfig, useRoutines, useAdd}, "name"},
 	}
 
 	for label, tc := range cases {

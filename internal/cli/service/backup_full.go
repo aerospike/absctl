@@ -24,7 +24,7 @@ import (
 
 func newBackupFullCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "full",
+		Use:   useFull,
 		Short: "Manage full backups",
 	}
 
@@ -42,7 +42,7 @@ func newBackupFullListCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupList()
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   useList,
 		Short: "List available full backups",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)
@@ -64,7 +64,7 @@ func newBackupFullStartCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupTrigger()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Start a full backup for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)

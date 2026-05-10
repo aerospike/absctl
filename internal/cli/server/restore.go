@@ -43,7 +43,7 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "restore",
+		Use:   useRestore,
 		Short: "Manage server-integrated restores",
 	}
 
@@ -78,7 +78,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Start a server-integrated restore",
 		Long:  "Start a server-integrated restore on the Aerospike cluster.",
 		RunE: func(cmd *cobra.Command, _ []string) error {

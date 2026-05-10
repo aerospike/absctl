@@ -58,7 +58,7 @@ func addCommonResourceSubcommands(parent *cobra.Command, rc *runCtx, ops *resour
 
 func newResourceListCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   useList,
 		Short: "List configured " + ops.resourcePlural,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newConfigHandler(rc)
@@ -79,7 +79,7 @@ func newResourceShowCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 	f := flags.NewServiceConfigName()
 
 	cmd := &cobra.Command{
-		Use:   "show",
+		Use:   useShow,
 		Short: "Show a single " + ops.resource + " by name",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
@@ -106,7 +106,7 @@ func newResourceDeleteCmd(rc *runCtx, ops *resourceOps) *cobra.Command {
 	f := flags.NewServiceConfigName()
 
 	cmd := &cobra.Command{
-		Use:   "delete",
+		Use:   useDelete,
 		Short: "Delete a " + ops.resource + " by name",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {

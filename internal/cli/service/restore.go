@@ -24,7 +24,7 @@ import (
 
 func newRestoreCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "restore",
+		Use:   useRestore,
 		Short: "Manage restores on the Aerospike Backup Service",
 	}
 
@@ -46,7 +46,7 @@ func newRestoreCancelCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreJobID()
 
 	cmd := &cobra.Command{
-		Use:   "cancel",
+		Use:   useCancel,
 		Short: "Cancel a running restore operation",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)
@@ -75,7 +75,7 @@ func newRestoreStatusCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreJobID()
 
 	cmd := &cobra.Command{
-		Use:   "status",
+		Use:   useStatus,
 		Short: "Get the status of a restore job",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)
@@ -98,7 +98,7 @@ func newRestoreJobsCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreJobs()
 
 	cmd := &cobra.Command{
-		Use:   "jobs",
+		Use:   useJobs,
 		Short: "List restore jobs",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)

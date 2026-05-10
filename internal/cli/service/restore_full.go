@@ -24,7 +24,7 @@ import (
 
 func newRestoreFullCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "full",
+		Use:   useFull,
 		Short: "Manage full restore operations",
 	}
 
@@ -41,7 +41,7 @@ func newRestoreFullStartCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreRequest()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Trigger an asynchronous full restore operation",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)

@@ -73,17 +73,17 @@ func newWriter(
 
 	logger.Info("initializing storage for writer",
 		slog.String("directory", directory),
-		slog.String("output_file", outputFile),
-		slog.Bool("should_clear_target", shouldClearTarget),
-		slog.Bool("continue_backup", continueBackup),
+		slog.String("outputFile", outputFile),
+		slog.Bool("shouldClearTarget", shouldClearTarget),
+		slog.Bool("continueBackup", continueBackup),
 	)
 
 	switch {
 	case params.AwsS3 != nil && params.AwsS3.BucketName != "":
 		defer logger.Info("initialized AWS storage writer",
 			slog.String("bucket", params.AwsS3.BucketName),
-			slog.String("storage_class", params.AwsS3.StorageClass),
-			slog.Int("chunk_size", params.AwsS3.ChunkSize),
+			slog.String("storageClass", params.AwsS3.StorageClass),
+			slog.Int("chunkSize", params.AwsS3.ChunkSize),
 			slog.String("endpoint", params.AwsS3.Endpoint),
 		)
 
@@ -91,7 +91,7 @@ func newWriter(
 	case params.GcpStorage != nil && params.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage writer",
 			slog.String("bucket", params.GcpStorage.BucketName),
-			slog.Int("chunk_size", params.GcpStorage.ChunkSize),
+			slog.Int("chunkSize", params.GcpStorage.ChunkSize),
 			slog.String("endpoint", params.GcpStorage.Endpoint),
 		)
 
@@ -99,8 +99,8 @@ func newWriter(
 	case params.AzureBlob != nil && params.AzureBlob.ContainerName != "":
 		defer logger.Info("initialized Azure storage writer",
 			slog.String("container", params.AzureBlob.ContainerName),
-			slog.String("access_tier", params.AzureBlob.AccessTier),
-			slog.Int("block_size", params.AzureBlob.BlockSize),
+			slog.String("accessTier", params.AzureBlob.AccessTier),
+			slog.Int("blockSize", params.AzureBlob.BlockSize),
 			slog.String("endpoint", params.AzureBlob.Endpoint),
 		)
 

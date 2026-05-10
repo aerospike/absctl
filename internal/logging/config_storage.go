@@ -23,6 +23,9 @@ import (
 const (
 	headerStorage    = "Storage"
 	headerStorageAll = "Storage definitions"
+
+	storageTypeLocal = "local"
+	storageTypeS3    = "s3"
 )
 
 // PrintStorageList prints all configured storage entries keyed by name. When
@@ -107,9 +110,9 @@ func printStorage(name string, s *api.DtoStorage) {
 func storageSummary(s *api.DtoStorage) (storageType, location, path string) {
 	switch {
 	case s.LocalStorage != nil:
-		return "local", "-", s.LocalStorage.Path
+		return storageTypeLocal, "-", s.LocalStorage.Path
 	case s.S3Storage != nil:
-		return "s3", s.S3Storage.Bucket, strVal(s.S3Storage.Path)
+		return storageTypeS3, s.S3Storage.Bucket, strVal(s.S3Storage.Path)
 	case s.GcpStorage != nil:
 		return "gcp", s.GcpStorage.BucketName, strVal(s.GcpStorage.Path)
 	case s.AzureStorage != nil:

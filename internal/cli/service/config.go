@@ -24,7 +24,7 @@ import (
 
 func newConfigCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "config",
+		Use:   useConfig,
 		Short: "Manage Aerospike Backup Service configuration",
 	}
 
@@ -45,7 +45,7 @@ func newConfigCmd(rc *runCtx) *cobra.Command {
 
 func newConfigShowCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "show",
+		Use:   useShow,
 		Short: "Show the full service configuration",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newConfigHandler(rc)
@@ -66,7 +66,7 @@ func newConfigUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigFile()
 
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   useUpdate,
 		Short: "Replace the full service configuration from a YAML file",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
@@ -97,7 +97,7 @@ func newConfigUpdateCmd(rc *runCtx) *cobra.Command {
 
 func newConfigApplyCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "apply",
+		Use:   useApply,
 		Short: "Apply the pending configuration on the service",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newConfigHandler(rc)
