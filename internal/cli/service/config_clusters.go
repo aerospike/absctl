@@ -31,13 +31,13 @@ import (
 
 func newConfigClustersCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "clusters",
+		Use:   useClusters,
 		Short: "Manage Aerospike cluster definitions",
 	}
 
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "cluster",
-		resourcePlural: "clusters",
+		resourcePlural: useClusters,
 		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListClusters(ctx)
 		},
@@ -63,7 +63,7 @@ func newConfigClusterAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigCluster()
 
 	cmd := &cobra.Command{
-		Use:   "add",
+		Use:   useAdd,
 		Short: "Add a new Aerospike cluster definition",
 		Long: "Add a new Aerospike cluster definition. Body fields can be supplied " +
 			"as individual flags.",
@@ -98,7 +98,7 @@ func newConfigClusterUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigCluster()
 
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   useUpdate,
 		Short: "Replace an existing Aerospike cluster definition",
 		Long: "Replace an existing Aerospike cluster definition. Body fields can be " +
 			"supplied as individual flags.",

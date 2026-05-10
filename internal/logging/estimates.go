@@ -167,8 +167,8 @@ func printEstimate(
 		// Formatting the remaining time to milliseconds to avoid printing 0.000000000 seconds.
 		slog.String("remaining", estimatedEndTime.Round(time.Millisecond).String()),
 		slog.Uint64("rec/s", rps),
-		slog.Uint64("KiB/s", kbps),
-		slog.Uint64("B/rec", recSize),
+		slog.Uint64("kiB/s", kbps),
+		slog.Uint64("b/rec", recSize),
 	)
 
 	return percentage, nil

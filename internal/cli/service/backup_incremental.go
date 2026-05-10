@@ -24,7 +24,7 @@ import (
 
 func newBackupIncrementalCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "incremental",
+		Use:   useIncremental,
 		Short: "Manage incremental backups",
 	}
 
@@ -42,7 +42,7 @@ func newBackupIncrementalListCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupList()
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   useList,
 		Short: "List available incremental backups",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)
@@ -64,7 +64,7 @@ func newBackupIncrementalStartCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupTrigger()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Start an incremental backup for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)

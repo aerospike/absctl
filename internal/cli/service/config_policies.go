@@ -25,13 +25,13 @@ import (
 
 func newConfigPoliciesCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "policies",
+		Use:   usePolicies,
 		Short: "Manage backup policy definitions",
 	}
 
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "policy",
-		resourcePlural: "policies",
+		resourcePlural: usePolicies,
 		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListPolicies(ctx)
 		},
@@ -57,7 +57,7 @@ func newConfigPolicyAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigPolicy()
 
 	cmd := &cobra.Command{
-		Use:   "add",
+		Use:   useAdd,
 		Short: "Add a new backup policy definition",
 		Long: "Add a new backup policy definition. Body fields can be supplied as " +
 			"individual flags.",
@@ -92,7 +92,7 @@ func newConfigPolicyUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigPolicy()
 
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   useUpdate,
 		Short: "Replace an existing backup policy definition",
 		Long: "Replace an existing backup policy definition. Body fields can be " +
 			"supplied as individual flags.",

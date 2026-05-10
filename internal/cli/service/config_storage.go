@@ -25,13 +25,13 @@ import (
 
 func newConfigStorageCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "storage",
+		Use:   useStorage,
 		Short: "Manage storage definitions",
 	}
 
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
-		resource:       "storage",
-		resourcePlural: "storage",
+		resource:       useStorage,
+		resourcePlural: useStorage,
 		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListStorage(ctx)
 		},
@@ -58,7 +58,7 @@ func newConfigStorageAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigStorage()
 
 	cmd := &cobra.Command{
-		Use:   "add",
+		Use:   useAdd,
 		Short: "Add a new storage definition",
 		Long: "Add a new storage definition. Storage wraps exactly one of " +
 			"local/s3/gcp/azure provider blocks; populating any field of a provider " +
@@ -96,7 +96,7 @@ func newConfigStorageUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigStorage()
 
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   useUpdate,
 		Short: "Replace an existing storage definition",
 		Long: "Replace an existing storage definition. Storage wraps exactly one of " +
 			"local/s3/gcp/azure provider blocks; populating any field of a provider " +

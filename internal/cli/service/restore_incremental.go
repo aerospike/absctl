@@ -24,7 +24,7 @@ import (
 
 func newRestoreIncrementalCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "incremental",
+		Use:   useIncremental,
 		Short: "Manage incremental restore operations",
 	}
 
@@ -41,7 +41,7 @@ func newRestoreIncrementalStartCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreRequest()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Trigger an asynchronous incremental restore operation",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)

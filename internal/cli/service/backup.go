@@ -24,7 +24,7 @@ import (
 
 func newBackupCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "backup",
+		Use:   useBackup,
 		Short: "Manage backups on the Aerospike Backup Service",
 	}
 
@@ -44,7 +44,7 @@ func newBackupCancelCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupRoutine()
 
 	cmd := &cobra.Command{
-		Use:   "cancel",
+		Use:   useCancel,
 		Short: "Cancel a currently running backup",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)
@@ -73,7 +73,7 @@ func newBackupStatusCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceBackupRoutine()
 
 	cmd := &cobra.Command{
-		Use:   "status",
+		Use:   useStatus,
 		Short: "Get current backup statistics for a routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newBackupHandler(rc)

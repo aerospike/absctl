@@ -25,13 +25,13 @@ import (
 
 func newConfigRoutinesCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "routines",
+		Use:   useRoutines,
 		Short: "Manage backup routine definitions",
 	}
 
 	addCommonResourceSubcommands(cmd, rc, &resourceOps{
 		resource:       "routine",
-		resourcePlural: "routines",
+		resourcePlural: useRoutines,
 		list: func(ctx context.Context, h *configService.ConfigHandler) error {
 			return h.ListRoutines(ctx)
 		},
@@ -59,7 +59,7 @@ func newConfigRoutineAddCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigRoutine()
 
 	cmd := &cobra.Command{
-		Use:   "add",
+		Use:   useAdd,
 		Short: "Add a new backup routine definition",
 		Long: "Add a new backup routine definition. Body fields can be supplied as " +
 			"individual flags.",
@@ -94,7 +94,7 @@ func newConfigRoutineUpdateCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigRoutine()
 
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use:   useUpdate,
 		Short: "Replace an existing backup routine definition",
 		Long: "Replace an existing backup routine definition. Body fields can be " +
 			"supplied as individual flags.",
@@ -129,7 +129,7 @@ func newConfigRoutineEnableCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigName()
 
 	cmd := &cobra.Command{
-		Use:   "enable",
+		Use:   useEnable,
 		Short: "Enable a backup routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {
@@ -162,7 +162,7 @@ func newConfigRoutineDisableCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceConfigName()
 
 	cmd := &cobra.Command{
-		Use:   "disable",
+		Use:   useDisable,
 		Short: "Disable a backup routine",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := f.Validate(); err != nil {

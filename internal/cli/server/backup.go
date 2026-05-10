@@ -43,7 +43,7 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "backup",
+		Use:   useBackup,
 		Short: "Manage server-integrated backups",
 	}
 
@@ -81,7 +81,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	ssbFlagSet := ssbFlags.NewBackupCreateFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Start a server-integrated backup",
 		Long:  "Start a server-integrated backup on the Aerospike cluster.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -115,7 +115,7 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	ssbFlagSet := ssbFlags.NewBackupListFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   useList,
 		Short: "List server-integrated backups",
 		Long:  "List available server-integrated backups from the configured storage.",
 		RunE: func(cmd *cobra.Command, _ []string) error {

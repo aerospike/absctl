@@ -77,10 +77,10 @@ func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger
 		slog.Time("start_time", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
 		slog.Uint64(recordsMetric, stats.GetReadRecords()),
-		slog.Uint64("s_index_read", uint64(stats.GetSIndexes())),
-		slog.Uint64("udf_read", uint64(stats.GetUDFs())),
-		slog.Uint64("bytes_written", stats.GetBytesWritten()),
-		slog.Uint64("files_written", stats.GetFileCount()),
+		slog.Uint64("sIndexRead", uint64(stats.GetSIndexes())),
+		slog.Uint64("udfRead", uint64(stats.GetUDFs())),
+		slog.Uint64("bytesWritten", stats.GetBytesWritten()),
+		slog.Uint64("filesWritten", stats.GetFileCount()),
 	)
 }
 
@@ -144,27 +144,27 @@ func logRestoreReport(stats *bModels.RestoreStats, logger *slog.Logger, isValida
 
 	logAttr := make([]any, 0)
 	logAttr = append(logAttr,
-		slog.Time("start_time", stats.StartTime),
+		slog.Time("startTime", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
-		slog.Uint64("records_read", stats.GetReadRecords()),
-		slog.Uint64("s_index_read", uint64(stats.GetSIndexes())),
-		slog.Uint64("udf_read", uint64(stats.GetUDFs())),
+		slog.Uint64("recordsRead", stats.GetReadRecords()),
+		slog.Uint64("sIndexRead", uint64(stats.GetSIndexes())),
+		slog.Uint64("udfRead", uint64(stats.GetUDFs())),
 	)
 
 	if !isValidation {
 		logAttr = append(logAttr,
-			slog.Uint64("expired_records", stats.GetRecordsExpired()),
-			slog.Uint64("skipped_records", stats.GetRecordsSkipped()),
-			slog.Uint64("ignored_records", stats.GetRecordsIgnored()),
-			slog.Uint64("fresher_records", stats.GetRecordsFresher()),
-			slog.Uint64("existed_records", stats.GetRecordsExisted()),
-			slog.Uint64("inserted_records", stats.GetRecordsInserted()),
-			slog.Uint64("in_doubt_errors", stats.GetErrorsInDoubt()),
+			slog.Uint64("expiredRecords", stats.GetRecordsExpired()),
+			slog.Uint64("skippedRecords", stats.GetRecordsSkipped()),
+			slog.Uint64("ignoredRecords", stats.GetRecordsIgnored()),
+			slog.Uint64("fresherRecords", stats.GetRecordsFresher()),
+			slog.Uint64("existedRecords", stats.GetRecordsExisted()),
+			slog.Uint64("insertedRecords", stats.GetRecordsInserted()),
+			slog.Uint64("inDoubtErrors", stats.GetErrorsInDoubt()),
 		)
 	}
 
 	logAttr = append(logAttr,
-		slog.Uint64("total_bytes_read", stats.GetTotalBytesRead()),
+		slog.Uint64("totalBytesRead", stats.GetTotalBytesRead()),
 	)
 
 	logger.Info(header, logAttr...)

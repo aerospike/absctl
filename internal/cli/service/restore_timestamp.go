@@ -24,7 +24,7 @@ import (
 
 func newRestoreTimestampCmd(rc *runCtx) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "timestamp",
+		Use:   useTimestamp,
 		Short: "Manage point-in-time restore operations",
 	}
 
@@ -41,7 +41,7 @@ func newRestoreTimestampStartCmd(rc *runCtx) *cobra.Command {
 	f := flags.NewServiceRestoreTimestamp()
 
 	cmd := &cobra.Command{
-		Use:   "start",
+		Use:   useStart,
 		Short: "Trigger an asynchronous restore operation to a specific point in time",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			handler, err := newRestoreHandler(rc)

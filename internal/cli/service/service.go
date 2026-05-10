@@ -46,7 +46,7 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "service",
+		Use:   useService,
 		Short: serviceShort,
 		Long:  serviceLong,
 	}
