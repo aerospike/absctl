@@ -105,7 +105,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	JobID, err := client.StartBackup(
+	JobID, err := client.StartServerBackup(
 		ctx,
 		s.config.ServerBackup.Namespace,
 		s.config.ServerBackup.StorageType,
@@ -133,7 +133,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	err = client.StartRestore(
+	err = client.StartServerRestore(
 		ctx,
 		s.config.ServerBackup.JobID,
 		s.config.ServerBackup.Namespace,
@@ -150,6 +150,29 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated restore started",
+		slog.String("backup-id", s.config.ServerBackup.JobID))
+
+	return nil
+}
+
+// PrepareRestore initiates a restore preparation process for the specified job ID.
+func (s *Service) PrepareRestore(ctx context.Context) error {
+	client, err := s.newInfoClient()
+	if err != nil {
+		return err
+	}
+
+	err = client.PrepareServerRestore(
+		ctx,
+		s.config.ServerBackup.JobID,
+		s.config.ServerBackup.Namespace,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to prepare restore: %w", err)
+	}
+
+	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
+	s.logger.Info("Restore preparation started",
 		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil

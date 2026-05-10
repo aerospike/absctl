@@ -33,6 +33,7 @@ const (
 	useRestore = "restore"
 	useStart   = "start"
 	useList    = "list"
+	usePrepare = "prepare"
 )
 
 // runCtx is passed to all server subcommand constructors so they share the

@@ -126,7 +126,7 @@ func TestNewCmd_RestoreSubcommandHasStart(t *testing.T) {
 
 	require.NotNil(t, restore, "expected a 'restore' subcommand")
 
-	assert.ElementsMatch(t, []string{"start"}, subcommandNames(restore))
+	assert.ElementsMatch(t, []string{"start", "prepare"}, subcommandNames(restore))
 }
 
 func TestNewCmd_PersistentFlags(t *testing.T) {

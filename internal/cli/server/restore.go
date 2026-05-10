@@ -60,6 +60,7 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 	cmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	cmd.AddCommand(newRestoreStartCmd(rc, rf))
+	cmd.AddCommand(newRestorePrepareCmd(rc, rf))
 
 	setParentHelp(cmd,
 		compressionFlagSet,
@@ -95,6 +96,36 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 
 			if err := svc.StartRestore(cmd.Context()); err != nil {
 				return fmt.Errorf("server side restore failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().AddFlagSet(ssbFlagSet)
+	setLeafHelp(cmd)
+
+	return cmd
+}
+
+func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
+	ssbFlags := flags.NewServerBackup()
+	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   usePrepare,
+		Short: "Prepare a server-integrated restore",
+		Long:  "Prepare a server-integrated restore on the Aerospike cluster.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
+
+			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			if err != nil {
+				return fmt.Errorf("server side restore initialization failed: %w", err)
+			}
+
+			if err := svc.PrepareRestore(cmd.Context()); err != nil {
+				return fmt.Errorf("server side restore preparation failed: %w", err)
 			}
 
 			return nil
