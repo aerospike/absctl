@@ -119,6 +119,10 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
 
+			if err := cfg.Validate(false); err != nil {
+				return fmt.Errorf("failed to validate config: %w", err)
+			}
+
 			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
 			if err != nil {
 				return fmt.Errorf("server side restore initialization failed: %w", err)
