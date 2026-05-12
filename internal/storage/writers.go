@@ -170,15 +170,14 @@ func newWriterOpts(
 
 func newLocalWriter(ctx context.Context, l *models.Local, opts []options.Opt) (backup.Writer, error) {
 	if l != nil {
-		opts = append(opts, options.WithChunkSize(l.BufferSize))
+		opts = append(opts, options.WithChunkSize(toBytes(l.BufferSize)))
 	}
 
 	return local.NewWriter(ctx, opts...)
 }
 
 func newStdWriter(ctx context.Context, bufferSizeMiB int) (backup.Writer, error) {
-	bufferSizeBytes := bufferSizeMiB * 1024 * 1024
-	return std.NewWriter(ctx, bufferSizeBytes)
+	return std.NewWriter(ctx, toBytes(bufferSizeMiB))
 }
 
 func newS3Writer(
@@ -199,7 +198,7 @@ func newS3Writer(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := a.ChunkSize * 1024 * 1024
+	chunkSize := toBytes(a.ChunkSize)
 	opts = append(opts, options.WithChunkSize(chunkSize), options.WithUploadConcurrency(a.UploadConcurrency))
 
 	return s3.NewWriter(ctx, client, a.BucketName, opts...)
@@ -219,7 +218,7 @@ func newGcpWriter(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := g.ChunkSize * 1024 * 1024
+	chunkSize := toBytes(g.ChunkSize)
 	opts = append(opts, options.WithChunkSize(chunkSize))
 
 	return storage.NewWriter(ctx, client, g.BucketName, opts...)
@@ -243,8 +242,12 @@ func newAzureWriter(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := a.BlockSize * 1024 * 1024
+	chunkSize := toBytes(a.BlockSize)
 	opts = append(opts, options.WithChunkSize(chunkSize), options.WithUploadConcurrency(a.UploadConcurrency))
 
 	return blob.NewWriter(ctx, client, a.ContainerName, opts...)
+}
+
+func toBytes(m int) int {
+	return m * 1024 * 1024
 }

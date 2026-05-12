@@ -38,7 +38,7 @@ const (
 	DefaultS3RestorePollDuration = int64(60000)
 	DefaultS3RetryMaxAttempts    = 10
 	DefaultS3RetryMaxBackoff     = 90000
-	DefaultS3ChunkSize           = 5
+	DefaultS3ChunkSize           = 50
 	DefaultS3UploadConcurrency   = 0
 )
 
@@ -56,7 +56,7 @@ const (
 	DefaultAzureRetryMaxAttempts    = 10
 	DefaultAzureRetryDelay          = 60000
 	DefaultAzureRetryMaxDelay       = 90000
-	DefaultAzureBlockSize           = 5
+	DefaultAzureBlockSize           = 50
 	DefaultAzureUploadConcurrency   = 1
 )
 
@@ -69,13 +69,13 @@ const (
 	DefaultGcpRetryBackoffMax        = 90000
 	DefaultGcpRetryBackoffInit       = 60000
 	DefaultGcpRetryBackoffMultiplier = 2.0
-	DefaultGcpChunkSize              = 5
+	DefaultGcpChunkSize              = 50
 )
 
 // noinspection GoCommentStart
 // Local Storage.
 const (
-	DefaultLocalBufferSize = 5
+	DefaultLocalBufferSize = 4
 )
 
 // Cloud common.
