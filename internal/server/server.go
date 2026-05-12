@@ -105,7 +105,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	JobID, err := client.StartBackup(
+	JobID, err := client.StartServerBackup(
 		ctx,
 		s.config.ServerBackup.Namespace,
 		s.config.ServerBackup.StorageType,
@@ -133,7 +133,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	err = client.StartRestore(
+	err = client.StartServerRestore(
 		ctx,
 		s.config.ServerBackup.JobID,
 		s.config.ServerBackup.Namespace,
