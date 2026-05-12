@@ -46,6 +46,7 @@ Release artifacts are automatically built and uploaded under GitHub Releases.
 
 
 
+
 ## Supported flags
 ```bash
 
@@ -250,7 +251,7 @@ Example: absctl backup --azure-account-name secret:resource1:azaccount
       --sa-is-base64                Whether Secret Agent responses are Base64 encoded.
 
 Local Storage Flags:
-      --local-buffer-size int   Buffer size in megabytes for local file writes. (default 5)
+      --local-buffer-size int   Buffer size in megabytes for local file writes. (default 4)
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -277,7 +278,7 @@ Any AWS parameter can be retrieved from Secret Agent.
                                       EXPRESS_ONEZONE.
       --s3-chunk-size int             Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to
                                       the storage in a single request. Objects smaller than the size will be sent in a single request,
-                                      while larger objects will be split over multiple requests. (default 5)
+                                      while larger objects will be split over multiple requests. (default 50)
       --s3-upload-concurrency int     Defines the max number of concurrent uploads to be performed to upload the file.
                                       Each concurrent upload will create a buffer of size s3-chunk-size.
       --s3-calculate-checksum         Calculate checksum for each uploaded object.
@@ -302,7 +303,7 @@ Any GCP parameter can be retrieved from Secret Agent.
       --gcp-endpoint-override string         An alternate url endpoint to send GCP API calls to.
       --gcp-chunk-size int                   Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to
                                              the storage in a single request. Objects smaller than the size will be sent in a single request,
-                                             while larger objects will be split over multiple requests. (default 5)
+                                             while larger objects will be split over multiple requests. (default 50)
       --gcp-calculate-checksum               Calculate checksum for each uploaded object.
       --gcp-retry-max-attempts int           Max retries specifies the maximum number of attempts a failed operation will be retried
                                              before producing an error. (default 10)
@@ -335,7 +336,7 @@ Any Azure parameter can be retrieved from Secret Agent.
       --azure-access-tier string       Azure access tier is applied to created backup files.
                                        If not set, tier will be determined by the Azure storage account settings and rules.
                                        Tiers are: Cold, Cool, Hot.
-      --azure-block-size int           Block size in MiB defines the size of the buffer used during upload. (default 5)
+      --azure-block-size int           Block size in MiB defines the size of the buffer used during upload. (default 50)
       --azure-upload-concurrency int   Defines the max number of concurrent uploads to be performed to upload the file.
                                        Each concurrent upload will create a buffer of size azure-block-size. (default 1)
       --azure-calculate-checksum       Calculate checksum for each uploaded object.
@@ -684,7 +685,7 @@ aws:
     # Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to
     # the storage in a single request. Objects smaller than the size will be sent in a single request,
     # while larger objects will be split over multiple requests.
-    chunk-size: 5
+    chunk-size: 50
     # Defines the max number of concurrent uploads to be performed to upload the file.
     # Each concurrent upload will create a buffer of size s3-chunk-size.
     upload-concurrency: 0
@@ -720,7 +721,7 @@ gcp:
     # Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to
     # the storage in a single request. Objects smaller than the size will be sent in a single request,
     # while larger objects will be split over multiple requests.
-    chunk-size: 5
+    chunk-size: 50
     # Calculate checksum for each uploaded object.
     calculate-checksum: false
     # Max connections per host optionally limits the total number of connections per host,
@@ -777,9 +778,9 @@ azure:
     # 0 means no limit.
     request-timeout: 600000
     # Block size in MiB defines the size of the buffer used during upload.
-    block-size: 5
+    block-size: 50
 local:
   disk:
     # Buffer size in megabytes for local file writes.
-    buffer-size: 5
+    buffer-size: 4
 ```
