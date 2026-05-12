@@ -108,6 +108,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	return cmd
 }
 
+//nolint:dupl // Sub commands look the same.
 func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
