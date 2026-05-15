@@ -25,14 +25,14 @@ jobs:
           egress-policy: audit
 
       - name: Get checkout directory
-        uses: step-security/action-cond@45aa5a709bd075f11c74285d8b0ca4d527e5fbcf # v1.2.4
+        uses: step-security/action-cond@6c9b559685e1bcd523fc000b3cc1272529f8810d # v1.2.5
         id: checkout-dir
         with:
           cond: ${{ inputs.submodule != '' }}
           if_true: aerospike-tools # In this case we are expecting to checkout the tools package.
           if_false: absctl
       - name: Get absctl working directory
-        uses: step-security/action-cond@45aa5a709bd075f11c74285d8b0ca4d527e5fbcf # v1.2.4
+        uses: step-security/action-cond@6c9b559685e1bcd523fc000b3cc1272529f8810d # v1.2.5
         id: working-dir
         with:
           cond: ${{ inputs.submodule != '' }}
