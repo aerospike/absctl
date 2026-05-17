@@ -26,6 +26,7 @@ import (
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/backup-go"
 	bModels "github.com/aerospike/backup-go/models"
+	"github.com/aerospike/backup-go/pkg/estimates"
 )
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
@@ -147,10 +148,8 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		logging.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
+		estimates.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
 	})
-
-	go logging.PrintRestoreEstimate(ctx, h.GetStats(), h.GetMetrics, r.reader.GetSize, r.logger)
 
 	// Wait for restore / validation to finish.
 	if err = h.Wait(ctx); err != nil {
@@ -190,8 +189,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 				return
 			}
 
-			go logging.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-			go logging.PrintRestoreEstimate(ctx, h.GetStats(), h.GetMetrics, r.reader.GetSize, r.logger)
+			go estimates.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
 
 			if err = h.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asb restore: %w", err)
@@ -219,8 +217,7 @@ func (r *Service) runAuto(ctx context.Context) error {
 				return
 			}
 
-			go logging.PrintFilesNumber(ctx, r.readerXdr.GetNumber, models.RestoreModeASBX, r.logger)
-			go logging.PrintRestoreEstimate(ctx, hXdr.GetStats(), hXdr.GetMetrics, r.readerXdr.GetSize, r.logger)
+			go estimates.PrintFilesNumber(ctx, r.readerXdr.GetNumber, models.RestoreModeASBX, r.logger)
 
 			if err = hXdr.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asbx restore: %w", err)
