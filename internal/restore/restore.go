@@ -26,7 +26,6 @@ import (
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/backup-go"
 	bModels "github.com/aerospike/backup-go/models"
-	"github.com/aerospike/backup-go/pkg/estimates"
 )
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
@@ -144,19 +143,12 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 	if err != nil {
 		return fmt.Errorf("failed to start %s %s: %w", restoreType, logMessage, err)
 	}
-	// Run async printing files stats.
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		estimates.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-	})
 
 	// Wait for restore / validation to finish.
 	if err = h.Wait(ctx); err != nil {
 		return fmt.Errorf("failed to perform %s %s: %w", restoreType, logMessage, err)
 	}
 
-	wg.Wait()
 	// Print report.
 	logging.ReportRestore(h.GetStats(), r.config.ValidateOnly, r.reportToLog, r.logger)
 
@@ -189,8 +181,6 @@ func (r *Service) runAuto(ctx context.Context) error {
 				return
 			}
 
-			go estimates.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-
 			if err = h.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asb restore: %w", err)
 
@@ -216,8 +206,6 @@ func (r *Service) runAuto(ctx context.Context) error {
 
 				return
 			}
-
-			go estimates.PrintFilesNumber(ctx, r.readerXdr.GetNumber, models.RestoreModeASBX, r.logger)
 
 			if err = hXdr.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asbx restore: %w", err)
