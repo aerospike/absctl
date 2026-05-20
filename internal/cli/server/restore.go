@@ -26,20 +26,12 @@ import (
 // restoreFlags groups the operation-specific flag holders shared by all
 // "server restore" subcommands.
 type restoreFlags struct {
-	compression *flags.Compression
-	encryption  *flags.Encryption
-	aws         *flags.AwsS3
-	gcp         *flags.GcpStorage
-	azure       *flags.AzureBlob
+	aws *flags.AwsS3
 }
 
 func newRestoreCmd(rc *runCtx) *cobra.Command {
 	rf := &restoreFlags{
-		compression: flags.NewCompression(flags.OperationRestore),
-		encryption:  flags.NewEncryption(flags.OperationRestore),
-		aws:         flags.NewAwsS3(flags.OperationRestore),
-		gcp:         flags.NewGcpStorage(flags.OperationRestore),
-		azure:       flags.NewAzureBlob(flags.OperationRestore),
+		aws: flags.NewAwsS3(flags.OperationRestore),
 	}
 
 	cmd := &cobra.Command{
@@ -47,27 +39,15 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 		Short: "Manage server-integrated restores",
 	}
 
-	compressionFlagSet := rf.compression.NewFlagSet()
-	encryptionFlagSet := rf.encryption.NewFlagSet()
 	awsFlagSet := rf.aws.NewFlagSet()
-	gcpFlagSet := rf.gcp.NewFlagSet()
-	azureFlagSet := rf.azure.NewFlagSet()
 
-	cmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	cmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
 	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	cmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	cmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	cmd.AddCommand(newRestoreStartCmd(rc, rf))
 	cmd.AddCommand(newRestorePrepareCmd(rc, rf))
 
 	setParentHelp(cmd,
-		compressionFlagSet,
-		encryptionFlagSet,
 		awsFlagSet,
-		gcpFlagSet,
-		azureFlagSet,
 	)
 
 	return cmd
@@ -155,12 +135,7 @@ func newIntegratedRestoreConfig(
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
-		rf.compression.GetCompression(),
-		rf.encryption.GetEncryption(),
 		rc.secretAgent.GetSecretAgent(),
 		rf.aws.GetAwsS3(),
-		rf.gcp.GetGcpStorage(),
-		rf.azure.GetAzureBlob(),
-		nil,
 	)
 }

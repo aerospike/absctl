@@ -33,13 +33,8 @@ func NewServerBackupServiceConfig(
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
-	compression *models.Compression,
-	encryption *models.Encryption,
 	secretAgent *models.SecretAgent,
 	awsS3 *models.AwsS3,
-	gcpStorage *models.GcpStorage,
-	azureBlob *models.AzureBlob,
-	local *models.Local,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		ServerBackup: serverBackup,
@@ -47,13 +42,8 @@ func NewServerBackupServiceConfig(
 			App:          app,
 			ClientConfig: clientConfig,
 			ClientPolicy: clientPolicy,
-			Compression:  compression,
-			Encryption:   encryption,
 			SecretAgent:  secretAgent,
 			AwsS3:        awsS3,
-			GcpStorage:   gcpStorage,
-			AzureBlob:    azureBlob,
-			Local:        local,
 		},
 	}
 }
