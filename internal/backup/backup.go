@@ -224,8 +224,6 @@ func (s *Service) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to start backup of indexes and udfs: %w", err)
 		}
 
-		go logging.PrintBackupEstimate(ctx, hXdr.GetStats(), hXdr.GetMetrics, s.logger)
-
 		if err = hXdr.Wait(ctx); err != nil {
 			return fmt.Errorf("failed to xdr backup: %w", err)
 		}
@@ -243,8 +241,6 @@ func (s *Service) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to start backup: %w", errHumanize(err))
 		}
-
-		go logging.PrintBackupEstimate(ctx, h.GetStats(), h.GetMetrics, s.logger)
 
 		if err = h.Wait(ctx); err != nil {
 			return fmt.Errorf("failed to backup: %w", err)

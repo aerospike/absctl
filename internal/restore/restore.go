@@ -143,21 +143,12 @@ func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMe
 	if err != nil {
 		return fmt.Errorf("failed to start %s %s: %w", restoreType, logMessage, err)
 	}
-	// Run async printing files stats.
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		logging.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-	})
-
-	go logging.PrintRestoreEstimate(ctx, h.GetStats(), h.GetMetrics, r.reader.GetSize, r.logger)
 
 	// Wait for restore / validation to finish.
 	if err = h.Wait(ctx); err != nil {
 		return fmt.Errorf("failed to perform %s %s: %w", restoreType, logMessage, err)
 	}
 
-	wg.Wait()
 	// Print report.
 	logging.ReportRestore(h.GetStats(), r.config.ValidateOnly, r.reportToLog, r.logger)
 
@@ -190,9 +181,6 @@ func (r *Service) runAuto(ctx context.Context) error {
 				return
 			}
 
-			go logging.PrintFilesNumber(ctx, r.reader.GetNumber, models.RestoreModeASB, r.logger)
-			go logging.PrintRestoreEstimate(ctx, h.GetStats(), h.GetMetrics, r.reader.GetSize, r.logger)
-
 			if err = h.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asb restore: %w", err)
 
@@ -218,9 +206,6 @@ func (r *Service) runAuto(ctx context.Context) error {
 
 				return
 			}
-
-			go logging.PrintFilesNumber(ctx, r.readerXdr.GetNumber, models.RestoreModeASBX, r.logger)
-			go logging.PrintRestoreEstimate(ctx, hXdr.GetStats(), hXdr.GetMetrics, r.readerXdr.GetSize, r.logger)
 
 			if err = hXdr.Wait(ctx); err != nil {
 				errChan <- fmt.Errorf("failed to perform asbx restore: %w", err)
