@@ -26,20 +26,12 @@ import (
 // backupFlags groups the operation-specific flag holders shared by all
 // "server backup" subcommands.
 type backupFlags struct {
-	compression *flags.Compression
-	encryption  *flags.Encryption
-	aws         *flags.AwsS3
-	gcp         *flags.GcpStorage
-	azure       *flags.AzureBlob
+	aws *flags.AwsS3
 }
 
 func newBackupCmd(rc *runCtx) *cobra.Command {
 	bf := &backupFlags{
-		compression: flags.NewCompression(flags.OperationBackup),
-		encryption:  flags.NewEncryption(flags.OperationBackup),
-		aws:         flags.NewAwsS3(flags.OperationBackup),
-		gcp:         flags.NewGcpStorage(flags.OperationBackup),
-		azure:       flags.NewAzureBlob(flags.OperationBackup),
+		aws: flags.NewAwsS3(flags.OperationBackup),
 	}
 
 	cmd := &cobra.Command{
@@ -47,17 +39,9 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 		Short: "Manage server-integrated backups",
 	}
 
-	compressionFlagSet := bf.compression.NewFlagSet()
-	encryptionFlagSet := bf.encryption.NewFlagSet()
 	awsFlagSet := bf.aws.NewFlagSet()
-	gcpFlagSet := bf.gcp.NewFlagSet()
-	azureFlagSet := bf.azure.NewFlagSet()
 
-	cmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	cmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
 	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	cmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	cmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	cmd.AddCommand(
 		newBackupStartCmd(rc, bf),
@@ -65,11 +49,7 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 	)
 
 	setParentHelp(cmd,
-		compressionFlagSet,
-		encryptionFlagSet,
 		awsFlagSet,
-		gcpFlagSet,
-		azureFlagSet,
 	)
 
 	return cmd
@@ -161,12 +141,7 @@ func newIntegratedBackupConfig(
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
-		bf.compression.GetCompression(),
-		bf.encryption.GetEncryption(),
 		rc.secretAgent.GetSecretAgent(),
 		bf.aws.GetAwsS3(),
-		bf.gcp.GetGcpStorage(),
-		bf.azure.GetAzureBlob(),
-		nil,
 	)
 }

@@ -26,20 +26,12 @@ import (
 // restoreFlags groups the operation-specific flag holders shared by all
 // "server restore" subcommands.
 type restoreFlags struct {
-	compression *flags.Compression
-	encryption  *flags.Encryption
-	aws         *flags.AwsS3
-	gcp         *flags.GcpStorage
-	azure       *flags.AzureBlob
+	aws *flags.AwsS3
 }
 
 func newRestoreCmd(rc *runCtx) *cobra.Command {
 	rf := &restoreFlags{
-		compression: flags.NewCompression(flags.OperationRestore),
-		encryption:  flags.NewEncryption(flags.OperationRestore),
-		aws:         flags.NewAwsS3(flags.OperationRestore),
-		gcp:         flags.NewGcpStorage(flags.OperationRestore),
-		azure:       flags.NewAzureBlob(flags.OperationRestore),
+		aws: flags.NewAwsS3(flags.OperationRestore),
 	}
 
 	cmd := &cobra.Command{
@@ -47,26 +39,15 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 		Short: "Manage server-integrated restores",
 	}
 
-	compressionFlagSet := rf.compression.NewFlagSet()
-	encryptionFlagSet := rf.encryption.NewFlagSet()
 	awsFlagSet := rf.aws.NewFlagSet()
-	gcpFlagSet := rf.gcp.NewFlagSet()
-	azureFlagSet := rf.azure.NewFlagSet()
 
-	cmd.PersistentFlags().AddFlagSet(compressionFlagSet)
-	cmd.PersistentFlags().AddFlagSet(encryptionFlagSet)
 	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-	cmd.PersistentFlags().AddFlagSet(gcpFlagSet)
-	cmd.PersistentFlags().AddFlagSet(azureFlagSet)
 
 	cmd.AddCommand(newRestoreStartCmd(rc, rf))
+	cmd.AddCommand(newRestorePrepareCmd(rc, rf))
 
 	setParentHelp(cmd,
-		compressionFlagSet,
-		encryptionFlagSet,
 		awsFlagSet,
-		gcpFlagSet,
-		azureFlagSet,
 	)
 
 	return cmd
@@ -107,6 +88,41 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	return cmd
 }
 
+//nolint:dupl // Sub commands look the same.
+func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
+	ssbFlags := flags.NewServerBackup()
+	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   usePrepare,
+		Short: "Prepare a server-integrated restore",
+		Long:  "Prepare a server-integrated restore on the Aerospike cluster.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
+
+			if err := cfg.Validate(false); err != nil {
+				return fmt.Errorf("failed to validate config: %w", err)
+			}
+
+			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			if err != nil {
+				return fmt.Errorf("server side restore initialization failed: %w", err)
+			}
+
+			if err := svc.PrepareRestore(cmd.Context()); err != nil {
+				return fmt.Errorf("server side restore preparation failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().AddFlagSet(ssbFlagSet)
+	setLeafHelp(cmd)
+
+	return cmd
+}
+
 // newIntegratedRestoreConfig builds the IntegratedServiceConfig from the flag
 // objects collected on the parent commands.
 func newIntegratedRestoreConfig(
@@ -119,12 +135,7 @@ func newIntegratedRestoreConfig(
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
-		rf.compression.GetCompression(),
-		rf.encryption.GetEncryption(),
 		rc.secretAgent.GetSecretAgent(),
 		rf.aws.GetAwsS3(),
-		rf.gcp.GetGcpStorage(),
-		rf.azure.GetAzureBlob(),
-		nil,
 	)
 }

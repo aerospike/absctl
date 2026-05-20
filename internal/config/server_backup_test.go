@@ -31,13 +31,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
-		compression  = &models.Compression{}
-		encryption   = &models.Encryption{}
 		secretAgent  = &models.SecretAgent{}
 		awsS3        = &models.AwsS3{}
-		gcpStorage   = &models.GcpStorage{}
-		azureBlob    = &models.AzureBlob{}
-		local        = &models.Local{}
 	)
 
 	tests := []struct {
@@ -46,13 +41,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		app              *models.App
 		clientConfig     *client.AerospikeConfig
 		clientPolicy     *models.ClientPolicy
-		compression      *models.Compression
-		encryption       *models.Encryption
 		secretAgent      *models.SecretAgent
 		awsS3            *models.AwsS3
-		gcpStorage       *models.GcpStorage
-		azureBlob        *models.AzureBlob
-		local            *models.Local
 	}{
 		{
 			name:             "all fields set",
@@ -60,13 +50,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			app:              app,
 			clientConfig:     clientCfg,
 			clientPolicy:     clientPolicy,
-			compression:      compression,
-			encryption:       encryption,
 			secretAgent:      secretAgent,
 			awsS3:            awsS3,
-			gcpStorage:       gcpStorage,
-			azureBlob:        azureBlob,
-			local:            local,
 		},
 		{
 			name: "all fields nil",
@@ -78,11 +63,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			clientConfig:     clientCfg,
 		},
 		{
-			name:       "only cloud storage fields set",
-			awsS3:      awsS3,
-			gcpStorage: gcpStorage,
-			azureBlob:  azureBlob,
-			local:      local,
+			name:  "only cloud storage fields set",
+			awsS3: awsS3,
 		},
 	}
 
@@ -95,13 +77,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 				tt.app,
 				tt.clientConfig,
 				tt.clientPolicy,
-				tt.compression,
-				tt.encryption,
 				tt.secretAgent,
 				tt.awsS3,
-				tt.gcpStorage,
-				tt.azureBlob,
-				tt.local,
 			)
 
 			require.NotNil(t, got)
@@ -110,13 +87,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			assert.Same(t, tt.app, got.App, "App")
 			assert.Same(t, tt.clientConfig, got.ClientConfig, "ClientConfig")
 			assert.Same(t, tt.clientPolicy, got.ClientPolicy, "ClientPolicy")
-			assert.Same(t, tt.compression, got.Compression, "Compression")
-			assert.Same(t, tt.encryption, got.Encryption, "Encryption")
 			assert.Same(t, tt.secretAgent, got.SecretAgent, "SecretAgent")
 			assert.Same(t, tt.awsS3, got.AwsS3, "AwsS3")
-			assert.Same(t, tt.gcpStorage, got.GcpStorage, "GcpStorage")
-			assert.Same(t, tt.azureBlob, got.AzureBlob, "AzureBlob")
-			assert.Same(t, tt.local, got.Local, "Local")
 		})
 	}
 }
