@@ -46,6 +46,10 @@ func (c *Compression) Policy() *backup.CompressionPolicy {
 }
 
 func (c *Compression) Validate() error {
+	if c == nil {
+		return nil
+	}
+
 	if c.Mode != "" {
 		if !strings.EqualFold(c.Mode, compressionModeNone) &&
 			!strings.EqualFold(c.Mode, compressionModeZstd) {
