@@ -18,19 +18,19 @@ import "time"
 
 // Metadata is the metadata for a backup.
 type Metadata struct {
-	BackupID      string `json:"backup_id"`
+	BackupID      string `json:"backupId"`
 	Namespace     string `json:"namespace"`
-	FormatVersion int    `json:"format_version"`
+	FormatVersion int    `json:"formatVersion"`
 	Nodes         []Node `json:"nodes"`
 }
 
 // Node is the metadata for a node.
 type Node struct {
-	NodeID         string    `json:"node_id"`
+	NodeID         string    `json:"nodeId"`
 	Created        time.Time `json:"created"`
 	Finished       time.Time `json:"finished"`
-	RecordCount    int64     `json:"record_count"`
-	ByteCount      int64     `json:"byte_count"`
-	PartitionCount int       `json:"partition_count"`
-	SegmentCount   int       `json:"segment_count"`
+	RecordCount    int64     `json:"recordCount"`
+	ByteCount      int64     `json:"byteCount"`
+	PartitionCount int       `json:"partitionCount"`
+	SegmentCount   int       `json:"segmentCount"`
 }

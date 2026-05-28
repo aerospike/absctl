@@ -84,7 +84,7 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) ListBackups(ctx context.Context) error {
-	l := NewLister(s.reader)
+	l := NewLister(s.reader, s.logger, s.config.App.LogJSON)
 
 	if s.config.ServerBackup.ListPath == "/" || s.config.ServerBackup.ListPath == "\\" {
 		s.config.ServerBackup.ListPath = ""
@@ -119,9 +119,8 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
-	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated backup started",
-		slog.String("backup-id", JobID))
+		slog.String("backupId", JobID))
 
 	return nil
 }
@@ -148,9 +147,8 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
-	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Server integrated restore started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+		slog.String("backupId", s.config.ServerBackup.JobID))
 
 	return nil
 }
@@ -171,9 +169,8 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to prepare restore: %w", err)
 	}
 
-	//nolint:sloglint // Log messages must looks like flags. So no camelCase here.
 	s.logger.Info("Restore preparation started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+		slog.String("backupId", s.config.ServerBackup.JobID))
 
 	return nil
 }

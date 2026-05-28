@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"text/tabwriter"
@@ -35,14 +36,21 @@ const metafileSSB = "metadata.json"
 // Lister lists all backups in the given path.
 type Lister struct {
 	reader backup.StreamingReader
+	logger *slog.Logger
+	// If true, the output is logged to the logger; otherwise it is rendered to stderr.
+	toLog bool
 }
 
 // NewLister creates a new backup Lister.
 func NewLister(
 	reader backup.StreamingReader,
+	logger *slog.Logger,
+	toLog bool,
 ) *Lister {
 	return &Lister{
 		reader: reader,
+		logger: logger,
+		toLog:  toLog,
 	}
 }
 
@@ -53,23 +61,37 @@ func (l *Lister) listBackups(ctx context.Context, path string) error {
 		return fmt.Errorf("failed to list objects: %w", err)
 	}
 
-	// Print Table Header
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
-
-	for _, object := range allObjects {
-		if filepath.Base(object) == metafileSSB {
-			mf, err := l.readMetafile(ctx, object)
-			if err != nil {
-				return fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
-			}
-
-			logging.PrintMetadata(w, mf)
-		}
+	// tabwriter (with the header) is only needed for the stdout table.
+	var w *tabwriter.Writer
+	if !l.toLog {
+		w = tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
+		fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
 	}
 
-	// Flush the writer to output the buffered table
-	w.Flush()
+	for _, object := range allObjects {
+		if filepath.Base(object) != metafileSSB {
+			continue
+		}
+
+		mf, err := l.readMetafile(ctx, object)
+		if err != nil {
+			return fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
+		}
+
+		if l.toLog {
+			l.logger.InfoContext(ctx, "backup entry", slog.Any("backup", mf))
+
+			continue
+		}
+
+		logging.PrintMetadata(w, mf)
+	}
+
+	if w != nil {
+		if err := w.Flush(); err != nil {
+			return fmt.Errorf("failed to flush output: %w", err)
+		}
+	}
 
 	return nil
 }
