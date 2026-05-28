@@ -65,6 +65,10 @@ func (e *Encryption) Policy() *backup.EncryptionPolicy {
 }
 
 func (e *Encryption) Validate() error {
+	if e == nil {
+		return nil
+	}
+
 	if e.Mode != "" {
 		if !strings.EqualFold(e.Mode, encryptionAES128) &&
 			!strings.EqualFold(e.Mode, encryptionAES256) &&

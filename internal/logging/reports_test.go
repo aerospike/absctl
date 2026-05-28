@@ -169,9 +169,9 @@ func TestLogBackupReport(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "start_time=")
+	assert.Contains(t, logOutput, "startTime=")
 	assert.Contains(t, logOutput, "duration=")
-	assert.Contains(t, logOutput, "records_read=1000")
+	assert.Contains(t, logOutput, "recordsRead=1000")
 	assert.Contains(t, logOutput, "sIndexRead=5")
 	assert.Contains(t, logOutput, "udfRead=3")
 	assert.Contains(t, logOutput, "bytesWritten=5000000")
@@ -188,8 +188,8 @@ func TestLogBackupReportXdr(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "records_received=1000")
-	assert.NotContains(t, logOutput, "records_read=")
+	assert.Contains(t, logOutput, "recordsReceived=1000")
+	assert.NotContains(t, logOutput, "recordsRead=")
 }
 
 func TestReportBackup(t *testing.T) {
@@ -212,7 +212,7 @@ func TestReportBackup(t *testing.T) {
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "backup report")
-		assert.Contains(t, logOutput, "records_read=1000")
+		assert.Contains(t, logOutput, "recordsRead=1000")
 	})
 }
 
@@ -318,7 +318,7 @@ func TestLogEstimateReport(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "estimate report")
-	assert.Contains(t, logOutput, "file_size_bytes=5000000")
+	assert.Contains(t, logOutput, "fileSizeBytes=5000000")
 }
 
 func TestReportEstimate(t *testing.T) {
@@ -340,6 +340,6 @@ func TestReportEstimate(t *testing.T) {
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "estimate report")
-		assert.Contains(t, logOutput, "file_size_bytes=5000000")
+		assert.Contains(t, logOutput, "fileSizeBytes=5000000")
 	})
 }
