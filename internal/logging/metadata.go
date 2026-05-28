@@ -17,13 +17,14 @@ package logging
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/aerospike/absctl/internal/models"
 )
 
 // PrintMetadata displays the node data in a formatted table.
-func PrintMetadata(w io.Writer, data models.Metadata) {
+func PrintMetadata(w io.Writer, data models.Metadata, toLog bool, logger *slog.Logger) {
 	// count totals.
 	var (
 		totalRecords int64
@@ -49,6 +50,19 @@ func PrintMetadata(w io.Writer, data models.Metadata) {
 		if node.Finished.After(maxFinished) {
 			maxFinished = node.Finished
 		}
+	}
+
+	if toLog {
+		logger.Info("backup entry",
+			slog.String("backupId", data.BackupID),
+			slog.String("namespace", data.Namespace),
+			slog.Int64("totalRecords", totalRecords),
+			slog.Int64("totalBytes", totalBytes),
+			slog.Time("created", minCreated),
+			slog.Time("finished", maxFinished),
+		)
+
+		return
 	}
 
 	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",

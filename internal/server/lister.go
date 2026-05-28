@@ -78,13 +78,7 @@ func (l *Lister) listBackups(ctx context.Context, path string) error {
 			return fmt.Errorf("failed to read BackupEntry %s: %w", object, err)
 		}
 
-		if l.toLog {
-			l.logger.InfoContext(ctx, "backup entry", slog.Any("backup", mf))
-
-			continue
-		}
-
-		logging.PrintMetadata(w, mf)
+		logging.PrintMetadata(w, mf, l.toLog, l.logger)
 	}
 
 	if w != nil {
