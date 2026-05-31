@@ -115,7 +115,7 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 				return fmt.Errorf("server side backup initialization failed: %w", err)
 			}
 
-			if err := svc.ListBackups(cmd.Context()); err != nil {
+			if err := svc.ListBackupsV2(cmd.Context()); err != nil {
 				return fmt.Errorf("listing backups failed: %w", err)
 			}
 

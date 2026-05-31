@@ -131,7 +131,7 @@ func TestNewS3Reader(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	client, err := newS3Client(ctx, params.AwsS3)
+	client, err := NewS3Client(ctx, params.AwsS3)
 	require.NoError(t, err)
 	err = createTmpFileS3(ctx, client, dir, testFileNameASBX)
 	require.NoError(t, err)

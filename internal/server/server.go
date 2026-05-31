@@ -31,6 +31,7 @@ import (
 type Service struct {
 	config *config.ServerBackupServiceConfig
 	reader backup.StreamingReader
+	client S3API
 
 	// reportToLog bool
 
@@ -45,11 +46,17 @@ func NewService(
 ) (*Service, error) {
 	var (
 		reader backup.StreamingReader
+		client S3API
 		err    error
 	)
 
 	// If list path is set, init reader.
 	if cfg.ServerBackup.ListPath != "" {
+		client, err = storage.NewS3Client(ctx, cfg.AwsS3)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create s3 client: %w", err)
+		}
+
 		reader, err = storage.NewReader(
 			ctx,
 			&cfg.ServiceConfigCommon,
@@ -70,6 +77,7 @@ func NewService(
 	return &Service{
 		config: cfg,
 		reader: reader,
+		client: client,
 		logger: logger,
 	}, nil
 }
@@ -92,6 +100,16 @@ func (s *Service) ListBackups(ctx context.Context) error {
 
 	if err := l.listBackups(ctx, s.config.ServerBackup.ListPath); err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ListBackupsV2(ctx context.Context) error {
+	l := NewListerV2(s.client, s.config.AwsS3.BucketName, s.logger)
+
+	if err := l.FetchAllMetadata(ctx); err != nil {
+		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
 	return nil

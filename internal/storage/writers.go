@@ -185,7 +185,7 @@ func newS3Writer(
 	a *models.AwsS3,
 	opts []options.Opt,
 ) (backup.Writer, error) {
-	client, err := newS3Client(ctx, a)
+	client, err := NewS3Client(ctx, a)
 	if err != nil {
 		return nil, err
 	}
