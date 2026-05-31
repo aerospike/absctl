@@ -21,12 +21,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/aerospike/absctl/internal/logging"
@@ -49,15 +47,22 @@ const (
 
 var errMetadataNotFound = errors.New("metadata.json not found")
 
+// S3API is an interface for the S3 client.
 type S3API interface {
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
 	) (*s3.ListObjectsV2Output, error)
 	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+// ListerV2 provides functionality to list backups from an S3 bucket.
+// As development is ongoing, this is a work-in-progress, and may change.
+// It supports listing all snapshots in a given prefix, or a single snapshot.
+// The concurrency level can be configured, and the output can be logged or rendered to stderr.
+// The logger is used for logging, and stderr is used for rendering.
 type ListerV2 struct {
 	client      S3API
 	logger      *slog.Logger
+	writer      io.Writer
 	bucket      string
 	prefix      string
 	concurrency int
@@ -65,7 +70,8 @@ type ListerV2 struct {
 	toLog bool
 }
 
-func NewListerV2(client S3API, bucket, prefix string, toLog bool, logger *slog.Logger) *ListerV2 {
+// NewListerV2 creates a new backup ListerV2.
+func NewListerV2(client S3API, bucket, prefix string, toLog bool, writer io.Writer, logger *slog.Logger) *ListerV2 {
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
@@ -77,9 +83,11 @@ func NewListerV2(client S3API, bucket, prefix string, toLog bool, logger *slog.L
 		concurrency: runtime.NumCPU(),
 		logger:      logger,
 		toLog:       toLog,
+		writer:      writer,
 	}
 }
 
+// FetchAllMetadata lists all metadata files in the given prefix.
 func (l *ListerV2) FetchAllMetadata(ctx context.Context) error {
 	prefixes, err := l.listSnapshotPrefixes(ctx)
 	if err != nil {
@@ -145,21 +153,15 @@ func (l *ListerV2) FetchAllMetadata(ctx context.Context) error {
 		}
 	}()
 
-	if err = l.printMetadata(ctx, futures, g); err != nil {
+	if err = l.printMetadata(ctx, l.writer, futures, g); err != nil {
 		return fmt.Errorf("failed to print metadata: %w", err)
 	}
 
 	return g.Wait()
 }
 
-func (l *ListerV2) printMetadata(ctx context.Context, futures []chan models.Metadata, g *errgroup.Group) error {
-	// tabwriter (with the header) is only needed for the stdout table.
-	var w *tabwriter.Writer
-	if !l.toLog {
-		w = tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-		fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
-	}
-
+func (l *ListerV2) printMetadata(ctx context.Context, w io.Writer, futures []chan models.Metadata, g *errgroup.Group,
+) error {
 	for _, f := range futures {
 		select {
 		case md, ok := <-f:
@@ -171,12 +173,6 @@ func (l *ListerV2) printMetadata(ctx context.Context, futures []chan models.Meta
 		case <-ctx.Done():
 			_ = g.Wait()
 			return ctx.Err()
-		}
-	}
-
-	if w != nil {
-		if err := w.Flush(); err != nil {
-			return fmt.Errorf("failed to flush output: %w", err)
 		}
 	}
 

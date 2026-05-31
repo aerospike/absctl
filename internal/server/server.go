@@ -20,6 +20,7 @@ import (
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
@@ -88,10 +89,16 @@ func (s *Service) ListBackups(ctx context.Context) error {
 }
 
 func (s *Service) ListBackupsV2(ctx context.Context) error {
-	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, s.logger)
+	w := logging.GetMetadataWriter(s.config.App.LogJSON)
+
+	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
 
 	if err := l.FetchAllMetadata(ctx); err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
+	}
+
+	if err := logging.CloseMetadataWriter(l.writer); err != nil {
+		return fmt.Errorf("failed to close metadata writer: %w", err)
 	}
 
 	return nil
