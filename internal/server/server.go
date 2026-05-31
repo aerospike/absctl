@@ -45,7 +45,6 @@ func NewService(
 	logger *slog.Logger,
 ) (*Service, error) {
 	var (
-		reader backup.StreamingReader
 		client S3API
 		err    error
 	)
@@ -56,27 +55,10 @@ func NewService(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create s3 client: %w", err)
 		}
-
-		reader, err = storage.NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			cfg.ServerBackup.ListPath,
-			"",
-			"",
-			"",
-			0,
-			false,
-			true,
-			logger,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create reader: %w", err)
-		}
 	}
 
 	return &Service{
 		config: cfg,
-		reader: reader,
 		client: client,
 		logger: logger,
 	}, nil
@@ -106,7 +88,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 }
 
 func (s *Service) ListBackupsV2(ctx context.Context) error {
-	l := NewListerV2(s.client, s.config.AwsS3.BucketName, s.logger)
+	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, s.logger)
 
 	if err := l.FetchAllMetadata(ctx); err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)

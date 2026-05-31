@@ -21,8 +21,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/aerospike/absctl/internal/logging"
@@ -35,8 +39,8 @@ import (
 )
 
 const (
-	metadataFileName   = "metadata.json"
-	defaultConcurrency = 32
+	metadataFileName = "metadata.json"
+	maxMetadataSize  = 16 << 20
 
 	minCitrusleafTS  int64 = 157_766_400
 	clockSkewSeconds int64 = 24 * 60 * 60
@@ -53,62 +57,133 @@ type S3API interface {
 
 type ListerV2 struct {
 	client      S3API
+	logger      *slog.Logger
 	bucket      string
 	prefix      string
 	concurrency int
-	logger      *slog.Logger
+	// If true, the output is logged to the logger; otherwise it is rendered to stderr.
+	toLog bool
 }
 
-type MetadataResult struct {
-	Prefix string
-	Data   []byte
-	Err    error
-}
+func NewListerV2(client S3API, bucket, prefix string, toLog bool, logger *slog.Logger) *ListerV2 {
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 
-func NewListerV2(client S3API, bucket string, logger *slog.Logger) *ListerV2 {
 	return &ListerV2{
 		bucket:      bucket,
+		prefix:      prefix,
 		client:      client,
-		concurrency: defaultConcurrency,
+		concurrency: runtime.NumCPU(),
 		logger:      logger,
+		toLog:       toLog,
 	}
 }
 
 func (l *ListerV2) FetchAllMetadata(ctx context.Context) error {
-	prefixes, err := l.ListSnapshotPrefixes(ctx)
+	prefixes, err := l.listSnapshotPrefixes(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(prefixes) == 0 {
+		return nil
+	}
+
+	sort.Slice(prefixes, func(i, j int) bool {
+		ti, _ := l.extractTimestamp(prefixes[i])
+		tj, _ := l.extractTimestamp(prefixes[j])
+
+		return ti < tj
+	})
+
+	futures := make([]chan models.Metadata, len(prefixes))
+	for i := range futures {
+		futures[i] = make(chan models.Metadata, 1)
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(l.concurrency)
 
-	for _, p := range prefixes {
-		g.Go(func() error {
-			data, err := l.fetchOne(gctx, p)
-			if errors.Is(err, errMetadataNotFound) {
-				l.logger.Debug("metadata.json missing (that means folder doesn't contain finished backup), skipping",
-					slog.String("prefix", p))
+	go func() {
+		for i, p := range prefixes {
+			g.Go(func() error {
+				defer close(futures[i])
+
+				if gctx.Err() != nil {
+					return nil
+				}
+
+				data, err := l.fetchOne(gctx, p)
+				if errors.Is(err, errMetadataNotFound) {
+					l.logger.DebugContext(gctx,
+						"metadata.json missing (folder doesn't contain finished backup), skipping",
+						slog.String("prefix", p))
+
+					return nil
+				}
+
+				if err != nil {
+					l.logger.WarnContext(gctx, "fetch metadata failed",
+						slog.String("prefix", p), slog.Any("error", err))
+
+					return nil
+				}
+
+				md, err := readMetafile(data)
+				if err != nil {
+					l.logger.WarnContext(gctx, "parse metadata failed",
+						slog.String("prefix", p), slog.Any("error", err))
+
+					return nil
+				}
+
+				futures[i] <- md
 
 				return nil
-			}
+			})
+		}
+	}()
 
-			md, err := readMetafile(data)
-			if err != nil {
-				return fmt.Errorf("read metadata for prefix %s: %w", p, err)
-			}
-
-			logging.PrintMetadata(nil, md, true, l.logger)
-
-			return nil
-		})
+	if err = l.printMetadata(ctx, futures, g); err != nil {
+		return fmt.Errorf("failed to print metadata: %w", err)
 	}
-	_ = g.Wait()
+
+	return g.Wait()
+}
+
+func (l *ListerV2) printMetadata(ctx context.Context, futures []chan models.Metadata, g *errgroup.Group) error {
+	// tabwriter (with the header) is only needed for the stdout table.
+	var w *tabwriter.Writer
+	if !l.toLog {
+		w = tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
+		fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
+	}
+
+	for _, f := range futures {
+		select {
+		case md, ok := <-f:
+			if !ok {
+				continue
+			}
+
+			logging.PrintMetadata(w, md, l.toLog, l.logger)
+		case <-ctx.Done():
+			_ = g.Wait()
+			return ctx.Err()
+		}
+	}
+
+	if w != nil {
+		if err := w.Flush(); err != nil {
+			return fmt.Errorf("failed to flush output: %w", err)
+		}
+	}
 
 	return nil
 }
 
-func (l *ListerV2) ListSnapshotPrefixes(ctx context.Context) ([]string, error) {
+func (l *ListerV2) listSnapshotPrefixes(ctx context.Context) ([]string, error) {
 	var out []string
 
 	pg := s3.NewListObjectsV2Paginator(l.client, &s3.ListObjectsV2Input{
@@ -120,7 +195,7 @@ func (l *ListerV2) ListSnapshotPrefixes(ctx context.Context) ([]string, error) {
 	for pg.HasMorePages() {
 		page, err := pg.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list snapshot prefixes: %w", err)
+			return nil, fmt.Errorf("failed to read next page: %w", err)
 		}
 
 		for _, cp := range page.CommonPrefixes {
@@ -130,7 +205,7 @@ func (l *ListerV2) ListSnapshotPrefixes(ctx context.Context) ([]string, error) {
 
 			name := strings.TrimSuffix(strings.TrimPrefix(*cp.Prefix, l.prefix), "/")
 			if !isCitrusleafTimestamp(name) {
-				slog.DebugContext(ctx, "skipping non-snapshot prefix", slog.String("prefix", name))
+				l.logger.DebugContext(ctx, "skipping non-snapshot prefix", slog.String("prefix", name))
 				continue
 			}
 
@@ -153,18 +228,21 @@ func (l *ListerV2) fetchOne(ctx context.Context, prefix string) ([]byte, error) 
 			return nil, errMetadataNotFound
 		}
 
-		return nil, fmt.Errorf("get %s: %w", key, err)
+		return nil, fmt.Errorf("failed to get %s: %w", key, err)
 	}
 	defer out.Body.Close()
 
-	const maxSize = 16 << 20
-
-	data, err := io.ReadAll(io.LimitReader(out.Body, maxSize))
+	data, err := io.ReadAll(io.LimitReader(out.Body, maxMetadataSize))
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", key, err)
+		return nil, fmt.Errorf("failed to read %s: %w", key, err)
 	}
 
 	return data, nil
+}
+
+func (l *ListerV2) extractTimestamp(fullPrefix string) (int64, error) {
+	name := strings.TrimPrefix(fullPrefix, l.prefix)
+	return strconv.ParseInt(name, 10, 64)
 }
 
 func isCitrusleafTimestamp(s string) bool {
@@ -195,7 +273,6 @@ func isNotFound(err error) bool {
 	return false
 }
 
-// readMetafile reads the content of a BackupEntry.
 func readMetafile(data []byte) (models.Metadata, error) {
 	var b models.Metadata
 	if err := json.Unmarshal(data, &b); err != nil {
