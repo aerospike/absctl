@@ -20,6 +20,7 @@ import (
 	"log/slog"
 
 	"github.com/aerospike/absctl/internal/config"
+	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
@@ -31,6 +32,7 @@ import (
 type Service struct {
 	config *config.ServerBackupServiceConfig
 	reader backup.StreamingReader
+	client S3API
 
 	// reportToLog bool
 
@@ -44,32 +46,21 @@ func NewService(
 	logger *slog.Logger,
 ) (*Service, error) {
 	var (
-		reader backup.StreamingReader
+		client S3API
 		err    error
 	)
 
 	// If list path is set, init reader.
 	if cfg.ServerBackup.ListPath != "" {
-		reader, err = storage.NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			cfg.ServerBackup.ListPath,
-			"",
-			"",
-			"",
-			0,
-			false,
-			true,
-			logger,
-		)
+		client, err = storage.NewS3Client(ctx, cfg.AwsS3)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create reader: %w", err)
+			return nil, fmt.Errorf("failed to create s3 client: %w", err)
 		}
 	}
 
 	return &Service{
 		config: cfg,
-		reader: reader,
+		client: client,
 		logger: logger,
 	}, nil
 }
@@ -92,6 +83,22 @@ func (s *Service) ListBackups(ctx context.Context) error {
 
 	if err := l.listBackups(ctx, s.config.ServerBackup.ListPath); err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ListBackupsV2(ctx context.Context) error {
+	w := logging.GetMetadataWriter(s.config.App.LogJSON)
+
+	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
+
+	if err := l.FetchAllMetadata(ctx); err != nil {
+		return fmt.Errorf("failed to list V2 backups: %w", err)
+	}
+
+	if err := logging.CloseMetadataWriter(l.writer); err != nil {
+		return fmt.Errorf("failed to close metadata writer: %w", err)
 	}
 
 	return nil

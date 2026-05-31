@@ -281,7 +281,7 @@ func newS3Reader(
 	opts []options.Opt,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
-	client, err := newS3Client(ctx, a)
+	client, err := NewS3Client(ctx, a)
 	if err != nil {
 		return nil, err
 	}

@@ -89,7 +89,8 @@ func NewAerospikeClient(
 	return asClient, nil
 }
 
-func newS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
+// NewS3Client initializes and returns a new S3 client with the specified configuration.
+func NewS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 	cfgOpts := make([]func(*config.LoadOptions) error, 0)
 
 	// use an adaptive mode for more aggressive retries

@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"text/tabwriter"
 	"time"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -73,4 +75,28 @@ func PrintMetadata(w io.Writer, data models.Metadata, toLog bool, logger *slog.L
 		minCreated.Format("2006-01-02 15:04:05"),
 		maxFinished.Format("2006-01-02 15:04:05"),
 	)
+}
+
+// GetMetadataWriter returns a writer for the metadata table.
+func GetMetadataWriter(toLog bool) io.Writer {
+	if toLog {
+		return nil
+	}
+
+	// tabwriter (with the header) is only needed for the stdout table.
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
+	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
+
+	return w
+}
+
+// CloseMetadataWriter flushes the metadata table.
+func CloseMetadataWriter(w io.Writer) error {
+	if w != nil {
+		if err := w.(*tabwriter.Writer).Flush(); err != nil {
+			return fmt.Errorf("failed to flush output: %w", err)
+		}
+	}
+
+	return nil
 }
