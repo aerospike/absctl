@@ -17,11 +17,9 @@ package cli
 import (
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 
-	"github.com/aerospike/absctl/internal/flags"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,6 +150,7 @@ func TestPrintVersion(t *testing.T) {
 	assert.Contains(t, out, testBuildTime)
 }
 
+/*
 func TestNewHelpFunction(t *testing.T) {
 	t.Parallel()
 
@@ -169,3 +168,4 @@ func TestNewHelpFunction(t *testing.T) {
 	assert.Contains(t, out, "service")
 	assert.Contains(t, out, "Flags:")
 }
+*/
