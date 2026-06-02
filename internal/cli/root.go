@@ -125,11 +125,10 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println(strings.Repeat("-", len(welcomeMessage)))
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
-
+		fmt.Println("\nAvailable Commands:")
+		fmt.Println("  backup    Aerospike backup command")
+		fmt.Println("  restore   Aerospike restore command")
 		//nolint:gocritic // This lines are commented as they belong to not released features.
-		// fmt.Println("\nAvailable Commands:")
-		// fmt.Println("  backup    Aerospike backup command")
-		// fmt.Println("  restore   Aerospike restore command")
 		// fmt.Println("  server    Manage server-integrated backups and restores")
 		// fmt.Println("  service   Interact with Aerospike Backup Service REST API")
 
