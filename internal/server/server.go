@@ -182,6 +182,22 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) GetStatus(ctx context.Context) error {
+	client, err := s.newInfoClient()
+	if err != nil {
+		return err
+	}
+
+	result, err := client.GetBackupStatus(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	s.logger.Info("Backup progress", slog.Float64("pct", result))
+
+	return nil
+}
+
 // newInfoClient separate function for a lazy load.
 func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	aerospikeClient, err := storage.NewAerospikeClient(
