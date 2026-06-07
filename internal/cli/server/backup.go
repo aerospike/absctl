@@ -61,10 +61,6 @@ func newBackupSvc(ctx context.Context, rc *runCtx, bf *backupFlags, ssbFlags *fl
 ) (*server.Service, error) {
 	cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
 
-	if cfg.ServerBackup.ListPath == "" {
-		cfg.ServerBackup.ListPath = "/"
-	}
-
 	if err := cfg.Validate(true); err != nil {
 		return nil, fmt.Errorf("failed to validate config: %w", err)
 	}

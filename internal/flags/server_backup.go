@@ -40,7 +40,7 @@ func (f *ServerBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
 func (f *ServerBackup) NewBackupListFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.ListPath, "path", "", "Path to list backups from.")
+	flagSet.StringVar(&f.ListPath, "path", "/", "Path to list backups from.")
 
 	return flagSet
 }
