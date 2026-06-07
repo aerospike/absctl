@@ -29,9 +29,10 @@ import (
 	"github.com/aerospike/backup-go"
 	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
+	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
-var xdrSupportedVersion = asinfo.AerospikeVersion{Major: 8}
+var xdrSupportedVersion = iModels.AerospikeVersion{Major: 8}
 
 // Service represents a struct that encapsulates components for backup and logging functionalities.
 // It is responsible for managing backup clients, configurations,

@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -27,6 +28,8 @@ import (
 	"github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
+
+const messageNoRunningBackup = "No running backup found"
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
@@ -178,6 +181,35 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 
 	s.logger.Info("Restore preparation started",
 		slog.String("backupId", s.config.ServerBackup.JobID))
+
+	return nil
+}
+
+func (s *Service) GetStatus(ctx context.Context) error {
+	client, err := s.newInfoClient()
+	if err != nil {
+		return err
+	}
+
+	result, err := client.GetBackupStatus(ctx)
+	if err != nil {
+		if errors.Is(err, asinfo.ErrNotFound) {
+			slog.Info(messageNoRunningBackup)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	if result >= 1.0 {
+		slog.Info(messageNoRunningBackup)
+
+		return nil
+	}
+
+	s.logger.Info("Backup progress",
+		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
 
 	return nil
 }

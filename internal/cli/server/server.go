@@ -29,11 +29,12 @@ const (
 	serverShort = "Manage server-integrated backups and restores"
 	serverLong  = "Commands for triggering and inspecting backups and restores that run inside the Aerospike server."
 
-	useBackup  = "backup"
-	useRestore = "restore"
-	useStart   = "start"
-	useList    = "list"
-	usePrepare = "prepare"
+	useBackup   = "backup"
+	useRestore  = "restore"
+	useStart    = "start"
+	useList     = "list"
+	useProgress = "progress"
+	usePrepare  = "prepare"
 )
 
 // runCtx is passed to all server subcommand constructors so they share the

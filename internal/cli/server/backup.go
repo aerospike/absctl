@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/config"
@@ -46,6 +47,7 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 	cmd.AddCommand(
 		newBackupStartCmd(rc, bf),
 		newBackupListCmd(rc, bf),
+		newBackupProgressCmd(rc, bf),
 	)
 
 	setParentHelp(cmd,
@@ -55,7 +57,22 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 	return cmd
 }
 
-//nolint:dupl // Sub commands are intentionally symmetric per operation.
+func newBackupSvc(ctx context.Context, rc *runCtx, bf *backupFlags, ssbFlags *flags.ServerBackup,
+) (*server.Service, error) {
+	cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
+
+	if err := cfg.Validate(true); err != nil {
+		return nil, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	svc, err := server.NewService(ctx, cfg, rc.logger)
+	if err != nil {
+		return nil, fmt.Errorf("server side backup initialization failed: %w", err)
+	}
+
+	return svc, nil
+}
+
 func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewBackupCreateFlagSet()
@@ -65,15 +82,9 @@ func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		Short: "Start a server-integrated backup",
 		Long:  "Start a server-integrated backup on the Aerospike cluster.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
-
-			if err := cfg.Validate(true); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
-			}
-
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
 			if err != nil {
-				return fmt.Errorf("server side backup initialization failed: %w", err)
+				return err
 			}
 
 			if err := svc.StartBackup(cmd.Context()); err != nil {
@@ -99,24 +110,41 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		Short: "List server-integrated backups",
 		Long:  "List available server-integrated backups from the configured storage.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
-
-			// Mock.
-			if cfg.ServerBackup.ListPath == "" {
-				cfg.ServerBackup.ListPath = "/"
-			}
-
-			if err := cfg.Validate(true); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
-			}
-
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
 			if err != nil {
-				return fmt.Errorf("server side backup initialization failed: %w", err)
+				return err
 			}
 
 			if err := svc.ListBackupsV2(cmd.Context()); err != nil {
 				return fmt.Errorf("listing backups failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().AddFlagSet(ssbFlagSet)
+	setLeafHelp(cmd)
+
+	return cmd
+}
+
+func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
+	ssbFlags := flags.NewServerBackup()
+	ssbFlagSet := ssbFlags.NewBackupListFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   useProgress,
+		Short: "Shows the progress of a backup",
+		Long:  "Shows the progress of a current ongoing server backup",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.GetStatus(cmd.Context()); err != nil {
+				return fmt.Errorf("getting backup progress failed: %w", err)
 			}
 
 			return nil
