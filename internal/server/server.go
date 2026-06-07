@@ -202,7 +202,7 @@ func (s *Service) GetStatus(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	if result == 1 {
+	if result >= 1.0 {
 		slog.Info(messageNoRunningBackup)
 
 		return nil
