@@ -16,9 +16,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
@@ -28,6 +28,8 @@ import (
 	"github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
+
+const messageNoRunningBackup = "No running backup found"
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
@@ -191,13 +193,23 @@ func (s *Service) GetStatus(ctx context.Context) error {
 
 	result, err := client.GetBackupStatus(ctx)
 	if err != nil {
+		if errors.Is(err, asinfo.ErrNotFound) {
+			slog.Info(messageNoRunningBackup)
+
+			return nil
+		}
+
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	// Set 2 digits after decimal point.
-	result = math.Round(result*100) / 100
+	if result == 1 {
+		slog.Info(messageNoRunningBackup)
 
-	s.logger.Info("Backup progress", slog.Float64("pct", result))
+		return nil
+	}
+
+	s.logger.Info("Backup progress",
+		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
 
 	return nil
 }
