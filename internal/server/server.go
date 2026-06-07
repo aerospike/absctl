@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
@@ -192,6 +193,9 @@ func (s *Service) GetStatus(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
+
+	// Set 2 digits after decimal point.
+	result = math.Round(result*100) / 100
 
 	s.logger.Info("Backup progress", slog.Float64("pct", result))
 

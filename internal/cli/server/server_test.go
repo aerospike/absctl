@@ -107,7 +107,7 @@ func TestNewCmd_BackupSubcommandHasStartAndList(t *testing.T) {
 
 	require.NotNil(t, backup, "expected a 'backup' subcommand")
 
-	assert.ElementsMatch(t, []string{"start", "list"}, subcommandNames(backup))
+	assert.ElementsMatch(t, []string{"start", "list", "progress"}, subcommandNames(backup))
 }
 
 func TestNewCmd_RestoreSubcommandHasStart(t *testing.T) {
