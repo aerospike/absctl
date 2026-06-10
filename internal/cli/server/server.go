@@ -26,8 +26,7 @@ import (
 )
 
 const (
-	serverShort = "Manage server-integrated backups and restores"
-	serverLong  = "Commands for triggering and inspecting backups and restores that run inside the Aerospike server."
+	backupWelcomeMessage = "Welcome to the Aerospike backup CLI tool!"
 
 	useBackup   = "backup"
 	useRestore  = "restore"
@@ -53,10 +52,10 @@ type runCtx struct {
 	buildTime  string
 }
 
-// NewCmd creates the root "server" command with the flags shared by all
-// server-integrated backup and restore subcommands.
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
-	rc := &runCtx{
+// newRunCtx constructs a runCtx with freshly-allocated flag holders and a
+// default logger. Each top-level command (backup, restore) gets its own runCtx.
+func newRunCtx(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *runCtx {
+	return &runCtx{
 		flagsRoot:    flagsRoot,
 		app:          flags.NewApp(),
 		aerospike:    asFlags.NewDefaultAerospikeFlags(),
@@ -67,13 +66,13 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 		commitHash:   commitHash,
 		buildTime:    buildTime,
 	}
+}
 
-	cmd := &cobra.Command{
-		Use:   "server",
-		Short: serverShort,
-		Long:  serverLong,
-	}
-
+// applyCommon attaches the persistent flag sets and pre/post-run lifecycle
+// hooks shared by the server-integrated backup and restore commands. The
+// returned flag sets are passed to setParentHelp so they appear in the help
+// output.
+func applyCommon(cmd *cobra.Command, rc *runCtx) []*pflag.FlagSet {
 	cmd.PersistentFlags().SortFlags = false
 	cmd.SilenceUsage = true
 
@@ -121,67 +120,5 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 		return nil
 	}
 
-	cmd.AddCommand(newBackupCmd(rc))
-	cmd.AddCommand(newRestoreCmd(rc))
-
-	setParentHelp(cmd, appFlagSet, aerospikeFlagSet, clientPolicyFlagSet, secretAgentFlagSet)
-
-	return cmd
-}
-
-// setParentHelp overrides the root-inherited help for commands that have subcommands.
-func setParentHelp(cmd *cobra.Command, flagSets ...*pflag.FlagSet) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		fmt.Println(c.Short)
-		fmt.Printf("\nUsage:\n  %s [command]\n", c.CommandPath())
-		fmt.Println("\nAvailable Commands:")
-
-		for _, sub := range c.Commands() {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
-
-			fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
-		}
-
-		if len(flagSets) > 0 {
-			fmt.Println("\nFlags:")
-
-			for _, fs := range flagSets {
-				fmt.Print(fs.FlagUsages())
-			}
-		}
-
-		fmt.Printf("\nUse \"%s [command] --help\" for more information about a command.\n", c.CommandPath())
-	})
-
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
-}
-
-// setLeafHelp overrides the root-inherited help for leaf commands.
-func setLeafHelp(cmd *cobra.Command) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		fmt.Println(c.Short)
-		fmt.Printf("\nUsage:\n  %s [flags]\n", c.CommandPath())
-
-		local := c.LocalFlags()
-		if local.HasFlags() {
-			fmt.Println("\nFlags:")
-			fmt.Print(local.FlagUsages())
-		}
-
-		inherited := c.InheritedFlags()
-		if inherited.HasFlags() {
-			fmt.Println("\nGlobal Flags:")
-			fmt.Print(inherited.FlagUsages())
-		}
-	})
-
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
+	return []*pflag.FlagSet{appFlagSet, aerospikeFlagSet, clientPolicyFlagSet, secretAgentFlagSet}
 }

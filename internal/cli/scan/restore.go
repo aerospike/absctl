@@ -33,6 +33,8 @@ import (
 const (
 	restoreWelcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
 	restoreWelcomeMessageShort = "Aerospike restore CLI tool"
+
+	useImport = "import"
 )
 
 type restoreRunner struct {
@@ -43,8 +45,8 @@ type restoreRunner struct {
 	restoreFlagSet *pflag.FlagSet
 }
 
-// NewRestoreCmd builds the top-level "restore" command for scan-based restores.
-func NewRestoreCmd(
+// NewImportCmd builds the top-level command for scan-based restores.
+func NewImportCmd(
 	flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
 ) (*cobra.Command, *subcmd.SharedFlags) {
 	r := &restoreRunner{
@@ -53,7 +55,7 @@ func NewRestoreCmd(
 	r.flagsCommon = flags.NewCommon(&r.flagsRestore.Common, flags.OperationRestore)
 
 	return subcmd.BuildCommand(
-		"restore", restoreWelcomeMessageShort, restoreWelcomeMessage,
+		useImport, restoreWelcomeMessageShort, restoreWelcomeMessage,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationRestore, r,
 	)

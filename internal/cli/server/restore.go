@@ -16,22 +16,28 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/server"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // restoreFlags groups the operation-specific flag holders shared by all
 // "server restore" subcommands.
 type restoreFlags struct {
-	aws *flags.AwsS3
+	// Used for restore.
+	objectStorageS3 *flags.ObjectStorageS3
 }
 
-func newRestoreCmd(rc *runCtx) *cobra.Command {
+// NewRestoreCmd builds the top-level "restore" command for server-integrated restores.
+func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
+	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
+
 	rf := &restoreFlags{
-		aws: flags.NewAwsS3(flags.OperationRestore),
+		objectStorageS3: flags.NewObjectStorageS3(),
 	}
 
 	cmd := &cobra.Command{
@@ -39,24 +45,43 @@ func newRestoreCmd(rc *runCtx) *cobra.Command {
 		Short: "Manage server-integrated restores",
 	}
 
-	awsFlagSet := rf.aws.NewFlagSet()
-
-	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-
-	cmd.AddCommand(newRestoreStartCmd(rc, rf))
-	cmd.AddCommand(newRestorePrepareCmd(rc, rf))
-
-	setParentHelp(cmd,
-		awsFlagSet,
+	cmd.AddCommand(
+		newRestoreStartCmd(rc, rf),
+		newRestorePrepareCmd(rc, rf),
 	)
+
+	setHelpRestore(cmd)
 
 	return cmd
 }
 
-//nolint:dupl // Sub commands are intentionally symmetric per operation.
+func setHelpRestore(cmd *cobra.Command) {
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageRestoreServer)
+
+		fmt.Println(flags.SectionAvailableCommands)
+
+		for _, sub := range c.Commands() {
+			if !sub.IsAvailableCommand() {
+				continue
+			}
+
+			fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
+		}
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
+}
+
 func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   useStart,
@@ -82,13 +107,51 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		},
 	}
 
+	commonFlagSet := applyCommon(cmd, rc)
 	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	cmd.Flags().AddFlagSet(objectStoreFlagSet)
+
+	setHelpRestoreStart(cmd, ssbFlagSet, objectStoreFlagSet, commonFlagSet)
 
 	return cmd
 }
 
-//nolint:dupl // Sub commands look the same.
+//nolint:dupl // Each sub-command should have it's own help.
+func setHelpRestoreStart(cmd *cobra.Command, ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
+	commonFlagSet []*pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageRestoreStart)
+
+		// Print section: App Flags
+		fmt.Println(flags.SectionTextGeneral)
+		commonFlagSet[0].PrintDefaults()
+
+		// Print section: Common Flags
+		fmt.Println(flags.SectionTextAerospike)
+		commonFlagSet[1].PrintDefaults()
+		commonFlagSet[2].PrintDefaults()
+
+		// Print section: Restore Flags
+		fmt.Println(flags.SectionTextRestore)
+		ssbFlagSet.PrintDefaults()
+
+		// Print section: AWS Flags
+		fmt.Println(flags.SectionTextAWS)
+		objectStoreFlagSet.PrintDefaults()
+
+		// Print section: Secret Agent Flags
+		fmt.Println(flags.SectionTextSecretAgentBackup)
+		commonFlagSet[3].PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
+}
+
 func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
@@ -117,10 +180,43 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		},
 	}
 
+	commonFlagSet := applyCommon(cmd, rc)
 	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+
+	setHelpRestorePrepare(cmd, ssbFlagSet, commonFlagSet)
 
 	return cmd
+}
+
+func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet,
+	commonFlagSet []*pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageRestorePrepare)
+
+		// Print section: App Flags
+		fmt.Println(flags.SectionTextGeneral)
+		commonFlagSet[0].PrintDefaults()
+
+		// Print section: Common Flags
+		fmt.Println(flags.SectionTextAerospike)
+		commonFlagSet[1].PrintDefaults()
+		commonFlagSet[2].PrintDefaults()
+
+		// Print section: Restore Flags
+		fmt.Println(flags.SectionTextRestore)
+		ssbFlagSet.PrintDefaults()
+
+		// Print section: Secret Agent Flags
+		fmt.Println(flags.SectionTextSecretAgentBackup)
+		commonFlagSet[3].PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
 }
 
 // newIntegratedRestoreConfig builds the IntegratedServiceConfig from the flag
@@ -136,6 +232,6 @@ func newIntegratedRestoreConfig(
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
 		rc.secretAgent.GetSecretAgent(),
-		rf.aws.GetAwsS3(),
+		rf.objectStorageS3.ToAwsS3(),
 	)
 }

@@ -17,22 +17,32 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/server"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // backupFlags groups the operation-specific flag holders shared by all
 // "server backup" subcommands.
 type backupFlags struct {
+	// Used for listing.
 	aws *flags.AwsS3
+	// Used for backup.
+	objectStorageS3 *flags.ObjectStorageS3
 }
 
-func newBackupCmd(rc *runCtx) *cobra.Command {
+// NewBackupCmd builds the top-level "backup" command for server-integrated backups.
+func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
+	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
+
 	bf := &backupFlags{
-		aws: flags.NewAwsS3(flags.OperationBackup),
+		aws:             flags.NewAwsS3(flags.OperationRestore),
+		objectStorageS3: flags.NewObjectStorageS3(),
 	}
 
 	cmd := &cobra.Command{
@@ -40,21 +50,38 @@ func newBackupCmd(rc *runCtx) *cobra.Command {
 		Short: "Manage server-integrated backups",
 	}
 
-	awsFlagSet := bf.aws.NewFlagSet()
-
-	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-
 	cmd.AddCommand(
 		newBackupStartCmd(rc, bf),
 		newBackupListCmd(rc, bf),
 		newBackupProgressCmd(rc, bf),
 	)
 
-	setParentHelp(cmd,
-		awsFlagSet,
-	)
+	setHelpBackup(cmd)
 
 	return cmd
+}
+
+func setHelpBackup(cmd *cobra.Command) {
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageBackupServer)
+
+		fmt.Println(flags.SectionAvailableCommands)
+
+		for _, sub := range c.Commands() {
+			if !sub.IsAvailableCommand() {
+				continue
+			}
+
+			fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
+		}
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
 }
 
 func newBackupSvc(ctx context.Context, rc *runCtx, bf *backupFlags, ssbFlags *flags.ServerBackup,
@@ -76,6 +103,7 @@ func newBackupSvc(ctx context.Context, rc *runCtx, bf *backupFlags, ssbFlags *fl
 func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewBackupCreateFlagSet()
+	objectStoreFlagSet := bf.objectStorageS3.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   useStart,
@@ -95,22 +123,60 @@ func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		},
 	}
 
+	commonFlagSet := applyCommon(cmd, rc)
 	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	cmd.Flags().AddFlagSet(objectStoreFlagSet)
+
+	setHelpBackupStart(cmd, ssbFlagSet, objectStoreFlagSet, commonFlagSet)
 
 	return cmd
 }
 
+//nolint:dupl // Each sub-command should have it's own help.
+func setHelpBackupStart(cmd *cobra.Command, ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
+	commonFlagSet []*pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageBackupStart)
+
+		// Print section: App Flags
+		fmt.Println(flags.SectionTextGeneral)
+		commonFlagSet[0].PrintDefaults()
+
+		// Print section: Common Flags
+		fmt.Println(flags.SectionTextAerospike)
+		commonFlagSet[1].PrintDefaults()
+		commonFlagSet[2].PrintDefaults()
+
+		// Print section: Backup Flags
+		fmt.Println(flags.SectionTextBackup)
+		ssbFlagSet.PrintDefaults()
+
+		// Print section: AWS Flags
+		fmt.Println(flags.SectionTextAWS)
+		objectStoreFlagSet.PrintDefaults()
+
+		// Print section: Secret Agent Flags
+		fmt.Println(flags.SectionTextSecretAgentBackup)
+		commonFlagSet[3].PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
+}
+
 func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewBackupListFlagSet()
+	awsFlagSet := bf.aws.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   useList,
 		Short: "List server-integrated backups",
 		Long:  "List available server-integrated backups from the configured storage.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
+			svc, err := newBackupSvc(cmd.Context(), rc, bf, nil)
 			if err != nil {
 				return err
 			}
@@ -123,22 +189,37 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	cmd.Flags().AddFlagSet(awsFlagSet)
+
+	setHelpBackupList(cmd, awsFlagSet)
 
 	return cmd
 }
 
-func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewBackupListFlagSet()
+func setHelpBackupList(cmd *cobra.Command, awsFlagSet *pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageBackupList)
 
+		// Print section: AWS Flags
+		fmt.Println(flags.SectionTextAWS)
+		awsFlagSet.PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
+}
+
+func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   useProgress,
 		Short: "Shows the progress of a backup",
 		Long:  "Shows the progress of a current ongoing server backup",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
+			svc, err := newBackupSvc(cmd.Context(), rc, bf, nil)
 			if err != nil {
 				return err
 			}
@@ -151,10 +232,36 @@ func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	commonFlagSet := applyCommon(cmd, rc)
+	setHelpBackupProgress(cmd, commonFlagSet)
 
 	return cmd
+}
+
+func setHelpBackupProgress(cmd *cobra.Command, commonFlagSet []*pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageBackupProgress)
+
+		// Print section: App Flags
+		fmt.Println(flags.SectionTextGeneral)
+		commonFlagSet[0].PrintDefaults()
+
+		// Print section: Common Flags
+		fmt.Println(flags.SectionTextAerospike)
+		commonFlagSet[1].PrintDefaults()
+		commonFlagSet[2].PrintDefaults()
+
+		// Print section: Secret Agent Flags
+		fmt.Println(flags.SectionTextSecretAgentBackup)
+		commonFlagSet[3].PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
 }
 
 // newIntegratedBackupConfig builds the IntegratedServiceConfig from the flag
@@ -162,14 +269,22 @@ func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 func newIntegratedBackupConfig(
 	rc *runCtx,
 	bf *backupFlags,
-	ssbFlags *flags.ServerBackup,
+	sbFlags *flags.ServerBackup,
 ) *config.ServerBackupServiceConfig {
+	var sbCfg *models.ServerBackup
+	awsCfg := bf.aws.GetAwsS3()
+
+	if sbFlags != nil {
+		sbCfg = sbFlags.GetIntegratedBackup()
+		awsCfg = bf.objectStorageS3.ToAwsS3()
+	}
+
 	return config.NewServerBackupServiceConfig(
-		ssbFlags.GetIntegratedBackup(),
+		sbCfg,
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
 		rc.secretAgent.GetSecretAgent(),
-		bf.aws.GetAwsS3(),
+		awsCfg,
 	)
 }

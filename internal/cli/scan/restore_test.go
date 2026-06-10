@@ -27,11 +27,11 @@ func TestNewRestoreCmd_Structure(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, shared := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, shared := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	require.NotNil(t, cmd)
 	require.NotNil(t, shared)
-	assert.Equal(t, "restore", cmd.Use)
+	assert.Equal(t, "import", cmd.Use)
 	assert.Equal(t, restoreWelcomeMessageShort, cmd.Short)
 	assert.Equal(t, restoreWelcomeMessage, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
@@ -42,7 +42,7 @@ func TestNewRestoreCmd_HasExpectedFlags(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	expectedFlags := []string{
 		"namespace",
@@ -65,7 +65,7 @@ func TestNewRestoreCmd_NiceFlagDeprecated(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	nice := cmd.Flag("nice")
 	require.NotNil(t, nice, "deprecated --nice flag must still be registered")
@@ -92,7 +92,7 @@ func TestNewRestoreHelpFunction_Output(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	_, shared := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	_, shared := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	appFS := shared.App.NewFlagSet()
 

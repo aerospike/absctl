@@ -32,6 +32,8 @@ import (
 const (
 	backupWelcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
 	backupWelcomeMessageShort = "Aerospike backup CLI tool"
+
+	useExport = "export"
 )
 
 type backupRunner struct {
@@ -44,8 +46,8 @@ type backupRunner struct {
 	localFlagSet  *pflag.FlagSet
 }
 
-// NewBackupCmd builds the top-level "backup" command for scan-based backups.
-func NewBackupCmd(
+// NewExportCmd builds the top-level "backup" command for scan-based backups.
+func NewExportCmd(
 	flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
 ) (*cobra.Command, *subcmd.SharedFlags) {
 	r := &backupRunner{
@@ -55,7 +57,7 @@ func NewBackupCmd(
 	r.flagsCommon = flags.NewCommon(&r.flagsBackup.Common, flags.OperationBackup)
 
 	return subcmd.BuildCommand(
-		"backup", backupWelcomeMessageShort, backupWelcomeMessage,
+		useExport, backupWelcomeMessageShort, backupWelcomeMessage,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationBackup, r,
 	)

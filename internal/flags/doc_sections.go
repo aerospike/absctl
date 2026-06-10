@@ -20,6 +20,17 @@ const (
 	SectionTextUsageBackup  = "\nUsage:\n  absctl backup [flags]"
 	SectionTextUsageRestore = "\nUsage:\n  absctl restore [flags]"
 
+	SectionTextUsageBackupServer  = "\nUsage:\n  absctl backup <command> [flags]"
+	SectionTextUsageRestoreServer = "\nUsage:\n  absctl restore <command> [flags]"
+
+	SectionTextUsageBackupStart    = "\nUsage:\n  absctl backup start [flags]"
+	SectionTextUsageBackupList     = "\nUsage:\n  absctl backup list [flags]"
+	SectionTextUsageBackupProgress = "\nUsage:\n  absctl backup progress [flags]"
+	SectionTextUsageRestorePrepare = "\nUsage:\n  absctl restore prepare [flags]"
+	SectionTextUsageRestoreStart   = "\nUsage:\n  absctl restore start [flags]"
+
+	SectionAvailableCommands = "\nAvailable Commands:"
+
 	SectionTextSecretAgentBackup = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
 		"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
