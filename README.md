@@ -3,33 +3,54 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/absctl)](https://pkg.go.dev/github.com/aerospike/absctl)
 [![codecov](https://codecov.io/gh/aerospike/absctl/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/absctl)
 
-The repository includes the [backup](docs/backup/readme.md) and [restore](docs/restore/readme.md) CLI tools,
-built using [backup-go](https://github.com/aerospike/backup-go) library.
-Refer to their respective README files for usage instructions.
+The `absctl` CLI triggers and manages **server-integrated** backup and restore operations on an Aerospike cluster.
+Backup and restore work is executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
+The tool is built using the [backup-go](https://github.com/aerospike/backup-go) library.
+
 Binaries for various platforms are released alongside the library and can be found under
 [releases](https://github.com/aerospike/absctl/releases).
 
+## Commands
+
+```
+absctl [command] [flags]
+```
+
+| Command | Description |
+|---------|-------------|
+| `backup` | Manage server-integrated backups |
+| `restore` | Manage server-integrated restores |
+
+### `absctl backup`
+
+| Subcommand | Description |
+|------------|-------------|
+| `start` | Start a server-integrated backup on the Aerospike cluster |
+| `list` | List available server-integrated backups from configured storage |
+| `progress` | Show the progress of a running backup |
+
+### `absctl restore`
+
+| Subcommand | Description |
+|------------|-------------|
+| `prepare` | Prepare a server-integrated restore on the Aerospike cluster |
+| `start` | Start a server-integrated restore on the Aerospike cluster |
+
+Run `absctl <command> --help` or `absctl <command> <subcommand> --help` for flags and usage details.
+
 ## Core Features
 
-### Standard Operations
-- **Full backups**: Complete namespace or set backups
-- **Incremental backups**: Time-based filtering for changed records
-- **Parallel processing**: Configurable workers for optimal performance
-- **Resume capability**: Continue interrupted backups from state files
+### Server-Integrated Operations
+- **Backup start**: Trigger a namespace backup executed by Aerospike Server
+- **Backup list**: Inspect available backups in object storage
+- **Backup progress**: Monitor an in-progress backup
+- **Restore prepare**: Prepare the cluster for a server-integrated restore
+- **Restore start**: Restore a namespace from a backup ID
 
-### Advanced Filtering
-- **Set-based**: Backup specific sets within namespaces
-- **Bin filtering**: Include only specified bins
-- **Time windows**: Records modified within date ranges
-- **Partition filtering**: Backup specific partition ranges
-- **Node/Rack targeting**: Geographic or hardware-specific backups
-
-### Enterprise Features
-- **Compression**: ZSTD compression for reduced storage
-- **Encryption**: AES-128/256 encryption for data security
-- **Cloud storage**: Direct backup to AWS S3, GCP Storage, Azure Blob
-- **Secret management**: Integration with Aerospike Secret Agent
-- **Rate limiting**: Bandwidth and RPS controls
+### Storage and Security
+- **Object storage**: AWS S3 (including MinIO via `--s3-endpoint-override`)
+- **Secret management**: Integration with Aerospike Secret Agent for credentials
+- **TLS**: Secure connections to the Aerospike cluster
 
 ## Build from Source
 ```bash
@@ -91,31 +112,70 @@ docker:
 # Pull
 docker pull aerospike/absctl:<version>
 
-# Run backup
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl backup -h <aerospike-address>  -n <namespace> -d <container-path>
+# Start a server-integrated backup
+docker run aerospike/absctl:<version> absctl backup start \
+  -h <aerospike-address> \
+  --namespace <namespace> \
+  --object-storage-type aws-s3 \
+  --s3-bucket-name <bucket>
 
-# Run restore
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl restore -h <aerospike-address>  -n <namespace> -d <container-path>
+# List backups in object storage
+docker run aerospike/absctl:<version> absctl backup list \
+  --s3-bucket-name <bucket>
+
+# Start a server-integrated restore
+docker run aerospike/absctl:<version> absctl restore start \
+  -h <aerospike-address> \
+  --namespace <namespace> \
+  --object-storage-type aws-s3 \
+  --backup-id <backup-id> \
+  --s3-bucket-name <bucket>
 ```
 
 ## Quick Start
 
-### Basic Backup
+### Start a Backup
 ```bash
-# Simple namespace backup
-absctl backup -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+absctl backup start \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --object-storage-type aws-s3 \
+  --s3-bucket-name my-backup-bucket
 ```
 
-### Basic Restore
+### List Backups
 ```bash
-# Restore from backup directory
-absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
+absctl backup list \
+  --s3-bucket-name my-backup-bucket
 ```
 
+### Monitor Backup Progress
+```bash
+absctl backup progress \
+  -h 127.0.0.1:3000
+```
+
+### Restore from a Backup
+```bash
+# Optional: prepare the cluster before restore
+absctl restore prepare \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --backup-id <backup-id>
+
+# Start the restore
+absctl restore start \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --object-storage-type aws-s3 \
+  --backup-id <backup-id> \
+  --s3-bucket-name my-backup-bucket
+```
 
 ## Configuration Reference
 
-Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-example-values) and [restore](docs/restore/readme.md#configuration-file-schema-with-example-values) readme files for details.
+Configuration can be supplied via command-line flags or a YAML file using `--config`.
+Run `absctl backup start --help`, `absctl backup list --help`, `absctl restore start --help`, or `absctl restore prepare --help` for the full flag reference.
 
 ## License
 
