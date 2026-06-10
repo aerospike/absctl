@@ -90,7 +90,7 @@ func TestNewCmd_Subcommands(t *testing.T) {
 	rootCmd, _ := NewCmd(testAppVersion, testCommitHash, testBuildTime)
 
 	assert.ElementsMatch(t,
-		[]string{"backup", "restore", "server", "service"},
+		[]string{"backup", "restore"},
 		subcommandNames(rootCmd),
 	)
 }
