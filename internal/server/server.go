@@ -160,8 +160,6 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Println("PrepareRestore", s.config.ServerBackup.JobID)
-
 	err = client.PrepareServerRestore(
 		ctx,
 		s.config.ServerBackup.JobID,
