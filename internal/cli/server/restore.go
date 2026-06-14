@@ -94,7 +94,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 				return fmt.Errorf("failed to validate config: %w", err)
 			}
 
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := server.NewService(cfg, rc.logger)
 			if err != nil {
 				return fmt.Errorf("server side restore initialization failed: %w", err)
 			}
@@ -167,7 +167,7 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 				return fmt.Errorf("failed to validate config: %w", err)
 			}
 
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := server.NewService(cfg, rc.logger)
 			if err != nil {
 				return fmt.Errorf("server side restore initialization failed: %w", err)
 			}

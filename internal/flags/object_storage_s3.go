@@ -69,5 +69,15 @@ func (f *ObjectStorageS3) ToAwsS3() *models.AwsS3 {
 		Profile:         f.Profile,
 		AccessKeyID:     f.AccessKeyID,
 		SecretAccessKey: f.SecretAccessKey,
+		// Set default to pass validation.
+		RestorePollDuration: models.DefaultS3RestorePollDuration,
+		RetryMaxAttempts:    models.DefaultS3RetryMaxAttempts,
+		RetryMaxBackoff:     models.DefaultS3RetryMaxBackoff,
+		ChunkSize:           models.DefaultS3ChunkSize,
+		StorageCommon: models.StorageCommon{
+			RetryReadBackoff:     models.DefaultCloudRetryReadBackoff,
+			RetryReadMultiplier:  models.DefaultCloudRetryReadMultiplier,
+			RetryReadMaxAttempts: models.DefaultCloudRetryReadMaxAttempts,
+		},
 	}
 }

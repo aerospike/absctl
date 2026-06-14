@@ -127,8 +127,9 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
-		fmt.Println("  export    Aerospike scan-based export")
-		fmt.Println("  import    Aerospike scan-based import")
+		//nolint:gocritic // This lines are commented as they belong to not released features.
+		// fmt.Println("  export    Aerospike scan-based export")
+		// fmt.Println("  import    Aerospike scan-based import")
 		fmt.Println("  backup    Manage server-integrated backups")
 		fmt.Println("  restore   Manage server-integrated restores")
 		//nolint:gocritic // This lines are commented as they belong to not released features.

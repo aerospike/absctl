@@ -15,7 +15,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -84,15 +83,15 @@ func setHelpBackup(cmd *cobra.Command) {
 	})
 }
 
-func newBackupSvc(ctx context.Context, rc *runCtx, bf *backupFlags, ssbFlags *flags.ServerBackup,
+func newBackupSvc(rc *runCtx, bf *backupFlags, ssbFlags *flags.ServerBackup,
 ) (*server.Service, error) {
 	cfg := newIntegratedBackupConfig(rc, bf, ssbFlags)
 
-	if err := cfg.Validate(true); err != nil {
+	if err := cfg.Validate(false); err != nil {
 		return nil, fmt.Errorf("failed to validate config: %w", err)
 	}
 
-	svc, err := server.NewService(ctx, cfg, rc.logger)
+	svc, err := server.NewService(cfg, rc.logger)
 	if err != nil {
 		return nil, fmt.Errorf("server side backup initialization failed: %w", err)
 	}
@@ -110,7 +109,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		Short: "Start a server-integrated backup",
 		Long:  "Start a server-integrated backup on the Aerospike cluster.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, err := newBackupSvc(cmd.Context(), rc, bf, ssbFlags)
+			svc, err := newBackupSvc(rc, bf, ssbFlags)
 			if err != nil {
 				return err
 			}
@@ -176,7 +175,7 @@ func newBackupListCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		Short: "List server-integrated backups",
 		Long:  "List available server-integrated backups from the configured storage.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, err := newBackupSvc(cmd.Context(), rc, bf, nil)
+			svc, err := newBackupSvc(rc, bf, nil)
 			if err != nil {
 				return err
 			}
@@ -219,7 +218,7 @@ func newBackupProgressCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 		Short: "Shows the progress of a backup",
 		Long:  "Shows the progress of a current ongoing server backup",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, err := newBackupSvc(cmd.Context(), rc, bf, nil)
+			svc, err := newBackupSvc(rc, bf, nil)
 			if err != nil {
 				return err
 			}

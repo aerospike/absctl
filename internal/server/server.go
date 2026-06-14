@@ -35,35 +35,18 @@ const messageNoRunningBackup = "No running backup found"
 type Service struct {
 	config *config.ServerBackupServiceConfig
 	reader backup.StreamingReader
-	client S3API
 
 	// reportToLog bool
-
 	logger *slog.Logger
 }
 
 // NewService initializes and returns a new Service instance.
 func NewService(
-	ctx context.Context,
 	cfg *config.ServerBackupServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	var (
-		client S3API
-		err    error
-	)
-
-	// If list path is set, init reader.
-	if cfg.ServerBackup.ListPath != "" {
-		client, err = storage.NewS3Client(ctx, cfg.AwsS3)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create s3 client: %w", err)
-		}
-	}
-
 	return &Service{
 		config: cfg,
-		client: client,
 		logger: logger,
 	}, nil
 }
@@ -92,9 +75,14 @@ func (s *Service) ListBackups(ctx context.Context) error {
 }
 
 func (s *Service) ListBackupsV2(ctx context.Context) error {
+	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
 	w := logging.GetMetadataWriter(s.config.App.LogJSON)
 
-	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
+	l := NewListerV2(client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
 
 	if err := l.FetchAllMetadata(ctx); err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
@@ -130,7 +118,8 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	}
 
 	s.logger.Info("Server integrated backup started",
-		slog.String("backupId", JobID))
+		//nolint:sloglint // Name parameter as flag.
+		slog.String("backup-id", JobID))
 
 	return nil
 }
@@ -158,7 +147,8 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	}
 
 	s.logger.Info("Server integrated restore started",
-		slog.String("backupId", s.config.ServerBackup.JobID))
+		//nolint:sloglint // Name parameter as flag.
+		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil
 }
@@ -170,6 +160,8 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return err
 	}
 
+	fmt.Println("PrepareRestore", s.config.ServerBackup.JobID)
+
 	err = client.PrepareServerRestore(
 		ctx,
 		s.config.ServerBackup.JobID,
@@ -180,7 +172,8 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	}
 
 	s.logger.Info("Restore preparation started",
-		slog.String("backupId", s.config.ServerBackup.JobID))
+		//nolint:sloglint // Name parameter as flag.
+		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil
 }
