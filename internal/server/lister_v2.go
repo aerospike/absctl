@@ -51,7 +51,10 @@ var errMetadataNotFound = errors.New("metadata.json not found")
 type S3API interface {
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
 	) (*s3.ListObjectsV2Output, error)
-	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options),
+	) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options),
+	) (*s3.HeadObjectOutput, error)
 }
 
 // ListerV2 provides functionality to list backups from an S3 bucket.
