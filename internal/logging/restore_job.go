@@ -29,7 +29,7 @@ const headerRestoreStatus = "Restore status"
 func PrintRestoreStatus(status *api.DtoRestoreJobStatus, jobID int64, toLog bool, logger *slog.Logger) {
 	if toLog {
 		logger.Info("restore status",
-			slog.Int64("jobId", jobID),
+			slog.Int64("job-id", jobID),
 			slog.Any("status", status),
 		)
 

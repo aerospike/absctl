@@ -54,7 +54,7 @@ func newRestoreFullStartCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			rc.logger.Info("full restore started successfully", slog.String("jobId", jobID))
+			rc.logger.Info("full restore started successfully", slog.String("job-id", jobID))
 
 			return nil
 		},
