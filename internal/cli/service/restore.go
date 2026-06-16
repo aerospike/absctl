@@ -58,7 +58,7 @@ func newRestoreCancelCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			rc.logger.Info("restore canceled successfully", slog.Int64("jobId", f.JobID))
+			rc.logger.Info("restore canceled successfully", slog.Int64("job-id", f.JobID))
 
 			return nil
 		},

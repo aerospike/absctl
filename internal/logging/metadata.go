@@ -56,10 +56,10 @@ func PrintMetadata(w io.Writer, data models.Metadata, toLog bool, logger *slog.L
 
 	if toLog {
 		logger.Info("backup entry",
-			slog.String("backupId", data.BackupID),
+			slog.String("backup-id", data.BackupID),
 			slog.String("namespace", data.Namespace),
-			slog.Int64("totalRecords", totalRecords),
-			slog.Int64("totalBytes", totalBytes),
+			slog.Int64("total-records", totalRecords),
+			slog.Int64("total-bytes", totalBytes),
 			slog.Time("created", minCreated),
 			slog.Time("finished", maxFinished),
 		)

@@ -73,13 +73,13 @@ func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger
 	}
 
 	logger.Info(strings.ToLower(headerBackupReport),
-		slog.Time("startTime", stats.StartTime),
+		slog.Time("start-time", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
 		slog.Uint64(recordsMetric, stats.GetReadRecords()),
-		slog.Uint64("sIndexRead", uint64(stats.GetSIndexes())),
-		slog.Uint64("udfRead", uint64(stats.GetUDFs())),
-		slog.Uint64("bytesWritten", stats.GetBytesWritten()),
-		slog.Uint64("filesWritten", stats.GetFileCount()),
+		slog.Uint64("s-index-read", uint64(stats.GetSIndexes())),
+		slog.Uint64("udf-read", uint64(stats.GetUDFs())),
+		slog.Uint64("bytes-written", stats.GetBytesWritten()),
+		slog.Uint64("files-written", stats.GetFileCount()),
 	)
 }
 
@@ -143,27 +143,27 @@ func logRestoreReport(stats *bModels.RestoreStats, logger *slog.Logger, isValida
 
 	logAttr := make([]any, 0)
 	logAttr = append(logAttr,
-		slog.Time("startTime", stats.StartTime),
+		slog.Time("start-time", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
-		slog.Uint64("recordsRead", stats.GetReadRecords()),
-		slog.Uint64("sIndexRead", uint64(stats.GetSIndexes())),
-		slog.Uint64("udfRead", uint64(stats.GetUDFs())),
+		slog.Uint64("records-read", stats.GetReadRecords()),
+		slog.Uint64("s-index-read", uint64(stats.GetSIndexes())),
+		slog.Uint64("udf-read", uint64(stats.GetUDFs())),
 	)
 
 	if !isValidation {
 		logAttr = append(logAttr,
-			slog.Uint64("expiredRecords", stats.GetRecordsExpired()),
-			slog.Uint64("skippedRecords", stats.GetRecordsSkipped()),
-			slog.Uint64("ignoredRecords", stats.GetRecordsIgnored()),
-			slog.Uint64("fresherRecords", stats.GetRecordsFresher()),
-			slog.Uint64("existedRecords", stats.GetRecordsExisted()),
-			slog.Uint64("insertedRecords", stats.GetRecordsInserted()),
-			slog.Uint64("inDoubtErrors", stats.GetErrorsInDoubt()),
+			slog.Uint64("expired-records", stats.GetRecordsExpired()),
+			slog.Uint64("skipped-records", stats.GetRecordsSkipped()),
+			slog.Uint64("ignored-records", stats.GetRecordsIgnored()),
+			slog.Uint64("fresher-records", stats.GetRecordsFresher()),
+			slog.Uint64("existed-records", stats.GetRecordsExisted()),
+			slog.Uint64("inserted-records", stats.GetRecordsInserted()),
+			slog.Uint64("in-doubt-errors", stats.GetErrorsInDoubt()),
 		)
 	}
 
 	logAttr = append(logAttr,
-		slog.Uint64("totalBytesRead", stats.GetTotalBytesRead()),
+		slog.Uint64("total-bytes-read", stats.GetTotalBytesRead()),
 	)
 
 	logger.Info(header, logAttr...)
@@ -190,6 +190,6 @@ func printEstimateReport(estimate uint64) {
 
 func logEstimateReport(estimate uint64, logger *slog.Logger) {
 	logger.Info(strings.ToLower(headerEstimateReport),
-		slog.Uint64("fileSizeBytes", estimate),
+		slog.Uint64("file-size-bytes", estimate),
 	)
 }
