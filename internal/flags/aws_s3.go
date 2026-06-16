@@ -122,7 +122,7 @@ func (f *AwsS3) NewFlagSet() *pflag.FlagSet {
 			models.DefaultS3ChunkSize,
 			"Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to\n"+
 				"the storage in a single request. Objects smaller than the size will be sent in a single request,\n"+
-				"while larger objects will be split over multiple requests.")
+				"while larger objects will be split over multiple requests. Minimum value is 5.")
 
 		flagSet.IntVar(&f.UploadConcurrency, flagS3UploadConcurrency,
 			models.DefaultS3UploadConcurrency,

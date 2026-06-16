@@ -121,7 +121,7 @@ func (f *AzureBlob) NewFlagSet() *pflag.FlagSet {
 	case OperationBackup:
 		flagSet.IntVar(&f.BlockSize, flagAzureBlockSize,
 			models.DefaultAzureBlockSize,
-			"Block size in MiB defines the size of the buffer used during upload.")
+			"Block size in MiB defines the size of the buffer used during upload. Minimum value is 1.")
 
 		flagSet.IntVar(&f.UploadConcurrency, flagAzureUploadConcurrency,
 			models.DefaultAzureUploadConcurrency,
