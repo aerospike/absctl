@@ -169,7 +169,7 @@ func RunCommand(
 	appVersion, commitHash, buildTime string,
 ) error {
 	if shared.Root.Version {
-		fmt.Fprintf(cmd.OutOrStdout(), "version: %s (%s) %s \n", appVersion, commitHash, buildTime)
+		fmt.Printf("version: %s (%s) %s \n", appVersion, commitHash, buildTime)
 
 		return nil
 	}
