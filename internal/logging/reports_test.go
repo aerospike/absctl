@@ -169,13 +169,13 @@ func TestLogBackupReport(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "startTime=")
+	assert.Contains(t, logOutput, "start-time=")
 	assert.Contains(t, logOutput, "duration=")
-	assert.Contains(t, logOutput, "recordsRead=1000")
-	assert.Contains(t, logOutput, "sIndexRead=5")
-	assert.Contains(t, logOutput, "udfRead=3")
-	assert.Contains(t, logOutput, "bytesWritten=5000000")
-	assert.Contains(t, logOutput, "filesWritten=10")
+	assert.Contains(t, logOutput, "records-read=1000")
+	assert.Contains(t, logOutput, "s-index-read=5")
+	assert.Contains(t, logOutput, "udf-read=3")
+	assert.Contains(t, logOutput, "bytes-written=5000000")
+	assert.Contains(t, logOutput, "files-written=10")
 }
 
 func TestLogBackupReportXdr(t *testing.T) {
@@ -188,8 +188,8 @@ func TestLogBackupReportXdr(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "recordsReceived=1000")
-	assert.NotContains(t, logOutput, "recordsRead=")
+	assert.Contains(t, logOutput, "records-received=1000")
+	assert.NotContains(t, logOutput, "records-read=")
 }
 
 func TestReportBackup(t *testing.T) {
@@ -212,7 +212,7 @@ func TestReportBackup(t *testing.T) {
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "backup report")
-		assert.Contains(t, logOutput, "recordsRead=1000")
+		assert.Contains(t, logOutput, "records-read=1000")
 	})
 }
 
@@ -261,19 +261,19 @@ func TestLogRestoreReport(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "restore report")
-	assert.Contains(t, logOutput, "startTime=")
+	assert.Contains(t, logOutput, "start-time=")
 	assert.Contains(t, logOutput, "duration=")
-	assert.Contains(t, logOutput, "recordsRead=1000")
-	assert.Contains(t, logOutput, "sIndexRead=5")
-	assert.Contains(t, logOutput, "udfRead=3")
-	assert.Contains(t, logOutput, "expiredRecords=10")
-	assert.Contains(t, logOutput, "skippedRecords=20")
-	assert.Contains(t, logOutput, "ignoredRecords=30")
-	assert.Contains(t, logOutput, "fresherRecords=40")
-	assert.Contains(t, logOutput, "existedRecords=50")
-	assert.Contains(t, logOutput, "insertedRecords=60")
-	assert.Contains(t, logOutput, "inDoubtErrors=5")
-	assert.Contains(t, logOutput, "totalBytesRead=5000000")
+	assert.Contains(t, logOutput, "records-read=1000")
+	assert.Contains(t, logOutput, "s-index-read=5")
+	assert.Contains(t, logOutput, "udf-read=3")
+	assert.Contains(t, logOutput, "expired-records=10")
+	assert.Contains(t, logOutput, "skipped-records=20")
+	assert.Contains(t, logOutput, "ignored-records=30")
+	assert.Contains(t, logOutput, "fresher-records=40")
+	assert.Contains(t, logOutput, "existed-records=50")
+	assert.Contains(t, logOutput, "inserted-records=60")
+	assert.Contains(t, logOutput, "in-doubt-errors=5")
+	assert.Contains(t, logOutput, "total-bytes-read=5000000")
 }
 
 func TestReportRestore(t *testing.T) {
@@ -296,7 +296,7 @@ func TestReportRestore(t *testing.T) {
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "restore report")
-		assert.Contains(t, logOutput, "recordsRead=1000")
+		assert.Contains(t, logOutput, "records-read=1000")
 	})
 }
 
@@ -318,7 +318,7 @@ func TestLogEstimateReport(t *testing.T) {
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "estimate report")
-	assert.Contains(t, logOutput, "fileSizeBytes=5000000")
+	assert.Contains(t, logOutput, "file-size-bytes=5000000")
 }
 
 func TestReportEstimate(t *testing.T) {
@@ -340,6 +340,6 @@ func TestReportEstimate(t *testing.T) {
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "estimate report")
-		assert.Contains(t, logOutput, "fileSizeBytes=5000000")
+		assert.Contains(t, logOutput, "file-size-bytes=5000000")
 	})
 }

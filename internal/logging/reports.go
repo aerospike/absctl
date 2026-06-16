@@ -67,9 +67,9 @@ func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
 }
 
 func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger) {
-	recordsMetric := "recordsRead"
+	recordsMetric := "records-read"
 	if isXdr {
-		recordsMetric = "recordsReceived"
+		recordsMetric = "records-received"
 	}
 
 	logger.Info(strings.ToLower(headerBackupReport),
