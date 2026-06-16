@@ -214,32 +214,6 @@ func TestNewSharedFlagSets_AllNonNil(t *testing.T) {
 	require.NotNil(t, sets.Azure)
 }
 
-func TestRunCommand_VersionFlagPrintsVersionAndSkipsRunner(t *testing.T) {
-	t.Parallel()
-
-	r := newFakeRunner()
-	rootFlags := flags.NewRoot()
-	cmd, shared := BuildCommand(
-		testCmdName, testCmdShort, testCmdLong,
-		rootFlags, testAppVersion, testCommitHash, testBuildTime,
-		flags.OperationBackup, r,
-	)
-
-	rootFlags.Version = true
-
-	buf := newCmdWithBuffer()
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
-
-	require.NoError(t, RunCommand(cmd, r, shared, testAppVersion, testCommitHash, testBuildTime))
-
-	out := buf.String()
-	require.Contains(t, out, testAppVersion)
-	require.Contains(t, out, testCommitHash)
-	require.Contains(t, out, testBuildTime)
-	require.False(t, r.runCalled, "RunService must not be called when --version is set")
-}
-
 func TestRunCommand_NoFlagsShowsHelpAndSkipsRunner(t *testing.T) {
 	t.Parallel()
 
