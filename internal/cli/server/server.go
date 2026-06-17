@@ -16,7 +16,6 @@ package server
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -141,33 +140,32 @@ func applyCommon(cmd *cobra.Command, rc *runCtx) commonFlagSets {
 
 // printHelpHeader writes the welcome banner, a matching underline and the
 // usage section for a command.
-func printHelpHeader(w io.Writer, usage string) {
-	fmt.Fprintln(w, textWelcomeMessage)
-	fmt.Fprintln(w, strings.Repeat("-", len(textWelcomeMessage)))
-	fmt.Fprintln(w, usage)
+func printHelpHeader(usage string) {
+	fmt.Println(textWelcomeMessage)
+	fmt.Println(strings.Repeat("-", len(textWelcomeMessage)))
+	fmt.Println(usage)
 }
 
 // printSection writes a section title followed by the defaults of one or more
 // flag sets, all routed to w so help output is testable and consistent.
-func printSection(w io.Writer, title string, sets ...*pflag.FlagSet) {
-	fmt.Fprintln(w, title)
+func printSection(title string, sets ...*pflag.FlagSet) {
+	fmt.Println(title)
 
 	for _, fs := range sets {
-		fs.SetOutput(w)
 		fs.PrintDefaults()
 	}
 }
 
 // printCommands lists the available subcommands of c in two-column form.
-func printCommands(w io.Writer, c *cobra.Command) {
-	fmt.Fprintln(w, flags.SectionAvailableCommands)
+func printCommands(c *cobra.Command) {
+	fmt.Println(flags.SectionAvailableCommands)
 
 	for _, sub := range c.Commands() {
 		if !sub.IsAvailableCommand() {
 			continue
 		}
 
-		fmt.Fprintf(w, "  %-25s %s\n", sub.Name(), sub.Short)
+		fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
 	}
 }
 

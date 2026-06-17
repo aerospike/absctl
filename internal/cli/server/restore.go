@@ -65,10 +65,8 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 
 func setHelpRestore(cmd *cobra.Command) {
 	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageRestoreServer)
-		printCommands(w, c)
+		printHelpHeader(flags.SectionTextUsageRestoreServer)
+		printCommands(c)
 	})
 
 	usageFromHelp(cmd)
@@ -120,15 +118,13 @@ func setHelpRestoreStart(
 	ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
 	common commonFlagSets,
 ) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageRestoreStart)
-		printSection(w, flags.SectionTextGeneral, common.app)
-		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(w, flags.SectionTextRestore, ssbFlagSet)
-		printSection(w, flags.SectionTextAWS, objectStoreFlagSet)
-		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageRestoreStart)
+		printSection(flags.SectionTextGeneral, common.app)
+		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(flags.SectionTextRestore, ssbFlagSet)
+		printSection(flags.SectionTextAWS, objectStoreFlagSet)
+		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
 	usageFromHelp(cmd)
@@ -174,14 +170,12 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 }
 
 func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet, common commonFlagSets) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageRestorePrepare)
-		printSection(w, flags.SectionTextGeneral, common.app)
-		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(w, flags.SectionTextRestore, ssbFlagSet)
-		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageRestorePrepare)
+		printSection(flags.SectionTextGeneral, common.app)
+		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(flags.SectionTextRestore, ssbFlagSet)
+		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
 	usageFromHelp(cmd)

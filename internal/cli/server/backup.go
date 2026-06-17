@@ -72,10 +72,8 @@ func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime strin
 
 func setHelpBackup(cmd *cobra.Command) {
 	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageBackupServer)
-		printCommands(w, c)
+		printHelpHeader(flags.SectionTextUsageBackupServer)
+		printCommands(c)
 	})
 
 	usageFromHelp(cmd)
@@ -127,15 +125,13 @@ func setHelpBackupStart(
 	ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
 	common commonFlagSets,
 ) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageBackupStart)
-		printSection(w, flags.SectionTextGeneral, common.app)
-		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(w, flags.SectionTextBackup, ssbFlagSet)
-		printSection(w, flags.SectionTextAWS, objectStoreFlagSet)
-		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageBackupStart)
+		printSection(flags.SectionTextGeneral, common.app)
+		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(flags.SectionTextBackup, ssbFlagSet)
+		printSection(flags.SectionTextAWS, objectStoreFlagSet)
+		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
 	usageFromHelp(cmd)
@@ -183,11 +179,9 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 }
 
 func setHelpBackupList(cmd *cobra.Command, awsFlagSet *pflag.FlagSet) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageBackupList)
-		printSection(w, flags.SectionTextAWS, awsFlagSet)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageBackupList)
+		printSection(flags.SectionTextAWS, awsFlagSet)
 	})
 
 	usageFromHelp(cmd)
@@ -229,13 +223,11 @@ func newBackupProgressCmd(rc *runCtx, _ *backupCtx) *cobra.Command {
 }
 
 func setHelpBackupProgress(cmd *cobra.Command, common commonFlagSets) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageBackupProgress)
-		printSection(w, flags.SectionTextGeneral, common.app)
-		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageBackupProgress)
+		printSection(flags.SectionTextGeneral, common.app)
+		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
 	usageFromHelp(cmd)
@@ -282,12 +274,10 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 }
 
 func setHelpBackupValidate(cmd *cobra.Command, awsFlagSet, validationFlagSet *pflag.FlagSet) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		w := c.OutOrStdout()
-
-		printHelpHeader(w, flags.SectionTextUsageValidate)
-		printSection(w, flags.SectionTextBackup, validationFlagSet)
-		printSection(w, flags.SectionTextAWS, awsFlagSet)
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageValidate)
+		printSection(flags.SectionTextBackup, validationFlagSet)
+		printSection(flags.SectionTextAWS, awsFlagSet)
 	})
 
 	usageFromHelp(cmd)
