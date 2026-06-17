@@ -34,6 +34,7 @@ const (
 	useList     = "list"
 	useProgress = "progress"
 	usePrepare  = "prepare"
+	useValidate = "validate"
 )
 
 // runCtx is passed to all server subcommand constructors so they share the

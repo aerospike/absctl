@@ -56,6 +56,15 @@ func (f *ServerBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
 	return flagSet
 }
 
+func (f *ServerBackup) NewBackupValidateFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.IntVar(&f.SampleSize, "sample-size", 10000, "Number of segments for random validation.")
+	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
+
+	return flagSet
+}
+
 func (f *ServerBackup) GetIntegratedBackup() *models.ServerBackup {
 	return &f.ServerBackup
 }

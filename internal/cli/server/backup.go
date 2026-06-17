@@ -53,6 +53,7 @@ func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime strin
 		newBackupStartCmd(rc, bf),
 		newBackupListCmd(rc, bf),
 		newBackupProgressCmd(rc, bf),
+		newBackupValidateCmd(rc, bf),
 	)
 
 	setHelpBackup(cmd)
@@ -255,6 +256,58 @@ func setHelpBackupProgress(cmd *cobra.Command, commonFlagSet []*pflag.FlagSet) {
 		// Print section: Secret Agent Flags
 		fmt.Println(flags.SectionTextSecretAgentBackup)
 		commonFlagSet[3].PrintDefaults()
+	})
+
+	cmd.SetUsageFunc(func(c *cobra.Command) error {
+		c.HelpFunc()(c, nil)
+		return nil
+	})
+}
+
+func newBackupValidateCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
+	ssbFlags := flags.NewServerBackup()
+	ssbFlagSet := ssbFlags.NewBackupValidateFlagSet()
+	awsFlagSet := bf.aws.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   useValidate,
+		Short: "Validate server-integrated backups",
+		Long:  "Validate available server-integrated backups from the configured storage.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			svc, err := newBackupSvc(rc, bf, ssbFlags)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.Validate(cmd.Context()); err != nil {
+				return fmt.Errorf("validating backups failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().AddFlagSet(ssbFlagSet)
+	cmd.Flags().AddFlagSet(awsFlagSet)
+
+	setHelpValidateList(cmd, awsFlagSet, ssbFlagSet)
+
+	return cmd
+}
+
+func setHelpValidateList(cmd *cobra.Command, awsFlagSet, ssbFlagSet *pflag.FlagSet) {
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		fmt.Println(backupWelcomeMessage)
+		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(flags.SectionTextUsageValidate)
+
+		// Print section: Backup Flags
+		fmt.Println(flags.SectionTextBackup)
+		ssbFlagSet.PrintDefaults()
+
+		// Print section: AWS Flags
+		fmt.Println(flags.SectionTextAWS)
+		awsFlagSet.PrintDefaults()
 	})
 
 	cmd.SetUsageFunc(func(c *cobra.Command) error {

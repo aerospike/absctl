@@ -16,8 +16,12 @@ package models
 
 // ServerBackup contains flags that will be mapped to ServerBackup.
 type ServerBackup struct {
-	ListPath    string
 	Namespace   string
 	JobID       string
 	StorageType string
+	// ListPath is the path to list backups from.
+	ListPath string
+
+	// SampleSize specifies the sample size limit for validation operations.
+	SampleSize int
 }

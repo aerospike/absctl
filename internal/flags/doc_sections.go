@@ -25,6 +25,7 @@ const (
 
 	SectionTextUsageBackupStart    = "\nUsage:\n  absctl backup start [flags]"
 	SectionTextUsageBackupList     = "\nUsage:\n  absctl backup list [flags]"
+	SectionTextUsageValidate       = "\nUsage:\n  absctl backup validate [flags]"
 	SectionTextUsageBackupProgress = "\nUsage:\n  absctl backup progress [flags]"
 	SectionTextUsageRestorePrepare = "\nUsage:\n  absctl restore prepare [flags]"
 	SectionTextUsageRestoreStart   = "\nUsage:\n  absctl restore start [flags]"
@@ -47,7 +48,7 @@ const (
 		"Example: absctl restore --azure-account-name secret:resource1:azaccount"
 
 	SectionTextBackup  = "\nBackup Flags:"
-	SectionTextRestore = "\nBackup Flags:"
+	SectionTextRestore = "\nRestore Flags:"
 
 	SectionTextGeneral     = "\nGeneral Flags:"
 	SectionTextAerospike   = "\nAerospike Client Flags:"

@@ -228,3 +228,21 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 
 	return infoClient, nil
 }
+
+func (s *Service) Validate(ctx context.Context) error {
+	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	v := NewValidator(client, s.config.AwsS3.BucketName, s.config.App.LogJSON, s.logger)
+
+	report, err := v.Validate(ctx, s.config.ServerBackup.JobID, s.config.ServerBackup.SampleSize)
+	if err != nil {
+		return fmt.Errorf("failed to validate: %w", err)
+	}
+
+	fmt.Println(report)
+
+	return nil
+}
