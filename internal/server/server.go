@@ -22,36 +22,57 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
-	"github.com/aerospike/backup-go/models"
+	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
+	commonClient "github.com/aerospike/tools-common-go/client"
 )
 
 const messageNoRunningBackup = "No running backup found"
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
-	config *config.ServerBackupServiceConfig
-	logger *slog.Logger
+	backupCfg  *config.ServerBackupServiceConfig
+	restoreCfg *config.ServerRestoreServiceConfig
+	logger     *slog.Logger
 }
 
 // NewService initializes and returns a new Service instance.
 func NewService(
-	cfg *config.ServerBackupServiceConfig,
+	backupCfg *config.ServerBackupServiceConfig,
+	restoreCfg *config.ServerRestoreServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	return &Service{
-		config: cfg,
-		logger: logger,
+		backupCfg:  backupCfg,
+		restoreCfg: restoreCfg,
+		logger:     logger,
 	}, nil
+}
+
+func (s *Service) clientConfig() *commonClient.AerospikeConfig {
+	if s.backupCfg != nil {
+		return s.backupCfg.ClientConfig
+	}
+
+	return s.restoreCfg.ClientConfig
+}
+
+func (s *Service) clientPolicy() *models.ClientPolicy {
+	if s.backupCfg != nil {
+		return s.backupCfg.ClientPolicy
+	}
+
+	return s.restoreCfg.ClientPolicy
 }
 
 // newInfoClient separate function for a lazy load.
 func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	aerospikeClient, err := storage.NewAerospikeClient(
-		s.config.ClientConfig,
-		s.config.ClientPolicy,
+		s.clientConfig(),
+		s.clientPolicy(),
 		nil,
 		0,
 		s.logger)
@@ -62,7 +83,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	infoClient, err := asinfo.NewClient(
 		aerospikeClient.Cluster(),
 		aerospike.NewInfoPolicy(),
-		models.NewDefaultRetryPolicy(),
+		bModels.NewDefaultRetryPolicy(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create info client: %w", err)
@@ -71,15 +92,16 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	return infoClient, nil
 }
 
+// ListBackups lists all backups from the configured storage.
 func (s *Service) ListBackups(ctx context.Context) error {
-	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	w := logging.GetMetadataWriter(s.config.App.LogJSON)
+	w := logging.GetMetadataWriter(s.backupCfg.App.LogJSON)
 
-	l := NewLister(client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
+	l := NewLister(client, s.backupCfg.AwsS3.BucketName, "", s.backupCfg.App.LogJSON, w, s.logger)
 
 	if err := l.FetchAllMetadata(ctx); err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
@@ -102,13 +124,15 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 	JobID, err := client.StartServerBackup(
 		ctx,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
+		s.backupCfg.Start.Namespace,
+		s.backupCfg.Start.StorageType,
+		s.backupCfg.AwsS3.BucketName,
+		s.backupCfg.AwsS3.Region,
+		s.backupCfg.AwsS3.Profile,
+		s.backupCfg.AwsS3.AccessKeyID,
+		s.backupCfg.AwsS3.SecretAccessKey,
+		s.backupCfg.Start.ModifiedBefore,
+		s.backupCfg.Start.ModifiedAfter,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
@@ -129,21 +153,21 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	err = client.StartServerRestore(
 		ctx,
-		s.config.ServerBackup.JobID,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
+		s.restoreCfg.Start.JobID,
+		s.restoreCfg.Start.Namespace,
+		s.restoreCfg.Start.StorageType,
+		s.restoreCfg.AwsS3.BucketName,
+		s.restoreCfg.AwsS3.Region,
+		s.restoreCfg.AwsS3.Profile,
+		s.restoreCfg.AwsS3.AccessKeyID,
+		s.restoreCfg.AwsS3.SecretAccessKey,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
 	s.logger.Info("Server integrated restore started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+		slog.String("backup-id", s.restoreCfg.Start.JobID))
 
 	return nil
 }
@@ -157,20 +181,20 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 
 	err = client.PrepareServerRestore(
 		ctx,
-		s.config.ServerBackup.JobID,
-		s.config.ServerBackup.Namespace,
+		s.restoreCfg.Prepare.JobID,
+		s.restoreCfg.Prepare.Namespace,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare restore: %w", err)
 	}
 
 	s.logger.Info("Restore preparation started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+		slog.String("backup-id", s.restoreCfg.Prepare.JobID))
 
 	return nil
 }
 
-func (s *Service) GetStatus(ctx context.Context) error {
+func (s *Service) BackupProgress(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
@@ -199,15 +223,15 @@ func (s *Service) GetStatus(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Validate(ctx context.Context) error {
-	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
+func (s *Service) BackupValidate(ctx context.Context) error {
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	v := NewValidator(client, s.config.AwsS3.BucketName, s.config.App.LogJSON, s.logger)
+	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.App.LogJSON, s.logger)
 
-	report, err := v.Validate(ctx, s.config.ServerBackup.JobID, s.config.ServerBackup.SampleSize)
+	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
 	if err != nil {
 		return fmt.Errorf("failed to validate: %w", err)
 	}

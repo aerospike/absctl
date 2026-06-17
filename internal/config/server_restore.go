@@ -19,31 +19,27 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
-// ServerBackupServiceConfig holds the configuration for the server-integrated Start service.
-type ServerBackupServiceConfig struct {
-	Start      *models.ServerBackup
-	List       *models.ServerBackupList
-	Validation *models.ServerBackupValidate
+// ServerRestoreServiceConfig holds the configuration for the server-integrated Start service.
+type ServerRestoreServiceConfig struct {
+	Start   *models.ServerRestore
+	Prepare *models.ServerRestorePrepare
 
 	ServiceConfigCommon
 }
 
-// NewServerBackupServiceConfig initializes a new ServerBackupServiceConfig
-// using the provided parameters for backup service configuration.
-func NewServerBackupServiceConfig(
-	start *models.ServerBackup,
-	list *models.ServerBackupList,
-	validation *models.ServerBackupValidate,
+// NewServerRestoreServiceConfig initializes a new ServerRestoreServiceConfig.
+func NewServerRestoreServiceConfig(
+	restore *models.ServerRestore,
+	prepare *models.ServerRestorePrepare,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
 	secretAgent *models.SecretAgent,
 	awsS3 *models.AwsS3,
-) *ServerBackupServiceConfig {
-	return &ServerBackupServiceConfig{
-		Start:      start,
-		List:       list,
-		Validation: validation,
+) *ServerRestoreServiceConfig {
+	return &ServerRestoreServiceConfig{
+		Start:   restore,
+		Prepare: prepare,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -55,16 +51,12 @@ func NewServerBackupServiceConfig(
 }
 
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
-func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
+func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 	if err := s.Start.Validate(); err != nil {
 		return err
 	}
 
-	if err := s.List.Validate(); err != nil {
-		return err
-	}
-
-	if err := s.Validation.Validate(); err != nil {
+	if err := s.Prepare.Validate(); err != nil {
 		return err
 	}
 

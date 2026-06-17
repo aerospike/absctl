@@ -54,9 +54,3 @@ const (
 	longRestoreStart   = "Start a server-integrated restore on the Aerospike cluster."
 	longRestorePrepare = "Prepare a server-integrated restore on the Aerospike cluster."
 )
-
-// Error message prefixes used when wrapping service initialization failures.
-const (
-	errInitBackup  = "server side backup initialization failed"
-	errInitRestore = "server side restore initialization failed"
-)

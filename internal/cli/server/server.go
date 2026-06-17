@@ -23,7 +23,6 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
-	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/server"
 	asFlags "github.com/aerospike/tools-common-go/flags"
 	"github.com/spf13/cobra"
@@ -181,43 +180,29 @@ func usageFromHelp(cmd *cobra.Command) {
 	})
 }
 
-// newServiceConfig assembles a ServerBackupServiceConfig from the shared run
-// context, the operation-specific backup model and the resolved object
-// storage.
-//
-// Storage is passed explicitly so each subcommand selects its own
-// source/target — backup writes to the object store, list/validate read from
-// the listing storage — instead of inferring the operation from flag state
-// (the old SampleSize heuristic).
-func (rc *runCtx) newServiceConfig(
-	sb *models.ServerBackup,
-	aws *models.AwsS3,
-) *config.ServerBackupServiceConfig {
-	return config.NewServerBackupServiceConfig(
-		sb,
-		rc.app.GetApp(),
-		rc.aerospike.NewAerospikeConfig(),
-		rc.clientPolicy.GetClientPolicy(),
-		rc.secretAgent.GetSecretAgent(),
-		aws,
-	)
-}
-
 // newService validates cfg and constructs the server-side service, wrapping an
 // initialization failure with the supplied prefix (errInitBackup /
 // errInitRestore).
 func newService(
 	rc *runCtx,
-	cfg *config.ServerBackupServiceConfig,
-	initErr string,
+	backupCfg *config.ServerBackupServiceConfig,
+	restoreCfg *config.ServerRestoreServiceConfig,
 ) (*server.Service, error) {
-	if err := cfg.Validate(false); err != nil {
-		return nil, fmt.Errorf("failed to validate config: %w", err)
+	if backupCfg != nil {
+		if err := backupCfg.Validate(false); err != nil {
+			return nil, fmt.Errorf("failed to validate backup config: %w", err)
+		}
 	}
 
-	svc, err := server.NewService(cfg, rc.logger)
+	if restoreCfg != nil {
+		if err := restoreCfg.Validate(false); err != nil {
+			return nil, fmt.Errorf("failed to validate restore config: %w", err)
+		}
+	}
+
+	svc, err := server.NewService(backupCfg, restoreCfg, rc.logger)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", initErr, err)
+		return nil, fmt.Errorf("failed to create service: %w", err)
 	}
 
 	return svc, nil

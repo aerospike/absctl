@@ -17,16 +17,27 @@ package server
 import (
 	"fmt"
 
+	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// restoreFlags groups the storage flag holders shared by the "server restore"
+// restoreCtx groups the storage flag holders shared by the "server restore"
 // subcommands.
-type restoreFlags struct {
+type restoreCtx struct {
+	start   *flags.ServerRestore
+	prepare *flags.ServerRestorePrepare
 	// objectStorageS3 is the restore read source (start, prepare).
 	objectStorageS3 *flags.ObjectStorageS3
+}
+
+func newRestoreCtx() *restoreCtx {
+	return &restoreCtx{
+		start:           flags.NewServerRestore(),
+		prepare:         flags.NewServerRestorePrepare(),
+		objectStorageS3: flags.NewObjectStorageS3(),
+	}
 }
 
 // NewRestoreCmd builds the top-level "restore" command for server-integrated
@@ -34,9 +45,7 @@ type restoreFlags struct {
 func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
 
-	rf := &restoreFlags{
-		objectStorageS3: flags.NewObjectStorageS3(),
-	}
+	rf := newRestoreCtx()
 
 	cmd := &cobra.Command{
 		Use:   useRestore,
@@ -65,10 +74,8 @@ func setHelpRestore(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
-//nolint:dupl // Restore commands looks the same, but it should be different sub commands.
-func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	startFlags := rf.start.NewFlagSet()
 	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
 
 	cmd := &cobra.Command{
@@ -76,15 +83,23 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		Short: shortRestoreStart,
 		Long:  longRestoreStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := rc.newServiceConfig(ssbFlags.GetIntegratedBackup(), rf.objectStorageS3.ToAwsS3())
+			cfg := config.NewServerRestoreServiceConfig(
+				rf.start.GetServerRestore(),
+				nil,
+				rc.app.GetApp(),
+				rc.aerospike.NewAerospikeConfig(),
+				rc.clientPolicy.GetClientPolicy(),
+				rc.secretAgent.GetSecretAgent(),
+				rf.objectStorageS3.ToAwsS3(),
+			)
 
-			svc, err := newService(rc, cfg, errInitRestore)
+			svc, err := newService(rc, nil, cfg)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to initialize server integrated restore: %w", err)
 			}
 
 			if err := svc.StartRestore(cmd.Context()); err != nil {
-				return fmt.Errorf("server side restore failed: %w", err)
+				return fmt.Errorf("failed to start server integrated restore: %w", err)
 			}
 
 			return nil
@@ -92,10 +107,10 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	}
 
 	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(ssbFlagSet)
+	cmd.Flags().AddFlagSet(startFlags)
 	cmd.Flags().AddFlagSet(objectStoreFlagSet)
 
-	setHelpRestoreStart(cmd, ssbFlagSet, objectStoreFlagSet, common)
+	setHelpRestoreStart(cmd, startFlags, objectStoreFlagSet, common)
 
 	return cmd
 }
@@ -119,18 +134,25 @@ func setHelpRestoreStart(
 	usageFromHelp(cmd)
 }
 
-func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	prepareFlags := rf.prepare.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   usePrepare,
 		Short: shortRestorePrepare,
 		Long:  longRestorePrepare,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := rc.newServiceConfig(ssbFlags.GetIntegratedBackup(), rf.objectStorageS3.ToAwsS3())
+			cfg := config.NewServerRestoreServiceConfig(
+				nil,
+				rf.prepare.GetServerRestorePrepare(),
+				rc.app.GetApp(),
+				rc.aerospike.NewAerospikeConfig(),
+				rc.clientPolicy.GetClientPolicy(),
+				rc.secretAgent.GetSecretAgent(),
+				rf.objectStorageS3.ToAwsS3(),
+			)
 
-			svc, err := newService(rc, cfg, errInitRestore)
+			svc, err := newService(rc, nil, cfg)
 			if err != nil {
 				return err
 			}
@@ -144,9 +166,9 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	}
 
 	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(ssbFlagSet)
+	cmd.Flags().AddFlagSet(prepareFlags)
 
-	setHelpRestorePrepare(cmd, ssbFlagSet, common)
+	setHelpRestorePrepare(cmd, prepareFlags, common)
 
 	return cmd
 }

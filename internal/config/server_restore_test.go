@@ -23,25 +23,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testServerNamespace = "test-ns"
-	testServerJobID     = "backup-job-1"
-	testServerListPath  = "/backups"
-	testServerStorage   = "s3"
-)
-
-func validServerBackupServiceConfig() *ServerBackupServiceConfig {
-	return &ServerBackupServiceConfig{
-		Start: &models.ServerBackup{
+func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
+	return &ServerRestoreServiceConfig{
+		Start: &models.ServerRestore{
 			ServerCommon: models.ServerCommon{
 				Namespace: testServerNamespace,
 			},
+			JobID:       testServerJobID,
 			StorageType: testServerStorage,
 		},
-		List: &models.ServerBackupList{
-			ListPath: testServerListPath,
-		},
-		Validation: &models.ServerBackupValidate{
+		Prepare: &models.ServerRestorePrepare{
+			ServerCommon: models.ServerCommon{
+				Namespace: testServerNamespace,
+			},
 			JobID: testServerJobID,
 		},
 		ServiceConfigCommon: ServiceConfigCommon{
@@ -54,13 +48,12 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	}
 }
 
-func TestNewServerBackupServiceConfig(t *testing.T) {
+func TestNewServerRestoreServiceConfig(t *testing.T) {
 	t.Parallel()
 
 	var (
-		start        = &models.ServerBackup{}
-		list         = &models.ServerBackupList{}
-		validation   = &models.ServerBackupValidate{}
+		restore      = &models.ServerRestore{}
+		prepare      = &models.ServerRestorePrepare{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -69,33 +62,31 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 	)
 
 	tests := []struct {
-		name       string
-		start      *models.ServerBackup
-		list       *models.ServerBackupList
-		validation *models.ServerBackupValidate
-		app        *models.App
-		clientCfg  *client.AerospikeConfig
-		clientPol  *models.ClientPolicy
-		secret     *models.SecretAgent
-		awsS3      *models.AwsS3
+		name      string
+		restore   *models.ServerRestore
+		prepare   *models.ServerRestorePrepare
+		app       *models.App
+		clientCfg *client.AerospikeConfig
+		clientPol *models.ClientPolicy
+		secret    *models.SecretAgent
+		awsS3     *models.AwsS3
 	}{
 		{
-			name:       "all fields set",
-			start:      start,
-			list:       list,
-			validation: validation,
-			app:        app,
-			clientCfg:  clientCfg,
-			clientPol:  clientPolicy,
-			secret:     secretAgent,
-			awsS3:      awsS3,
+			name:      "all fields set",
+			restore:   restore,
+			prepare:   prepare,
+			app:       app,
+			clientCfg: clientCfg,
+			clientPol: clientPolicy,
+			secret:    secretAgent,
+			awsS3:     awsS3,
 		},
 		{
 			name: "all fields nil",
 		},
 		{
 			name:      "only mandatory-looking fields",
-			start:     start,
+			restore:   restore,
 			app:       app,
 			clientCfg: clientCfg,
 		},
@@ -109,10 +100,9 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := NewServerBackupServiceConfig(
-				tt.start,
-				tt.list,
-				tt.validation,
+			got := NewServerRestoreServiceConfig(
+				tt.restore,
+				tt.prepare,
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,
@@ -122,9 +112,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 
 			require.NotNil(t, got)
 
-			assert.Same(t, tt.start, got.Start)
-			assert.Same(t, tt.list, got.List)
-			assert.Same(t, tt.validation, got.Validation)
+			assert.Same(t, tt.restore, got.Start)
+			assert.Same(t, tt.prepare, got.Prepare)
 			assert.Same(t, tt.app, got.App)
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)
@@ -134,108 +123,107 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 	}
 }
 
-func TestServerBackupServiceConfig_Validate(t *testing.T) {
+func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
-		cfg        func() *ServerBackupServiceConfig
+		cfg        func() *ServerRestoreServiceConfig
 		isBackup   bool
 		wantErr    bool
 		wantErrMsg string
 	}{
 		{
 			name:     "valid config in backup mode",
-			cfg:      validServerBackupServiceConfig,
+			cfg:      validServerRestoreServiceConfig,
 			isBackup: true,
 			wantErr:  false,
 		},
 		{
 			name:     "valid config in restore mode",
-			cfg:      validServerBackupServiceConfig,
+			cfg:      validServerRestoreServiceConfig,
 			isBackup: false,
 			wantErr:  false,
 		},
 		{
 			name: "nil start skips start validation",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
 				cfg.Start = nil
 				return cfg
 			},
-			isBackup: true,
+			isBackup: false,
 			wantErr:  false,
 		},
 		{
 			name: "missing storage type",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
 				cfg.Start.StorageType = ""
 				return cfg
 			},
-			isBackup:   true,
+			isBackup:   false,
 			wantErr:    true,
 			wantErrMsg: "storage-type is required",
 		},
 		{
-			name: "nil list skips list validation",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.List = nil
+			name: "missing namespace in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Start.Namespace = ""
 				return cfg
 			},
-			isBackup: true,
-			wantErr:  false,
-		},
-		{
-			name: "missing list path",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.List.ListPath = ""
-				return cfg
-			},
-			isBackup:   true,
+			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "list-path is required",
+			wantErrMsg: "namespace is required",
 		},
 		{
-			name: "nil validation skips validation config check",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.Validation = nil
+			name: "nil prepare skips prepare validation",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Prepare = nil
 				return cfg
 			},
-			isBackup: true,
+			isBackup: false,
 			wantErr:  false,
 		},
 		{
-			name: "missing validation backup id",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.Validation.JobID = ""
+			name: "missing backup id in prepare",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Prepare.JobID = ""
 				return cfg
 			},
-			isBackup:   true,
+			isBackup:   false,
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
 		},
 		{
 			name: "multiple cloud providers configured",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
 				cfg.AwsS3 = &models.AwsS3{
-					BucketName: testBucket,
-					Region:     "us-west-2",
-					ChunkSize:  5,
+					BucketName:          testBucket,
+					Region:              "us-west-2",
+					RestorePollDuration: 1,
+					StorageCommon: models.StorageCommon{
+						RetryReadMultiplier: 2,
+						RetryReadBackoff:    100,
+					},
+					ChunkSize: 5,
 				}
 				cfg.GcpStorage = &models.GcpStorage{
 					BucketName:             testBucket,
 					RetryBackoffMultiplier: 2,
-					ChunkSize:              5,
+					StorageCommon: models.StorageCommon{
+						RetryReadMultiplier: 2,
+						RetryReadBackoff:    100,
+					},
+					ChunkSize: 5,
 				}
 				return cfg
 			},
-			isBackup:   true,
+			isBackup:   false,
 			wantErr:    true,
 			wantErrMsg: "only one cloud provider can be configured",
 		},
