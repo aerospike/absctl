@@ -57,12 +57,12 @@ type S3API interface {
 	) (*s3.HeadObjectOutput, error)
 }
 
-// ListerV2 provides functionality to list backups from an S3 bucket.
+// Lister provides functionality to list backups from an S3 bucket.
 // As development is ongoing, this is a work-in-progress, and may change.
 // It supports listing all snapshots in a given prefix, or a single snapshot.
 // The concurrency level can be configured, and the output can be logged or rendered to stderr.
 // The logger is used for logging, and stderr is used for rendering.
-type ListerV2 struct {
+type Lister struct {
 	client      S3API
 	logger      *slog.Logger
 	writer      io.Writer
@@ -73,13 +73,13 @@ type ListerV2 struct {
 	toLog bool
 }
 
-// NewListerV2 creates a new backup ListerV2.
-func NewListerV2(client S3API, bucket, prefix string, toLog bool, writer io.Writer, logger *slog.Logger) *ListerV2 {
+// NewLister creates a new backup Lister.
+func NewLister(client S3API, bucket, prefix string, toLog bool, writer io.Writer, logger *slog.Logger) *Lister {
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
 
-	return &ListerV2{
+	return &Lister{
 		bucket:      bucket,
 		prefix:      prefix,
 		client:      client,
@@ -91,7 +91,7 @@ func NewListerV2(client S3API, bucket, prefix string, toLog bool, writer io.Writ
 }
 
 // FetchAllMetadata lists all metadata files in the given prefix.
-func (l *ListerV2) FetchAllMetadata(ctx context.Context) error {
+func (l *Lister) FetchAllMetadata(ctx context.Context) error {
 	prefixes, err := l.listSnapshotPrefixes(ctx)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (l *ListerV2) FetchAllMetadata(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (l *ListerV2) printMetadata(ctx context.Context, w io.Writer, futures []chan models.Metadata, g *errgroup.Group,
+func (l *Lister) printMetadata(ctx context.Context, w io.Writer, futures []chan models.Metadata, g *errgroup.Group,
 ) error {
 	for _, f := range futures {
 		select {
@@ -182,7 +182,7 @@ func (l *ListerV2) printMetadata(ctx context.Context, w io.Writer, futures []cha
 	return nil
 }
 
-func (l *ListerV2) listSnapshotPrefixes(ctx context.Context) ([]string, error) {
+func (l *Lister) listSnapshotPrefixes(ctx context.Context) ([]string, error) {
 	var out []string
 
 	pg := s3.NewListObjectsV2Paginator(l.client, &s3.ListObjectsV2Input{
@@ -215,7 +215,7 @@ func (l *ListerV2) listSnapshotPrefixes(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-func (l *ListerV2) fetchOne(ctx context.Context, prefix string) ([]byte, error) {
+func (l *Lister) fetchOne(ctx context.Context, prefix string) ([]byte, error) {
 	key := prefix + "/" + metadataFileName
 
 	out, err := l.client.GetObject(ctx, &s3.GetObjectInput{
@@ -239,7 +239,7 @@ func (l *ListerV2) fetchOne(ctx context.Context, prefix string) ([]byte, error) 
 	return data, nil
 }
 
-func (l *ListerV2) extractTimestamp(fullPrefix string) (int64, error) {
+func (l *Lister) extractTimestamp(fullPrefix string) (int64, error) {
 	name := strings.TrimPrefix(fullPrefix, l.prefix)
 	return strconv.ParseInt(name, 10, 64)
 }

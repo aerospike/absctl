@@ -24,7 +24,6 @@ import (
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
-	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 )
@@ -34,9 +33,6 @@ const messageNoRunningBackup = "No running backup found"
 // Service represents a server integrated backup and restore service.
 type Service struct {
 	config *config.ServerBackupServiceConfig
-	reader backup.StreamingReader
-
-	// reportToLog bool
 	logger *slog.Logger
 }
 
@@ -51,7 +47,31 @@ func NewService(
 	}, nil
 }
 
-func (s *Service) ListBackupsV2(ctx context.Context) error {
+// newInfoClient separate function for a lazy load.
+func (s *Service) newInfoClient() (*asinfo.Client, error) {
+	aerospikeClient, err := storage.NewAerospikeClient(
+		s.config.ClientConfig,
+		s.config.ClientPolicy,
+		nil,
+		0,
+		s.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
+	}
+
+	infoClient, err := asinfo.NewClient(
+		aerospikeClient.Cluster(),
+		aerospike.NewInfoPolicy(),
+		models.NewDefaultRetryPolicy(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create info client: %w", err)
+	}
+
+	return infoClient, nil
+}
+
+func (s *Service) ListBackups(ctx context.Context) error {
 	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
@@ -59,7 +79,7 @@ func (s *Service) ListBackupsV2(ctx context.Context) error {
 
 	w := logging.GetMetadataWriter(s.config.App.LogJSON)
 
-	l := NewListerV2(client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
+	l := NewLister(client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
 
 	if err := l.FetchAllMetadata(ctx); err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
@@ -177,30 +197,6 @@ func (s *Service) GetStatus(ctx context.Context) error {
 		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
 
 	return nil
-}
-
-// newInfoClient separate function for a lazy load.
-func (s *Service) newInfoClient() (*asinfo.Client, error) {
-	aerospikeClient, err := storage.NewAerospikeClient(
-		s.config.ClientConfig,
-		s.config.ClientPolicy,
-		nil,
-		0,
-		s.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
-	}
-
-	infoClient, err := asinfo.NewClient(
-		aerospikeClient.Cluster(),
-		aerospike.NewInfoPolicy(),
-		models.NewDefaultRetryPolicy(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create info client: %w", err)
-	}
-
-	return infoClient, nil
 }
 
 func (s *Service) Validate(ctx context.Context) error {

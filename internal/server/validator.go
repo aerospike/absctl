@@ -555,23 +555,23 @@ func (v *Validator) printReport(r *Report) {
 func (v *Validator) logReport(r *Report) {
 	if len(r.Issues) == 0 {
 		v.logger.Info("backup validation passed",
-			slog.String("backupId", r.BackupID),
-			slog.Int("totalSegments", r.TotalSegments),
-			slog.Int("checkedSegments", r.CheckedSegments),
-			slog.Int("verifiedByMetadata", r.VerifiedByMetadata),
-			slog.Int("verifiedByDownload", r.VerifiedByDownload),
+			slog.String("backup-id", r.BackupID),
+			slog.Int("total-segments", r.TotalSegments),
+			slog.Int("checked-segments", r.CheckedSegments),
+			slog.Int("verified-by-metadata", r.VerifiedByMetadata),
+			slog.Int("verified-by-download", r.VerifiedByDownload),
 		)
 
 		return
 	}
 
 	v.logger.Error("backup validation failed",
-		slog.String("backupId", r.BackupID),
-		slog.Int("totalSegments", r.TotalSegments),
-		slog.Int("checkedSegments", r.CheckedSegments),
-		slog.Int("verifiedByMetadata", r.VerifiedByMetadata),
-		slog.Int("verifiedByDownload", r.VerifiedByDownload),
-		slog.Int("damagedSegments", len(r.Issues)),
+		slog.String("backup-id", r.BackupID),
+		slog.Int("total-segments", r.TotalSegments),
+		slog.Int("checked-segments", r.CheckedSegments),
+		slog.Int("verified-by-metadata", r.VerifiedByMetadata),
+		slog.Int("verified-by-download", r.VerifiedByDownload),
+		slog.Int("damaged-segments", len(r.Issues)),
 	)
 
 	for _, issue := range r.Issues {

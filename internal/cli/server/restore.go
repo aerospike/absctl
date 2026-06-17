@@ -16,23 +16,21 @@ package server
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
-	"github.com/aerospike/absctl/internal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// restoreFlags groups the operation-specific flag holders shared by all
-// "server restore" subcommands.
+// restoreFlags groups the storage flag holders shared by the "server restore"
+// subcommands.
 type restoreFlags struct {
-	// Used for restore.
+	// objectStorageS3 is the restore read source (start, prepare).
 	objectStorageS3 *flags.ObjectStorageS3
 }
 
-// NewRestoreCmd builds the top-level "restore" command for server-integrated restores.
+// NewRestoreCmd builds the top-level "restore" command for server-integrated
+// restores.
 func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
 
@@ -42,7 +40,7 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 
 	cmd := &cobra.Command{
 		Use:   useRestore,
-		Short: "Manage server-integrated restores",
+		Short: shortRestore,
 	}
 
 	cmd.AddCommand(
@@ -50,6 +48,7 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 		newRestorePrepareCmd(rc, rf),
 	)
 
+	applyRootPersistent(cmd, rc)
 	setHelpRestore(cmd)
 
 	return cmd
@@ -57,27 +56,16 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 
 func setHelpRestore(cmd *cobra.Command) {
 	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		fmt.Println(backupWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
-		fmt.Println(flags.SectionTextUsageRestoreServer)
+		w := c.OutOrStdout()
 
-		fmt.Println(flags.SectionAvailableCommands)
-
-		for _, sub := range c.Commands() {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
-
-			fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
-		}
+		printHelpHeader(w, flags.SectionTextUsageRestoreServer)
+		printCommands(w, c)
 	})
 
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
+	usageFromHelp(cmd)
 }
 
+//nolint:dupl // Restore commands looks the same, but it should be different sub commands.
 func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 	ssbFlags := flags.NewServerBackup()
 	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
@@ -85,18 +73,14 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   useStart,
-		Short: "Start a server-integrated restore",
-		Long:  "Start a server-integrated restore on the Aerospike cluster.",
+		Short: shortRestoreStart,
+		Long:  longRestoreStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
+			cfg := rc.newServiceConfig(ssbFlags.GetIntegratedBackup(), rf.objectStorageS3.ToAwsS3())
 
-			if err := cfg.Validate(false); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
-			}
-
-			svc, err := server.NewService(cfg, rc.logger)
+			svc, err := newService(rc, cfg, errInitRestore)
 			if err != nil {
-				return fmt.Errorf("server side restore initialization failed: %w", err)
+				return err
 			}
 
 			if err := svc.StartRestore(cmd.Context()); err != nil {
@@ -107,49 +91,32 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		},
 	}
 
-	commonFlagSet := applyCommon(cmd, rc)
+	common := applyCommon(cmd, rc)
 	cmd.Flags().AddFlagSet(ssbFlagSet)
 	cmd.Flags().AddFlagSet(objectStoreFlagSet)
 
-	setHelpRestoreStart(cmd, ssbFlagSet, objectStoreFlagSet, commonFlagSet)
+	setHelpRestoreStart(cmd, ssbFlagSet, objectStoreFlagSet, common)
 
 	return cmd
 }
 
-//nolint:dupl // Each sub-command should have it's own help.
-func setHelpRestoreStart(cmd *cobra.Command, ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
-	commonFlagSet []*pflag.FlagSet) {
-	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		fmt.Println(backupWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
-		fmt.Println(flags.SectionTextUsageRestoreStart)
+func setHelpRestoreStart(
+	cmd *cobra.Command,
+	ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
+	common commonFlagSets,
+) {
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		w := c.OutOrStdout()
 
-		// Print section: App Flags
-		fmt.Println(flags.SectionTextGeneral)
-		commonFlagSet[0].PrintDefaults()
-
-		// Print section: Common Flags
-		fmt.Println(flags.SectionTextAerospike)
-		commonFlagSet[1].PrintDefaults()
-		commonFlagSet[2].PrintDefaults()
-
-		// Print section: Restore Flags
-		fmt.Println(flags.SectionTextRestore)
-		ssbFlagSet.PrintDefaults()
-
-		// Print section: AWS Flags
-		fmt.Println(flags.SectionTextAWS)
-		objectStoreFlagSet.PrintDefaults()
-
-		// Print section: Secret Agent Flags
-		fmt.Println(flags.SectionTextSecretAgentBackup)
-		commonFlagSet[3].PrintDefaults()
+		printHelpHeader(w, flags.SectionTextUsageRestoreStart)
+		printSection(w, flags.SectionTextGeneral, common.app)
+		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(w, flags.SectionTextRestore, ssbFlagSet)
+		printSection(w, flags.SectionTextAWS, objectStoreFlagSet)
+		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
+	usageFromHelp(cmd)
 }
 
 func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
@@ -158,18 +125,14 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   usePrepare,
-		Short: "Prepare a server-integrated restore",
-		Long:  "Prepare a server-integrated restore on the Aerospike cluster.",
+		Short: shortRestorePrepare,
+		Long:  longRestorePrepare,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
+			cfg := rc.newServiceConfig(ssbFlags.GetIntegratedBackup(), rf.objectStorageS3.ToAwsS3())
 
-			if err := cfg.Validate(false); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
-			}
-
-			svc, err := server.NewService(cfg, rc.logger)
+			svc, err := newService(rc, cfg, errInitRestore)
 			if err != nil {
-				return fmt.Errorf("server side restore initialization failed: %w", err)
+				return err
 			}
 
 			if err := svc.PrepareRestore(cmd.Context()); err != nil {
@@ -180,58 +143,24 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		},
 	}
 
-	commonFlagSet := applyCommon(cmd, rc)
+	common := applyCommon(cmd, rc)
 	cmd.Flags().AddFlagSet(ssbFlagSet)
 
-	setHelpRestorePrepare(cmd, ssbFlagSet, commonFlagSet)
+	setHelpRestorePrepare(cmd, ssbFlagSet, common)
 
 	return cmd
 }
 
-func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet,
-	commonFlagSet []*pflag.FlagSet) {
-	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		fmt.Println(backupWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
-		fmt.Println(flags.SectionTextUsageRestorePrepare)
+func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet, common commonFlagSets) {
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		w := c.OutOrStdout()
 
-		// Print section: App Flags
-		fmt.Println(flags.SectionTextGeneral)
-		commonFlagSet[0].PrintDefaults()
-
-		// Print section: Common Flags
-		fmt.Println(flags.SectionTextAerospike)
-		commonFlagSet[1].PrintDefaults()
-		commonFlagSet[2].PrintDefaults()
-
-		// Print section: Restore Flags
-		fmt.Println(flags.SectionTextRestore)
-		ssbFlagSet.PrintDefaults()
-
-		// Print section: Secret Agent Flags
-		fmt.Println(flags.SectionTextSecretAgentBackup)
-		commonFlagSet[3].PrintDefaults()
+		printHelpHeader(w, flags.SectionTextUsageRestorePrepare)
+		printSection(w, flags.SectionTextGeneral, common.app)
+		printSection(w, flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
+		printSection(w, flags.SectionTextRestore, ssbFlagSet)
+		printSection(w, flags.SectionTextSecretAgentBackup, common.secretAgent)
 	})
 
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
-}
-
-// newIntegratedRestoreConfig builds the IntegratedServiceConfig from the flag
-// objects collected on the parent commands.
-func newIntegratedRestoreConfig(
-	rc *runCtx,
-	rf *restoreFlags,
-	sb *flags.ServerBackup,
-) *config.ServerBackupServiceConfig {
-	return config.NewServerBackupServiceConfig(
-		sb.GetIntegratedBackup(),
-		rc.app.GetApp(),
-		rc.aerospike.NewAerospikeConfig(),
-		rc.clientPolicy.GetClientPolicy(),
-		rc.secretAgent.GetSecretAgent(),
-		rf.objectStorageS3.ToAwsS3(),
-	)
+	usageFromHelp(cmd)
 }
