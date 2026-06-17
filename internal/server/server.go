@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
@@ -122,6 +123,24 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
+	var mb, ma string
+
+	if s.backupCfg.Start.ModifiedBefore != "" {
+		mbt, err := s.backupCfg.Start.ModifiedBeforeTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified-before time: %w", err)
+		}
+		mb = strconv.FormatInt(mbt.Unix(), 10)
+	}
+
+	if s.backupCfg.Start.ModifiedAfter != "" {
+		mat, err := s.backupCfg.Start.ModifiedAfterTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified-after time: %w", err)
+		}
+		ma = strconv.FormatInt(mat.Unix(), 10)
+	}
+
 	JobID, err := client.StartServerBackup(
 		ctx,
 		s.backupCfg.Start.Namespace,
@@ -131,8 +150,8 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		s.backupCfg.AwsS3.Profile,
 		s.backupCfg.AwsS3.AccessKeyID,
 		s.backupCfg.AwsS3.SecretAccessKey,
-		s.backupCfg.Start.ModifiedBefore,
-		s.backupCfg.Start.ModifiedAfter,
+		mb,
+		ma,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
