@@ -96,7 +96,7 @@ func TestRestoreHandler_Status(t *testing.T) {
 	assert.Equal(t, "/v1/restore/status/42", rec.path)
 
 	out := buf.String()
-	assert.Contains(t, out, `"jobId":42`)
+	assert.Contains(t, out, `"job-id":42`)
 	assert.Contains(t, out, `"read-records":100`)
 }
 

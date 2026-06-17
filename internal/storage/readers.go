@@ -185,17 +185,16 @@ func NewReader(
 
 	logger.Info("initializing storage for reader",
 		slog.String("directory", directory),
-		slog.String("inputFile", inputFile),
-		slog.String("parentDirectory", parentDirectory),
-		slog.String("directoryList", directoryList),
+		slog.String("input-file", inputFile),
+		slog.String("parent-directory", parentDirectory),
+		slog.String("directory-list", directoryList),
 	)
 
 	switch {
 	case cfg.AwsS3 != nil && cfg.AwsS3.BucketName != "":
 		defer logger.Info("initialized AWS storage reader",
 			slog.String("bucket", cfg.AwsS3.BucketName),
-			slog.String("accessTier", cfg.AwsS3.AccessTier),
-			slog.Int("chunkSize", cfg.AwsS3.ChunkSize),
+			slog.String("access-tier", cfg.AwsS3.AccessTier),
 			slog.String("endpoint", cfg.AwsS3.Endpoint),
 		)
 
@@ -203,7 +202,6 @@ func NewReader(
 	case cfg.GcpStorage != nil && cfg.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage reader",
 			slog.String("bucket", cfg.GcpStorage.BucketName),
-			slog.Int("chunkSize", cfg.GcpStorage.ChunkSize),
 			slog.String("endpoint", cfg.GcpStorage.Endpoint),
 		)
 
@@ -211,8 +209,7 @@ func NewReader(
 	case cfg.AzureBlob != nil && cfg.AzureBlob.ContainerName != "":
 		defer logger.Info("initialized Azure storage reader",
 			slog.String("container", cfg.AzureBlob.ContainerName),
-			slog.String("accessTier", cfg.AzureBlob.AccessTier),
-			slog.Int("blockSize", cfg.AzureBlob.BlockSize),
+			slog.String("access-tier", cfg.AzureBlob.AccessTier),
 			slog.String("endpoint", cfg.AzureBlob.Endpoint),
 		)
 

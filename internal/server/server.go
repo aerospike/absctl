@@ -118,7 +118,6 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	}
 
 	s.logger.Info("Server integrated backup started",
-		//nolint:sloglint // Name parameter as flag.
 		slog.String("backup-id", JobID))
 
 	return nil
@@ -147,7 +146,6 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	}
 
 	s.logger.Info("Server integrated restore started",
-		//nolint:sloglint // Name parameter as flag.
 		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil
@@ -170,7 +168,6 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	}
 
 	s.logger.Info("Restore preparation started",
-		//nolint:sloglint // Name parameter as flag.
 		slog.String("backup-id", s.config.ServerBackup.JobID))
 
 	return nil

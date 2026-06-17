@@ -63,7 +63,7 @@ linters:
       require-specific: true
     sloglint:
       attr-only: true
-      key-naming-case: camel
+      key-naming-case: kebab
       forbidden-keys:
         - err # let's only use slog.Any("error", err)
     usetesting:

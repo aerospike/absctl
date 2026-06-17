@@ -61,6 +61,6 @@ func TestPrintRestoreStatus_JSON(t *testing.T) {
 		PrintRestoreStatus(sampleRestoreStatus(), 42, true, logger)
 	})
 
-	assert.Contains(t, out, `"jobId":42`)
+	assert.Contains(t, out, `"job-id":42`)
 	assert.Contains(t, out, `"read-records":1000`)
 }

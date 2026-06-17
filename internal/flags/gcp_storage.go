@@ -68,7 +68,7 @@ func (f *GcpStorage) NewFlagSet() *pflag.FlagSet {
 			models.DefaultGcpChunkSize,
 			"Chunk size controls the maximum number of megabytes of the object that the app will attempt to send to\n"+
 				"the storage in a single request. Objects smaller than the size will be sent in a single request,\n"+
-				"while larger objects will be split over multiple requests.")
+				"while larger objects will be split over multiple requests. Minimum value is 1.")
 
 		flagSet.BoolVar(&f.CalculateChecksum, flagGcpCalculateChecksum,
 			models.DefaultCloudCalculateChecksum,

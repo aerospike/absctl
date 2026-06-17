@@ -54,7 +54,7 @@ func newRestoreIncrementalStartCmd(rc *runCtx) *cobra.Command {
 				return err
 			}
 
-			rc.logger.Info("incremental restore started successfully", slog.String("jobId", jobID))
+			rc.logger.Info("incremental restore started successfully", slog.String("job-id", jobID))
 
 			return nil
 		},
