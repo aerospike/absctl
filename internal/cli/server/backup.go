@@ -56,6 +56,8 @@ func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime strin
 		newBackupValidateCmd(rc, bf),
 	)
 
+	cmd.PersistentFlags().AddFlagSet(rc.app.NewFlagSet())
+
 	setHelpBackup(cmd)
 
 	return cmd
@@ -290,12 +292,12 @@ func newBackupValidateCmd(rc *runCtx, bf *backupFlags) *cobra.Command {
 	cmd.Flags().AddFlagSet(ssbFlagSet)
 	cmd.Flags().AddFlagSet(awsFlagSet)
 
-	setHelpValidateList(cmd, awsFlagSet, ssbFlagSet)
+	setHelpValidate(cmd, awsFlagSet, ssbFlagSet)
 
 	return cmd
 }
 
-func setHelpValidateList(cmd *cobra.Command, awsFlagSet, ssbFlagSet *pflag.FlagSet) {
+func setHelpValidate(cmd *cobra.Command, awsFlagSet, ssbFlagSet *pflag.FlagSet) {
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
 		fmt.Println(backupWelcomeMessage)
 		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
@@ -321,14 +323,18 @@ func setHelpValidateList(cmd *cobra.Command, awsFlagSet, ssbFlagSet *pflag.FlagS
 func newIntegratedBackupConfig(
 	rc *runCtx,
 	bf *backupFlags,
-	sbFlags *flags.ServerBackup,
+	sb *flags.ServerBackup,
 ) *config.ServerBackupServiceConfig {
 	var sbCfg *models.ServerBackup
 	awsCfg := bf.aws.GetAwsS3()
-
-	if sbFlags != nil {
-		sbCfg = sbFlags.GetIntegratedBackup()
+	// TODO: refactore this!
+	if sb != nil && sb.SampleSize == 0 {
+		sbCfg = sb.GetIntegratedBackup()
 		awsCfg = bf.objectStorageS3.ToAwsS3()
+	}
+
+	if sb != nil && sb.SampleSize != 0 {
+		sbCfg = sb.GetIntegratedBackup()
 	}
 
 	return config.NewServerBackupServiceConfig(

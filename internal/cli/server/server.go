@@ -83,10 +83,9 @@ func applyCommon(cmd *cobra.Command, rc *runCtx) []*pflag.FlagSet {
 	clientPolicyFlagSet := rc.clientPolicy.NewFlagSet()
 	secretAgentFlagSet := rc.secretAgent.NewFlagSet()
 
-	cmd.PersistentFlags().AddFlagSet(appFlagSet)
-	cmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	cmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
-	cmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	cmd.Flags().AddFlagSet(aerospikeFlagSet)
+	cmd.Flags().AddFlagSet(clientPolicyFlagSet)
+	cmd.Flags().AddFlagSet(secretAgentFlagSet)
 
 	var loggerClose func() error
 

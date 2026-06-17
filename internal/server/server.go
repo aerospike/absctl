@@ -51,29 +51,6 @@ func NewService(
 	}, nil
 }
 
-func (s *Service) Run(ctx context.Context) error {
-	switch {
-	case s.config.ServerBackup.ListPath != "":
-		return s.ListBackups(ctx)
-	default:
-		return s.StartBackup(ctx)
-	}
-}
-
-func (s *Service) ListBackups(ctx context.Context) error {
-	l := NewLister(s.reader, s.logger, s.config.App.LogJSON)
-
-	if s.config.ServerBackup.ListPath == "/" || s.config.ServerBackup.ListPath == "\\" {
-		s.config.ServerBackup.ListPath = ""
-	}
-
-	if err := l.listBackups(ctx, s.config.ServerBackup.ListPath); err != nil {
-		return fmt.Errorf("failed to list backups: %w", err)
-	}
-
-	return nil
-}
-
 func (s *Service) ListBackupsV2(ctx context.Context) error {
 	client, err := storage.NewS3Client(ctx, s.config.AwsS3)
 	if err != nil {
@@ -239,7 +216,7 @@ func (s *Service) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to validate: %w", err)
 	}
 
-	fmt.Println(report)
+	v.printReport(report)
 
 	return nil
 }

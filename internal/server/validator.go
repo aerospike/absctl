@@ -183,7 +183,6 @@ func (v *Validator) Validate(ctx context.Context, backupID string, sampleSize in
 		VerifiedByDownload: outcome.verifiedByDownload,
 		Issues:             outcome.issues,
 	}
-	v.printReport(report)
 
 	return report, nil
 }

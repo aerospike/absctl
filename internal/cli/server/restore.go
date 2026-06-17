@@ -224,10 +224,10 @@ func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet,
 func newIntegratedRestoreConfig(
 	rc *runCtx,
 	rf *restoreFlags,
-	ssbFlags *flags.ServerBackup,
+	sb *flags.ServerBackup,
 ) *config.ServerBackupServiceConfig {
 	return config.NewServerBackupServiceConfig(
-		ssbFlags.GetIntegratedBackup(),
+		sb.GetIntegratedBackup(),
 		rc.app.GetApp(),
 		rc.aerospike.NewAerospikeConfig(),
 		rc.clientPolicy.GetClientPolicy(),
