@@ -17,6 +17,9 @@ package flags
 // Text for usage pretty-print.
 
 const (
+	// SectionDocgenMarker splits generated markdown docs into a static header and dynamic content.
+	SectionDocgenMarker = "\n<!-- docgen -->\n"
+
 	SectionTextUsageBackup  = "\nUsage:\n  absctl backup [flags]"
 	SectionTextUsageRestore = "\nUsage:\n  absctl restore [flags]"
 

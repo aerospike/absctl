@@ -48,8 +48,8 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 	rf := newRestoreCtx()
 
 	cmd := &cobra.Command{
-		Use:   useRestore,
-		Short: shortRestore,
+		Use:   UseRestore,
+		Short: ShortRestore,
 	}
 
 	cmd.AddCommand(
@@ -77,9 +77,9 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   useStart,
-		Short: shortRestoreStart,
-		Long:  longRestoreStart,
+		Use:   UseStart,
+		Short: ShortRestoreStart,
+		Long:  LongRestoreStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := config.NewServerRestoreServiceConfig(
 				rf.start.GetServerRestore(),
@@ -115,16 +115,16 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 
 func setHelpRestoreStart(
 	cmd *cobra.Command,
-	ssbFlagSet, objectStoreFlagSet *pflag.FlagSet,
+	startFS, objectStoreFS *pflag.FlagSet,
 	common commonFlagSets,
 ) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreStart,
+		Sections: restoreStartHelpSections(startFS, objectStoreFS, common),
+	}
+
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		printHelpHeader(flags.SectionTextUsageRestoreStart)
-		printSection(flags.SectionTextGeneral, common.app)
-		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(flags.SectionTextRestore, ssbFlagSet)
-		printSection(flags.SectionTextAWS, objectStoreFlagSet)
-		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
+		printSubcommandHelp(doc)
 	})
 
 	usageFromHelp(cmd)
@@ -134,9 +134,9 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	prepareFlags := rf.prepare.NewFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   usePrepare,
-		Short: shortRestorePrepare,
-		Long:  longRestorePrepare,
+		Use:   UsePrepare,
+		Short: ShortRestorePrepare,
+		Long:  LongRestorePrepare,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := config.NewServerRestoreServiceConfig(
 				nil,
@@ -169,13 +169,14 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	return cmd
 }
 
-func setHelpRestorePrepare(cmd *cobra.Command, ssbFlagSet *pflag.FlagSet, common commonFlagSets) {
+func setHelpRestorePrepare(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestorePrepare,
+		Sections: restorePrepareHelpSections(prepareFS, common),
+	}
+
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		printHelpHeader(flags.SectionTextUsageRestorePrepare)
-		printSection(flags.SectionTextGeneral, common.app)
-		printSection(flags.SectionTextAerospike, common.aerospike, common.clientPolicy)
-		printSection(flags.SectionTextRestore, ssbFlagSet)
-		printSection(flags.SectionTextSecretAgentBackup, common.secretAgent)
+		printSubcommandHelp(doc)
 	})
 
 	usageFromHelp(cmd)

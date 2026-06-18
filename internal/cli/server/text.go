@@ -24,33 +24,33 @@ const textWelcomeMessage = "Welcome to the Aerospike backup CLI tool!"
 
 // Command names (cobra "Use" values).
 const (
-	useBackup   = "backup"
-	useRestore  = "restore"
-	useStart    = "start"
-	useList     = "list"
-	useProgress = "progress"
-	usePrepare  = "prepare"
-	useValidate = "validate"
+	UseBackup   = "backup"
+	UseRestore  = "restore"
+	UseStart    = "start"
+	UseList     = "list"
+	UseProgress = "progress"
+	UsePrepare  = "prepare"
+	UseValidate = "validate"
 )
 
 // Short descriptions (cobra "Short" values).
 const (
-	shortBackup         = "Manage server-integrated backups"
-	shortBackupStart    = "Start a server-integrated backup"
-	shortBackupList     = "List server-integrated backups"
-	shortBackupProgress = "Show the progress of a backup"
-	shortBackupValidate = "Validate server-integrated backups"
-	shortRestore        = "Manage server-integrated restores"
-	shortRestoreStart   = "Start a server-integrated restore"
-	shortRestorePrepare = "Prepare a server-integrated restore"
+	ShortBackup         = "Manage server-integrated backups"
+	ShortBackupStart    = "Start a server-integrated backup"
+	ShortBackupList     = "List server-integrated backups"
+	ShortBackupProgress = "Show the progress of a backup"
+	ShortBackupValidate = "Validate server-integrated backups"
+	ShortRestore        = "Manage server-integrated restores"
+	ShortRestoreStart   = "Start a server-integrated restore"
+	ShortRestorePrepare = "Prepare a server-integrated restore"
 )
 
 // Long descriptions (cobra "Long" values).
 const (
-	longBackupStart    = "Start a server-integrated backup on the Aerospike cluster."
-	longBackupList     = "List available server-integrated backups from the configured storage."
-	longBackupProgress = "Show the progress of a currently running server-integrated backup."
-	longBackupValidate = "Validate available server-integrated backups from the configured storage."
-	longRestoreStart   = "Start a server-integrated restore on the Aerospike cluster."
-	longRestorePrepare = "Prepare a server-integrated restore on the Aerospike cluster."
+	LongBackupStart    = "Start a server-integrated backup on the Aerospike cluster."
+	LongBackupList     = "List available server-integrated backups from the configured storage."
+	LongBackupProgress = "Show the progress of a currently running server-integrated backup."
+	LongBackupValidate = "Validate available server-integrated backups from the configured storage."
+	LongRestoreStart   = "Start a server-integrated restore on the Aerospike cluster."
+	LongRestorePrepare = "Prepare a server-integrated restore on the Aerospike cluster."
 )

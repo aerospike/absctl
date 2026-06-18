@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// docgen generates README.md files for the backup and restore commands.
+// docgen generates README.md files for scan backup/restore and server backup/restore commands.
 // Flag descriptions and default values are pulled from the flag definitions
 // in internal/flags, and the YAML configuration schema is built from the
 // DTO structs in internal/config/dto with comments derived from flag usage text.
 //
 // Usage:
 //
-//	go run ./cmd/docgen
+//	go run docs/docgen/main.go
 //	make docs-generate
 package main
 
@@ -32,6 +32,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/config/dto"
 	"github.com/aerospike/absctl/internal/flags"
 	asFlags "github.com/aerospike/tools-common-go/flags"
@@ -48,8 +49,10 @@ const (
 	// sectionConfigSchema is used to split the existing README into a static header.
 	sectionConfigSchema = "\n## Configuration file schema with example values\n"
 
-	// Path where to save docs.
+	// Path where to save scan backup/restore docs.
 	docPath = "./docs"
+	// Path where to save server backup/restore docs.
+	serverDocPath = "./docs/server"
 
 	opBackup  = "backup"
 	opRestore = "restore"
@@ -68,14 +71,26 @@ type docSection struct {
 
 func main() {
 	for _, op := range []string{opBackup, opRestore} {
-		if err := generate(op); err != nil {
-			log.Fatalf("failed to generate %s readme: %v", op, err)
+		if err := generateScan(op); err != nil {
+			log.Fatalf("failed to generate scan %s readme: %v", op, err)
+		}
+	}
+
+	for _, gen := range []struct {
+		name string
+		build func() []server.SubcommandDoc
+	}{
+		{opBackup, server.BuildBackupSubcommandDocs},
+		{opRestore, server.BuildRestoreSubcommandDocs},
+	} {
+		if err := generateServer(gen.name, gen.build()); err != nil {
+			log.Fatalf("failed to generate server %s docs: %v", gen.name, err)
 		}
 	}
 }
 
-// generate reads the existing README, preserves the static header, and regenerates all dynamic sections.
-func generate(operation string) error {
+// generateScan reads the existing README, preserves the static header, and regenerates all dynamic sections.
+func generateScan(operation string) error {
 	readmePath := filepath.Join(docPath, operation, "readme.md")
 
 	existing, err := os.ReadFile(readmePath)
@@ -129,6 +144,64 @@ func generate(operation string) error {
 	sb.WriteString("```\n")
 
 	return os.WriteFile(readmePath, []byte(sb.String()), 0o644)
+}
+
+// generateServer reads the existing markdown file, preserves the static header,
+// and regenerates one section per subcommand with flags and descriptions.
+func generateServer(name string, subcommands []server.SubcommandDoc) error {
+	docPath := filepath.Join(serverDocPath, name+".md")
+
+	existing, err := os.ReadFile(docPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", docPath, err)
+	}
+
+	idx := strings.Index(string(existing), flags.SectionDocgenMarker)
+	if idx == -1 {
+		return fmt.Errorf("marker %q not found in %s", flags.SectionDocgenMarker, docPath)
+	}
+
+	staticHeader := string(existing[:idx+len(flags.SectionDocgenMarker)])
+
+	var sb strings.Builder
+	sb.WriteString(staticHeader)
+
+	for _, sub := range subcommands {
+		sb.WriteString(fmt.Sprintf("\n## %s\n\n", sub.Name))
+		sb.WriteString(sub.Short)
+		sb.WriteString("\n\n")
+
+		if sub.Long != "" && sub.Long != sub.Short {
+			sb.WriteString(sub.Long)
+			sb.WriteString("\n\n")
+		}
+
+		sb.WriteString("### Supported flags\n")
+		sb.WriteString("```bash\n")
+		sb.WriteString(sub.Usage)
+		sb.WriteString("\n")
+		sb.WriteString(generateHelpSectionsContent(sub.Sections))
+		sb.WriteString("```\n")
+	}
+
+	return os.WriteFile(docPath, []byte(sb.String()), 0o644)
+}
+
+func generateHelpSectionsContent(sections []server.HelpSection) string {
+	var sb strings.Builder
+
+	for _, sec := range sections {
+		if sec.Title != "" {
+			sb.WriteString(sec.Title)
+			sb.WriteString("\n")
+		}
+
+		for _, fs := range sec.FlagSets {
+			sb.WriteString(fsStr(fs))
+		}
+	}
+
+	return sb.String()
 }
 
 // buildSections constructs all FlagSets and associates them with their markdown headers and YAML mappings.

@@ -138,6 +138,17 @@ func applyCommon(cmd *cobra.Command, rc *runCtx) commonFlagSets {
 	return fs
 }
 
+// printSubcommandHelp writes the usage line and flag sections for a subcommand.
+//
+//nolint:gocritic // THis is doc gen function we don't need to optimize it and use pointer instead.
+func printSubcommandHelp(doc SubcommandDoc) {
+	printHelpHeader(doc.Usage)
+
+	for _, sec := range doc.Sections {
+		printSection(sec.Title, sec.FlagSets...)
+	}
+}
+
 // printHelpHeader writes the welcome banner, a matching underline and the
 // usage section for a command.
 func printHelpHeader(usage string) {
