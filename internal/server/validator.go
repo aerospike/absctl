@@ -25,12 +25,13 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/aerospike/absctl/internal/logging"
+	sModels "github.com/aerospike/absctl/internal/server/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -71,30 +72,6 @@ func NewValidator(client S3API, bucket string, toLog bool, logger *slog.Logger) 
 		toLog:    toLog,
 		parallel: parallel,
 	}
-}
-
-// Report is the outcome of a backup validation run.
-type Report struct {
-	BackupID        string
-	TotalSegments   int // total number of segments discovered in all manifests
-	CheckedSegments int // number of segments actually validated
-	// VerifiedByMetadata is the number of segments whose checksum was taken
-	// from the S3 object metadata (no body download).
-	VerifiedByMetadata int
-	// VerifiedByDownload is the number of segments whose checksum had to be
-	// computed by downloading the object body.
-	VerifiedByDownload int
-	Issues             []SegmentIssue
-}
-
-// SegmentIssue describes a single segment that failed validation, either
-// because its checksum did not match or because it could not be validated.
-type SegmentIssue struct {
-	Namespace   string
-	SegmentName string
-	Expected    string
-	Got         string
-	Err         error // non-nil when the segment could not be validated at all
 }
 
 // manifest mirrors the on-disk manifest.json structure.
@@ -146,7 +123,7 @@ type segmentResult struct {
 // If sampleSize is SampleAll (or not less than the total number of segments),
 // every segment is checked. Otherwise sampleSize segments are selected
 // randomly but spread evenly across the whole backup.
-func (v *Validator) Validate(ctx context.Context, backupID string, sampleSize int) (*Report, error) {
+func (v *Validator) Validate(ctx context.Context, backupID string, sampleSize int) (*sModels.Report, error) {
 	if backupID == "" {
 		return nil, errors.New("backup id must not be empty")
 	}
@@ -175,7 +152,7 @@ func (v *Validator) Validate(ctx context.Context, backupID string, sampleSize in
 		return nil, err
 	}
 
-	report := &Report{
+	report := &sModels.Report{
 		BackupID:           backupID,
 		TotalSegments:      len(refs),
 		CheckedSegments:    len(selected),
@@ -358,7 +335,7 @@ func (v *Validator) getManifest(ctx context.Context, key string) (*manifest, err
 
 // validationOutcome aggregates the result of validating a set of segments.
 type validationOutcome struct {
-	issues             []SegmentIssue
+	issues             []sModels.SegmentIssue
 	verifiedByMetadata int
 	verifiedByDownload int
 }
@@ -369,7 +346,7 @@ type validationOutcome struct {
 func (v *Validator) validate(ctx context.Context, refs []segmentRef) (validationOutcome, error) {
 	var (
 		mu     sync.Mutex
-		issues []SegmentIssue
+		issues []sModels.SegmentIssue
 
 		byMetadata atomic.Int64
 		byDownload atomic.Int64
@@ -401,7 +378,7 @@ func (v *Validator) validate(ctx context.Context, refs []segmentRef) (validation
 
 			mu.Lock()
 
-			issues = append(issues, SegmentIssue{
+			issues = append(issues, sModels.SegmentIssue{
 				Namespace:   ref.namespace,
 				SegmentName: ref.name,
 				Expected:    normalizeChecksum(ref.checksum),
@@ -543,16 +520,16 @@ func formatChecksum(crc uint32) string {
 }
 
 // printReport renders the report either through the logger or to stderr.
-func (v *Validator) printReport(r *Report) {
+func (v *Validator) printReport(r *sModels.Report) {
 	if v.toLog {
 		v.logReport(r)
 		return
 	}
 
-	v.writeReport(os.Stderr, r)
+	logging.PrintServerValidationReport(r)
 }
 
-func (v *Validator) logReport(r *Report) {
+func (v *Validator) logReport(r *sModels.Report) {
 	if len(r.Issues) == 0 {
 		v.logger.Info("backup validation passed",
 			slog.String("backup-id", r.BackupID),
@@ -587,29 +564,5 @@ func (v *Validator) logReport(r *Report) {
 		}
 
 		v.logger.Error("damaged segment", attrs...)
-	}
-}
-
-func (v *Validator) writeReport(w io.Writer, r *Report) {
-	if len(r.Issues) == 0 {
-		fmt.Fprintf(w, "backup %s: validation passed (%d/%d segments checked; %d by metadata, %d by download)\n",
-			r.BackupID, r.CheckedSegments, r.TotalSegments, r.VerifiedByMetadata, r.VerifiedByDownload)
-
-		return
-	}
-
-	fmt.Fprintf(w, "backup %s: validation FAILED, %d damaged segment(s) (%d/%d checked; %d by metadata, %d by download)\n",
-		r.BackupID, len(r.Issues), r.CheckedSegments, r.TotalSegments, r.VerifiedByMetadata, r.VerifiedByDownload)
-
-	for _, issue := range r.Issues {
-		if issue.Err != nil {
-			fmt.Fprintf(w, "  [%s] %s: could not validate: %v\n",
-				issue.Namespace, issue.SegmentName, issue.Err)
-
-			continue
-		}
-
-		fmt.Fprintf(w, "  [%s] %s: checksum mismatch (expected %s, got %s)\n",
-			issue.Namespace, issue.SegmentName, issue.Expected, issue.Got)
 	}
 }
