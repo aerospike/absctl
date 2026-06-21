@@ -163,6 +163,20 @@ func (l *Lister) FetchAllMetadata(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (l *Lister) GetMetadata(ctx context.Context, backupID string) (models.Metadata, error) {
+	data, err := l.fetchOne(ctx, backupID)
+	if err != nil {
+		return models.Metadata{}, fmt.Errorf("failed to get manifest %s: %w", backupID, err)
+	}
+
+	md, err := readMetafile(data)
+	if err != nil {
+		return models.Metadata{}, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	return md, nil
+}
+
 func (l *Lister) printMetadata(ctx context.Context, w io.Writer, futures []chan models.Metadata, g *errgroup.Group,
 ) error {
 	for _, f := range futures {

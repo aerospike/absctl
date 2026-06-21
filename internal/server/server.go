@@ -179,6 +179,12 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
 
+	// Need clarification before uncomment
+	// if err = s.checkBackupExists(ctx,
+	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Start.JobID, s.restoreCfg.Start.Namespace); err != nil {
+	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
+	// }
+
 	err = client.StartServerRestore(
 		ctx,
 		s.restoreCfg.Start.JobID,
@@ -210,6 +216,12 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
+
+	// Need clarification before uncomment
+	// if err = s.checkBackupExists(ctx,
+	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Prepare.JobID, s.restoreCfg.Prepare.Namespace); err != nil {
+	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
+	// }
 
 	err = client.PrepareServerRestore(
 		ctx,
@@ -294,6 +306,27 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 	if !isStable {
 		return fmt.Errorf("cluster is not stable")
 	}
+
+	return nil
+}
+
+// checkBackupExists validates the backup exists for RESTORE only.
+//
+//nolint:unused // Not used yet, but will be used in the future.
+func (s *Service) checkBackupExists(ctx context.Context, bucket, jobID string) error {
+	client, err := storage.NewS3Client(ctx, s.restoreCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	l := NewLister(client, bucket, "", false, nil, s.logger)
+
+	md, err := l.GetMetadata(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to check if backup exists: %w", err)
+	}
+
+	fmt.Println(md)
 
 	return nil
 }
