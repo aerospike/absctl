@@ -122,7 +122,7 @@ func crc32Base64(b []byte) string {
 func newTestValidator(t *testing.T, client S3API) *Validator {
 	t.Helper()
 	logger := slog.New(slog.DiscardHandler)
-	return NewValidator(client, testBucket, true, logger)
+	return NewValidator(client, testBucket, logger)
 }
 
 // nsPrefix is the prefix the Validator lists to discover namespaces.

@@ -279,14 +279,14 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
-	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.App.LogJSON, s.logger)
+	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.logger)
 
 	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
 	if err != nil {
 		return fmt.Errorf("failed to validate: %w", err)
 	}
 
-	v.printReport(report)
+	logging.PrintServerValidationReport(report, s.backupCfg.App.LogJSON, s.logger)
 
 	return nil
 }

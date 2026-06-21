@@ -30,7 +30,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/aerospike/absctl/internal/logging"
 	sModels "github.com/aerospike/absctl/internal/server/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -54,22 +53,20 @@ type Validator struct {
 	client S3API
 	logger *slog.Logger
 	bucket string
-	// If true, the output is logged to the logger; otherwise it is rendered to stderr.
-	toLog bool
+
 	// parallel bounds the number of concurrent S3 operations.
 	parallel int
 }
 
 // NewValidator creates a Validator. Concurrency is derived from the number of
 // available CPUs.
-func NewValidator(client S3API, bucket string, toLog bool, logger *slog.Logger) *Validator {
+func NewValidator(client S3API, bucket string, logger *slog.Logger) *Validator {
 	parallel := max(runtime.NumCPU(), 1)
 
 	return &Validator{
 		client:   client,
 		logger:   logger,
 		bucket:   bucket,
-		toLog:    toLog,
 		parallel: parallel,
 	}
 }
@@ -517,52 +514,4 @@ func normalizeChecksum(s string) string {
 
 func formatChecksum(crc uint32) string {
 	return fmt.Sprintf("%08x", crc)
-}
-
-// printReport renders the report either through the logger or to stderr.
-func (v *Validator) printReport(r *sModels.Report) {
-	if v.toLog {
-		v.logReport(r)
-		return
-	}
-
-	logging.PrintServerValidationReport(r)
-}
-
-func (v *Validator) logReport(r *sModels.Report) {
-	if len(r.Issues) == 0 {
-		v.logger.Info("backup validation passed",
-			slog.String("backup-id", r.BackupID),
-			slog.Int("total-segments", r.TotalSegments),
-			slog.Int("checked-segments", r.CheckedSegments),
-			slog.Int("verified-by-metadata", r.VerifiedByMetadata),
-			slog.Int("verified-by-download", r.VerifiedByDownload),
-		)
-
-		return
-	}
-
-	v.logger.Error("backup validation failed",
-		slog.String("backup-id", r.BackupID),
-		slog.Int("total-segments", r.TotalSegments),
-		slog.Int("checked-segments", r.CheckedSegments),
-		slog.Int("verified-by-metadata", r.VerifiedByMetadata),
-		slog.Int("verified-by-download", r.VerifiedByDownload),
-		slog.Int("damaged-segments", len(r.Issues)),
-	)
-
-	for _, issue := range r.Issues {
-		attrs := []any{
-			slog.String("namespace", issue.Namespace),
-			slog.String("segment", issue.SegmentName),
-			slog.String("expected", issue.Expected),
-		}
-		if issue.Err != nil {
-			attrs = append(attrs, slog.String("error", issue.Err.Error()))
-		} else {
-			attrs = append(attrs, slog.String("got", issue.Got))
-		}
-
-		v.logger.Error("damaged segment", attrs...)
-	}
 }
