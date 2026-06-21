@@ -275,6 +275,10 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
+	if err := s.checkBackupExists(ctx, client, s.backupCfg.AwsS3.BucketName, s.backupCfg.Validation.JobID); err != nil {
+		return fmt.Errorf("failed to check if backup exists: %w", err)
+	}
+
 	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.App.LogJSON, s.logger)
 
 	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
@@ -311,14 +315,7 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 }
 
 // checkBackupExists validates the backup exists for RESTORE only.
-//
-//nolint:unused // Not used yet, but will be used in the future.
-func (s *Service) checkBackupExists(ctx context.Context, bucket, jobID string) error {
-	client, err := storage.NewS3Client(ctx, s.restoreCfg.AwsS3)
-	if err != nil {
-		return fmt.Errorf("failed to create s3 client: %w", err)
-	}
-
+func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
 	l := NewLister(client, bucket, "", false, nil, s.logger)
 
 	md, err := l.GetMetadata(ctx, jobID)
@@ -326,7 +323,10 @@ func (s *Service) checkBackupExists(ctx context.Context, bucket, jobID string) e
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
-	fmt.Println(md)
+	s.logger.Info("Backup found",
+		slog.String("backup-id", md.BackupID),
+		slog.String("namespace", md.Namespace),
+	)
 
 	return nil
 }
