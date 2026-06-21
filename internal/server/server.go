@@ -28,6 +28,7 @@ import (
 	"github.com/aerospike/aerospike-client-go/v8"
 	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
+	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	commonClient "github.com/aerospike/tools-common-go/client"
 )
 
@@ -123,6 +124,10 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
+	if err = s.checkServerStatus(ctx, client, s.backupCfg.Start.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
 	var mb, ma string
 
 	if s.backupCfg.Start.ModifiedBefore != "" {
@@ -170,6 +175,10 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
+	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
 	err = client.StartServerRestore(
 		ctx,
 		s.restoreCfg.Start.JobID,
@@ -198,6 +207,10 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return err
 	}
 
+	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
 	err = client.PrepareServerRestore(
 		ctx,
 		s.restoreCfg.Prepare.JobID,
@@ -213,6 +226,7 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	return nil
 }
 
+// BackupProgress returns the progress of the currently running backup.
 func (s *Service) BackupProgress(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
@@ -242,6 +256,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 	return nil
 }
 
+// BackupValidate validates the backup identified by the configured job ID.
 func (s *Service) BackupValidate(ctx context.Context) error {
 	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
@@ -256,6 +271,29 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 	}
 
 	v.printReport(report)
+
+	return nil
+}
+
+// checkServerStatus validates the server status.
+func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, namespace string) error {
+	lowestVersion, err := client.GetVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get server version: %w", err)
+	}
+
+	if !lowestVersion.IsGreaterOrEqual(iModels.AerospikeVersionSupportsIntegratedBackup) {
+		return fmt.Errorf("server version %s does not support integrated backup", lowestVersion)
+	}
+
+	isStable, err := client.GetClusterStable(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to check cluster stability: %w", err)
+	}
+
+	if !isStable {
+		return fmt.Errorf("cluster is not stable")
+	}
 
 	return nil
 }
