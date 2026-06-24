@@ -16,87 +16,91 @@ package logging
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"text/tabwriter"
 	"time"
 
-	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go/pkg/server/models"
 )
 
+type metaDataStats struct {
+	totalRecords int64
+	totalBytes   int64
+	minCreated   time.Time
+	maxFinished  time.Time
+}
+
 // PrintMetadata displays the node data in a formatted table.
-func PrintMetadata(w io.Writer, data models.Metadata, toLog bool, logger *slog.Logger) {
-	// count totals.
-	var (
-		totalRecords int64
-		totalBytes   int64
-		minCreated   time.Time
-		maxFinished  time.Time
-	)
-
-	// Initialize with the values of the first node
-	if len(data.Nodes) != 0 {
-		minCreated = data.Nodes[0].Created
-		maxFinished = data.Nodes[0].Finished
+func PrintMetadata(data []models.Metadata, toLog bool, logger *slog.Logger) error {
+	var w *tabwriter.Writer
+	if !toLog {
+		w = tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
 	}
 
-	for _, node := range data.Nodes {
-		totalRecords += node.RecordCount
-		totalBytes += node.ByteCount
-
-		if node.Created.Before(minCreated) {
-			minCreated = node.Created
+	for _, md := range data {
+		stats := calcMetadataStats(md)
+		if toLog {
+			printMetadataToLog(md, stats, logger)
+			continue
 		}
 
-		if node.Finished.After(maxFinished) {
-			maxFinished = node.Finished
-		}
+		printMetadataToTable(md, stats, w)
 	}
 
-	if toLog {
-		logger.Info("backup entry",
-			slog.String("backup-id", data.BackupID),
-			slog.String("namespace", data.Namespace),
-			slog.Int64("total-records", totalRecords),
-			slog.Int64("total-bytes", totalBytes),
-			slog.Time("created", minCreated),
-			slog.Time("finished", maxFinished),
-		)
-
-		return
-	}
-
-	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
-		data.BackupID,
-		data.Namespace,
-		totalRecords,
-		totalBytes,
-		minCreated.Format("2006-01-02 15:04:05"),
-		maxFinished.Format("2006-01-02 15:04:05"),
-	)
-}
-
-// GetMetadataWriter returns a writer for the metadata table.
-func GetMetadataWriter(toLog bool) io.Writer {
-	if toLog {
-		return nil
-	}
-
-	// tabwriter (with the header) is only needed for the stdout table.
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
-
-	return w
-}
-
-// CloseMetadataWriter flushes the metadata table.
-func CloseMetadataWriter(w io.Writer) error {
 	if w != nil {
-		if err := w.(*tabwriter.Writer).Flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return fmt.Errorf("failed to flush output: %w", err)
 		}
 	}
 
 	return nil
+}
+
+func printMetadataToLog(data models.Metadata, stats metaDataStats, logger *slog.Logger) {
+	logger.Info("backup entry",
+		slog.String("backup-id", data.BackupID),
+		slog.String("namespace", data.Namespace),
+		slog.Int64("total-records", stats.totalRecords),
+		slog.Int64("total-bytes", stats.totalBytes),
+		slog.Time("created", stats.minCreated),
+		slog.Time("finished", stats.maxFinished),
+	)
+}
+
+func printMetadataToTable(data models.Metadata, stats metaDataStats, w *tabwriter.Writer) {
+	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
+		data.BackupID,
+		data.Namespace,
+		stats.totalRecords,
+		stats.totalBytes,
+		stats.minCreated.Format("2006-01-02 15:04:05"),
+		stats.maxFinished.Format("2006-01-02 15:04:05"),
+	)
+}
+
+func calcMetadataStats(data models.Metadata) metaDataStats {
+	// count totals.
+	var stats metaDataStats
+
+	// Initialize with the values of the first node
+	if len(data.Nodes) != 0 {
+		stats.minCreated = data.Nodes[0].Created
+		stats.maxFinished = data.Nodes[0].Finished
+	}
+
+	for _, node := range data.Nodes {
+		stats.totalRecords += node.RecordCount
+		stats.totalBytes += node.ByteCount
+
+		if node.Created.Before(stats.minCreated) {
+			stats.minCreated = node.Created
+		}
+
+		if node.Finished.After(stats.maxFinished) {
+			stats.maxFinished = node.Finished
+		}
+	}
+
+	return stats
 }

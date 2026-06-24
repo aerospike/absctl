@@ -8,13 +8,12 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.7.0
 	github.com/aerospike/aerospike-client-go/v8 v8.7.0
-	github.com/aerospike/backup-go v0.10.1-0.20260621111102-81e05d3e40e1
+	github.com/aerospike/backup-go v0.10.1-0.20260624123013-0a398857926b
 	github.com/aerospike/tools-common-go v0.4.2-0.20260330202015-38fcb43831fa
 	github.com/aws/aws-sdk-go-v2 v1.41.9
 	github.com/aws/aws-sdk-go-v2/config v1.32.20
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.19
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2
-	github.com/aws/smithy-go v1.26.0
 	github.com/googleapis/gax-go/v2 v2.22.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.7.0
 	github.com/oapi-codegen/runtime v1.4.1
@@ -55,6 +54,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.3 // indirect
+	github.com/aws/smithy-go v1.26.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

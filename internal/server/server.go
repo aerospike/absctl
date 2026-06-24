@@ -29,10 +29,21 @@ import (
 	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
+	"github.com/aerospike/backup-go/pkg/server"
 	commonClient "github.com/aerospike/tools-common-go/client"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 const messageNoRunningBackup = "No running backup found"
+
+// S3API is an interface for the S3 client.
+type S3API interface {
+	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
+	) (*s3.ListObjectsV2Output, error)
+	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options),
+	) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+}
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
@@ -101,16 +112,15 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	w := logging.GetMetadataWriter(s.backupCfg.App.LogJSON)
+	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
 
-	l := NewLister(client, s.backupCfg.AwsS3.BucketName, "", s.backupCfg.App.LogJSON, w, s.logger)
-
-	if err := l.FetchAllMetadata(ctx); err != nil {
+	mds, err := l.FetchAllMetadata(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
-	if err := logging.CloseMetadataWriter(l.writer); err != nil {
-		return fmt.Errorf("failed to close metadata writer: %w", err)
+	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
+		return err
 	}
 
 	return nil
@@ -316,7 +326,7 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 
 // checkBackupExists validates the backup exists for RESTORE only.
 func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
-	l := NewLister(client, bucket, "", false, nil, s.logger)
+	l := server.NewLister(client, bucket, "", server.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, jobID)
 	if err != nil {
