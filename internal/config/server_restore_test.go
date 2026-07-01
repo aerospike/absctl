@@ -54,6 +54,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 	var (
 		restore      = &models.ServerRestore{}
 		prepare      = &models.ServerRestorePrepare{}
+		progress     = &models.ServerRestoreProgress{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -65,6 +66,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 		name      string
 		restore   *models.ServerRestore
 		prepare   *models.ServerRestorePrepare
+		progress  *models.ServerRestoreProgress
 		app       *models.App
 		clientCfg *client.AerospikeConfig
 		clientPol *models.ClientPolicy
@@ -75,6 +77,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			name:      "all fields set",
 			restore:   restore,
 			prepare:   prepare,
+			progress:  progress,
 			app:       app,
 			clientCfg: clientCfg,
 			clientPol: clientPolicy,
@@ -103,6 +106,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			got := NewServerRestoreServiceConfig(
 				tt.restore,
 				tt.prepare,
+				tt.progress,
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,

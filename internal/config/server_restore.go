@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//nolint:dupl // Backup and restore looks the same and has same methods.
 package config
 
 import (
@@ -21,16 +22,18 @@ import (
 
 // ServerRestoreServiceConfig holds the configuration for the server-integrated Start service.
 type ServerRestoreServiceConfig struct {
-	Start   *models.ServerRestore
-	Prepare *models.ServerRestorePrepare
+	Start    *models.ServerRestore
+	Prepare  *models.ServerRestorePrepare
+	Progress *models.ServerRestoreProgress
 
 	ServiceConfigCommon
 }
 
 // NewServerRestoreServiceConfig initializes a new ServerRestoreServiceConfig.
 func NewServerRestoreServiceConfig(
-	restore *models.ServerRestore,
+	start *models.ServerRestore,
 	prepare *models.ServerRestorePrepare,
+	progress *models.ServerRestoreProgress,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -38,8 +41,9 @@ func NewServerRestoreServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
-		Start:   restore,
-		Prepare: prepare,
+		Start:    start,
+		Prepare:  prepare,
+		Progress: progress,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -57,6 +61,10 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 	}
 
 	if err := s.Prepare.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.Progress.Validate(); err != nil {
 		return err
 	}
 

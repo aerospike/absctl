@@ -79,6 +79,7 @@ func setHelpBackup(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
+//nolint:dupl // Commands are all look the same.
 func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	startFlagSet := bf.start.NewFlagSet()
 	objectStoreFlagSet := bf.objectStorageS3.NewFlagSet()

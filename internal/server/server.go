@@ -290,13 +290,13 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 }
 
 // RestoreProgress returns the progress of the currently running restore.
-func (s *Service) RestoreProgress(ctx context.Context, namespace string) error {
+func (s *Service) RestoreProgress(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
 
-	result, err := client.GetRestoreStatus(ctx, namespace)
+	result, err := client.GetRestoreStatus(ctx, s.restoreCfg.Progress.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}

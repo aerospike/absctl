@@ -98,6 +98,15 @@ func restorePrepareHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets)
 	}
 }
 
+func restoreProgressHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
+		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
 // BuildBackupSubcommandDocs returns documentation for every server backup subcommand.
 func BuildBackupSubcommandDocs() []SubcommandDoc {
 	rc := newRunCtx(flags.NewRoot(), "", "", "")
@@ -151,6 +160,7 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 	startFS := rf.start.NewFlagSet()
 	objectStoreFS := rf.objectStorageS3.NewFlagSet()
 	prepareFS := rf.prepare.NewFlagSet()
+	progressFS := rf.progress.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -166,6 +176,13 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestorePrepare,
 			Usage:    flags.SectionTextUsageRestorePrepare,
 			Sections: restorePrepareHelpSections(prepareFS, common),
+		},
+		{
+			Name:     UseProgress,
+			Short:    ShortRestoreProgress,
+			Long:     LongRestoreProgress,
+			Usage:    flags.SectionTextUsageRestoreProgress,
+			Sections: restoreProgressHelpSections(progressFS, common),
 		},
 	}
 }

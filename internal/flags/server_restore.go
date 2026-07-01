@@ -64,3 +64,23 @@ func (f *ServerRestorePrepare) NewFlagSet() *pflag.FlagSet {
 func (f *ServerRestorePrepare) GetServerRestorePrepare() *models.ServerRestorePrepare {
 	return &f.ServerRestorePrepare
 }
+
+type ServerRestoreProgress struct {
+	models.ServerRestoreProgress
+}
+
+func NewServerRestoreProgress() *ServerRestoreProgress {
+	return &ServerRestoreProgress{}
+}
+
+func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to check progress.")
+
+	return flagSet
+}
+
+func (f *ServerRestoreProgress) GetServerRestoreProgress() *models.ServerRestoreProgress {
+	return &f.ServerRestoreProgress
+}

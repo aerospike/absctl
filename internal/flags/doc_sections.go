@@ -26,12 +26,13 @@ const (
 	SectionTextUsageBackupServer  = "\nUsage:\n  absctl backup <command> [flags]"
 	SectionTextUsageRestoreServer = "\nUsage:\n  absctl restore <command> [flags]"
 
-	SectionTextUsageBackupStart    = "\nUsage:\n  absctl backup start [flags]"
-	SectionTextUsageBackupList     = "\nUsage:\n  absctl backup list [flags]"
-	SectionTextUsageValidate       = "\nUsage:\n  absctl backup validate [flags]"
-	SectionTextUsageBackupProgress = "\nUsage:\n  absctl backup progress [flags]"
-	SectionTextUsageRestorePrepare = "\nUsage:\n  absctl restore prepare [flags]"
-	SectionTextUsageRestoreStart   = "\nUsage:\n  absctl restore start [flags]"
+	SectionTextUsageBackupStart     = "\nUsage:\n  absctl backup start [flags]"
+	SectionTextUsageBackupList      = "\nUsage:\n  absctl backup list [flags]"
+	SectionTextUsageValidate        = "\nUsage:\n  absctl backup validate [flags]"
+	SectionTextUsageBackupProgress  = "\nUsage:\n  absctl backup progress [flags]"
+	SectionTextUsageRestorePrepare  = "\nUsage:\n  absctl restore prepare [flags]"
+	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl restore progress [flags]"
+	SectionTextUsageRestoreStart    = "\nUsage:\n  absctl restore start [flags]"
 
 	SectionAvailableCommands = "\nAvailable Commands:"
 

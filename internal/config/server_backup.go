@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//nolint:dupl // Backup and restore looks the same and has same methods.
 package config
 
 import (

@@ -56,3 +56,16 @@ func (s *ServerRestorePrepare) Validate() error {
 
 	return s.ServerCommon.Validate()
 }
+
+// ServerRestoreProgress contains flags that will be mapped to ServerRestorePrepare.
+type ServerRestoreProgress struct {
+	ServerCommon
+}
+
+func (s *ServerRestoreProgress) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	return s.ServerCommon.Validate()
+}

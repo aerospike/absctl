@@ -79,6 +79,11 @@ Backup Flags:
   -b, --modified-before string       <YYYY-MM-DD_HH:MM:SS>
                                      Only include records that last changed before the given
                                      date and time. May combined with --modified-after to specify a range.
+  -s, --set-list string              The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
+                                     If multiple sets are being backed up, filter-exp cannot be used.
+                                     If empty, include all sets.
+  -i, --no-indexes                   Exclude indexes from the backup.
+  -u, --no-udfs                      Exclude user-defined functions from the backup.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.

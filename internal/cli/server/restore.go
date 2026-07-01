@@ -26,8 +26,9 @@ import (
 // restoreCtx groups the storage flag holders shared by the "server restore"
 // subcommands.
 type restoreCtx struct {
-	start   *flags.ServerRestore
-	prepare *flags.ServerRestorePrepare
+	start    *flags.ServerRestore
+	prepare  *flags.ServerRestorePrepare
+	progress *flags.ServerRestoreProgress
 	// objectStorageS3 is the restore read source (start, prepare).
 	objectStorageS3 *flags.ObjectStorageS3
 }
@@ -36,6 +37,7 @@ func newRestoreCtx() *restoreCtx {
 	return &restoreCtx{
 		start:           flags.NewServerRestore(),
 		prepare:         flags.NewServerRestorePrepare(),
+		progress:        flags.NewServerRestoreProgress(),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
 }
@@ -55,6 +57,7 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 	cmd.AddCommand(
 		newRestoreStartCmd(rc, rf),
 		newRestorePrepareCmd(rc, rf),
+		newRestoreProgressCmd(rc, rf),
 	)
 
 	applyRootPersistent(cmd, rc)
@@ -72,7 +75,7 @@ func setHelpRestore(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
-//nolint:dupl // WIP
+//nolint:dupl // Commands are all look the same.
 func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	startFlags := rf.start.NewFlagSet()
 	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
@@ -85,47 +88,6 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 			cfg := config.NewServerRestoreServiceConfig(
 				rf.start.GetServerRestore(),
 				nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				rf.objectStorageS3.ToAwsS3(),
-			)
-
-			svc, err := newService(rc, nil, cfg)
-			if err != nil {
-				return fmt.Errorf("failed to initialize server integrated restore: %w", err)
-			}
-
-			if err := svc.StartRestore(cmd.Context()); err != nil {
-				return fmt.Errorf("failed to start server integrated restore: %w", err)
-			}
-
-			return nil
-		},
-	}
-
-	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(startFlags)
-	cmd.Flags().AddFlagSet(objectStoreFlagSet)
-
-	setHelpRestoreStart(cmd, startFlags, objectStoreFlagSet, common)
-
-	return cmd
-}
-
-//nolint:dupl,unused // WIP
-func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	startFlags := rf.start.NewFlagSet()
-	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
-
-	cmd := &cobra.Command{
-		Use:   UseProgress,
-		Short: ShortRestoreProgress,
-		Long:  LongRestoreProgress,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerRestoreServiceConfig(
-				rf.start.GetServerRestore(),
 				nil,
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
@@ -184,6 +146,7 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 			cfg := config.NewServerRestoreServiceConfig(
 				nil,
 				rf.prepare.GetServerRestorePrepare(),
+				nil,
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
 				rc.clientPolicy.GetClientPolicy(),
@@ -216,6 +179,59 @@ func setHelpRestorePrepare(cmd *cobra.Command, prepareFS *pflag.FlagSet, common 
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageRestorePrepare,
 		Sections: restorePrepareHelpSections(prepareFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	progressFlags := rf.progress.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseProgress,
+		Short: ShortRestoreProgress,
+		Long:  LongRestoreProgress,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg := config.NewServerRestoreServiceConfig(
+				nil,
+				nil,
+				rf.progress.GetServerRestoreProgress(),
+				rc.app.GetApp(),
+				rc.aerospike.NewAerospikeConfig(),
+				rc.clientPolicy.GetClientPolicy(),
+				rc.secretAgent.GetSecretAgent(),
+				rf.objectStorageS3.ToAwsS3(),
+			)
+
+			svc, err := newService(rc, nil, cfg)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.RestoreProgress(cmd.Context()); err != nil {
+				return fmt.Errorf("server side restore preparation failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(progressFlags)
+
+	setHelpRestoreProgress(cmd, progressFlags, common)
+
+	return cmd
+}
+
+func setHelpRestoreProgress(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreProgress,
+		Sections: restoreProgressHelpSections(prepareFS, common),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
