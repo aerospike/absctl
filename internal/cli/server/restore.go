@@ -72,6 +72,7 @@ func setHelpRestore(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
+//nolint:dupl // WIP
 func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	startFlags := rf.start.NewFlagSet()
 	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
@@ -80,6 +81,48 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		Use:   UseStart,
 		Short: ShortRestoreStart,
 		Long:  LongRestoreStart,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg := config.NewServerRestoreServiceConfig(
+				rf.start.GetServerRestore(),
+				nil,
+				rc.app.GetApp(),
+				rc.aerospike.NewAerospikeConfig(),
+				rc.clientPolicy.GetClientPolicy(),
+				rc.secretAgent.GetSecretAgent(),
+				rf.objectStorageS3.ToAwsS3(),
+			)
+
+			svc, err := newService(rc, nil, cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize server integrated restore: %w", err)
+			}
+
+			if err := svc.StartRestore(cmd.Context()); err != nil {
+				return fmt.Errorf("failed to start server integrated restore: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(startFlags)
+	cmd.Flags().AddFlagSet(objectStoreFlagSet)
+
+	setHelpRestoreStart(cmd, startFlags, objectStoreFlagSet, common)
+
+	return cmd
+}
+
+//nolint:dupl,unused // WIP
+func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	startFlags := rf.start.NewFlagSet()
+	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseProgress,
+		Short: ShortRestoreProgress,
+		Long:  LongRestoreProgress,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := config.NewServerRestoreServiceConfig(
 				rf.start.GetServerRestore(),

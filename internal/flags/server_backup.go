@@ -48,6 +48,15 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
 			"Only include records that last changed before the given\n"+
 			"date and time. May combined with --modified-after to specify a range.")
+	flagSet.StringVarP(&f.SetList, "set-list", "s",
+		models.DefaultCommonSetList,
+		descSetListBackup)
+	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "i",
+		models.DefaultCommonNoIndexes,
+		"Exclude indexes from the backup.")
+	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
+		models.DefaultCommonNoUDFs,
+		"Exclude user-defined functions from the backup.")
 
 	return flagSet
 }

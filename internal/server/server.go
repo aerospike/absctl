@@ -156,19 +156,25 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		ma = strconv.FormatInt(mat.Unix(), 10)
 	}
 
-	JobID, err := client.StartServerBackup(
-		ctx,
-		s.backupCfg.Start.Namespace,
-		s.backupCfg.Start.StorageType,
-		s.backupCfg.AwsS3.BucketName,
-		s.backupCfg.AwsS3.Region,
-		s.backupCfg.AwsS3.Profile,
-		s.backupCfg.AwsS3.AccessKeyID,
-		s.backupCfg.AwsS3.SecretAccessKey,
-		s.backupCfg.AwsS3.Endpoint,
-		mb,
-		ma,
-	)
+	bReq := &iModels.RequestBackup{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.backupCfg.Start.Namespace,
+			Storage:   s.backupCfg.Start.StorageType,
+			Bucket:    s.backupCfg.AwsS3.BucketName,
+			Region:    s.backupCfg.AwsS3.Region,
+			Profile:   s.backupCfg.AwsS3.Profile,
+			AccessKey: s.backupCfg.AwsS3.AccessKeyID,
+			SecretKey: s.backupCfg.AwsS3.SecretAccessKey,
+			Endpoint:  s.backupCfg.AwsS3.Endpoint,
+		},
+		ModifiedAfter:  ma,
+		ModifiedBefore: mb,
+		SetList:        s.backupCfg.Start.SetList,
+		NoIndexes:      s.backupCfg.Start.NoIndexes,
+		NoUDFs:         s.backupCfg.Start.NoUDFs,
+	}
+
+	JobID, err := client.StartServerBackup(ctx, bReq)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
@@ -196,18 +202,21 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
 	// }
 
-	err = client.StartServerRestore(
-		ctx,
-		s.restoreCfg.Start.JobID,
-		s.restoreCfg.Start.Namespace,
-		s.restoreCfg.Start.StorageType,
-		s.restoreCfg.AwsS3.BucketName,
-		s.restoreCfg.AwsS3.Region,
-		s.restoreCfg.AwsS3.Profile,
-		s.restoreCfg.AwsS3.AccessKeyID,
-		s.restoreCfg.AwsS3.SecretAccessKey,
-		s.backupCfg.AwsS3.Endpoint,
-	)
+	rReq := &iModels.RequestRestore{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.restoreCfg.Start.Namespace,
+			Storage:   s.restoreCfg.Start.StorageType,
+			Bucket:    s.restoreCfg.AwsS3.BucketName,
+			Region:    s.restoreCfg.AwsS3.Region,
+			Profile:   s.restoreCfg.AwsS3.Profile,
+			AccessKey: s.restoreCfg.AwsS3.AccessKeyID,
+			SecretKey: s.restoreCfg.AwsS3.SecretAccessKey,
+			Endpoint:  s.restoreCfg.AwsS3.Endpoint,
+		},
+		JobID: s.restoreCfg.Start.JobID,
+	}
+
+	err = client.StartServerRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
@@ -276,6 +285,24 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 
 	s.logger.Info("Backup progress",
 		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
+
+	return nil
+}
+
+// RestoreProgress returns the progress of the currently running restore.
+func (s *Service) RestoreProgress(ctx context.Context, namespace string) error {
+	client, err := s.newInfoClient()
+	if err != nil {
+		return err
+	}
+
+	result, err := client.GetRestoreStatus(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	s.logger.Info("Restore progress",
+		slog.String("result", result))
 
 	return nil
 }

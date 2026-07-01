@@ -25,6 +25,9 @@ type ServerBackup struct {
 	StorageType    string
 	ModifiedBefore string
 	ModifiedAfter  string
+	SetList        string
+	NoIndexes      bool
+	NoUDFs         bool
 }
 
 func (s *ServerBackup) Validate() error {
