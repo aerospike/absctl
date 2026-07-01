@@ -165,6 +165,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		s.backupCfg.AwsS3.Profile,
 		s.backupCfg.AwsS3.AccessKeyID,
 		s.backupCfg.AwsS3.SecretAccessKey,
+		s.backupCfg.AwsS3.Endpoint,
 		mb,
 		ma,
 	)
@@ -205,6 +206,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		s.restoreCfg.AwsS3.Profile,
 		s.restoreCfg.AwsS3.AccessKeyID,
 		s.restoreCfg.AwsS3.SecretAccessKey,
+		s.backupCfg.AwsS3.Endpoint,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
