@@ -270,7 +270,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 	result, err := client.GetBackupStatus(ctx)
 	if err != nil {
 		if errors.Is(err, asinfo.ErrNotFound) {
-			slog.Info(messageNoRunningBackup)
+			s.logger.Info(messageNoRunningBackup)
 
 			if err := s.getBackupState(ctx); err != nil {
 				return fmt.Errorf("failed to get backup state: %w", err)
@@ -283,7 +283,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 	}
 
 	if result >= 1.0 {
-		slog.Info(messageNoRunningBackup)
+		s.logger.Info(messageNoRunningBackup)
 
 		if err := s.getBackupState(ctx); err != nil {
 			return fmt.Errorf("failed to get backup state: %w", err)
