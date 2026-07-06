@@ -223,6 +223,41 @@ Aerospike Client Flags:
 
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
+Backup Flags:
+      --namespace string   The namespace to be backed up.
+      --backup-id string   Backup id used for validation.
+
+AWS Storage Flags:
+For S3, the storage bucket name must be set with the --s3-bucket-name flag.
+--directory path will only contain the folder name.
+--s3-endpoint-override is used for MinIO storage instead of AWS.
+Any AWS parameter can be retrieved from Secret Agent.
+      --s3-bucket-name string             Existing S3 bucket name
+      --s3-region string                  The S3 region that the bucket(s) exist in.
+      --s3-profile string                 The S3 profile to use for credentials.
+      --s3-access-key-id string           S3 access key ID. If not set, profile auth info will be used.
+      --s3-secret-access-key string       S3 secret access key. If not set, profile auth info will be used.
+      --s3-endpoint-override string       An alternate URL endpoint to send S3 API calls to.
+      --s3-tier string                    If is set, tool will try to restore archived files to the specified tier.
+                                          Attention! This triggers an asynchronous process that cannot be terminated.
+                                          Tiers are: Standard, Bulk, Expedited.
+      --s3-restore-poll-duration int      How often ((in ms)) a backup client checks object status when restoring an archived object. (default 60000)
+      --s3-retry-read-backoff int         The initial delay (in ms) between retry attempts. In case of connection errors
+                                          tool will retry reading the object from the last known position. (default 1000)
+      --s3-retry-read-multiplier float    Multiplier is used to increase the delay between subsequent retry attempts.
+                                          Used in combination with initial delay. (default 2)
+      --s3-retry-read-max-attempts uint   The maximum number of retry attempts that will be made. If set to 0, no retries will be performed. (default 3)
+      --s3-retry-max-attempts int         Maximum number of attempts that should be made in case of an error. (default 10)
+      --s3-retry-max-backoff int          Max backoff duration (in ms) between retried attempts.
+                                          The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff. (default 90000)
+      --s3-max-conns-per-host int         Max connections per host optionally limits the total number of connections per host,
+                                          including connections in the dialing, active, and idle states. On limit violation, dials will block.
+                                          Should be greater than --parallel to avoid download speed degradation.
+                                          0 means no limit.
+      --s3-request-timeout int            Timeout (in ms) specifies a time limit for requests made by this Client.
+                                          The timeout includes connection time, any redirects, and reading the response body.
+                                          0 means no limit. (default 600000)
+
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
 See documentation here: https://aerospike.com/docs/tools/secret-agent.

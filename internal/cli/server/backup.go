@@ -29,6 +29,7 @@ type backupCtx struct {
 	start    *flags.ServerBackup
 	list     *flags.ServerBackupList
 	validate *flags.ServerBackupValidate
+	progress *flags.ServerBackupProgress
 
 	// aws is the listing/validation source (list, validate, progress).
 	aws *flags.AwsS3
@@ -41,6 +42,7 @@ func newBackupCtx() *backupCtx {
 		start:           flags.NewServerBackup(),
 		list:            flags.NewServerBackupList(),
 		validate:        flags.NewServerBackupValidate(),
+		progress:        flags.NewServerBackupProgress(),
 		aws:             flags.NewAwsS3(flags.OperationRestore),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
@@ -79,7 +81,6 @@ func setHelpBackup(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
-//nolint:dupl // Commands are all look the same.
 func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	startFlagSet := bf.start.NewFlagSet()
 	objectStoreFlagSet := bf.objectStorageS3.NewFlagSet()
@@ -91,7 +92,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := config.NewServerBackupServiceConfig(
 				bf.start.GetServerBackup(),
-				nil, nil,
+				nil, nil, nil,
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
 				rc.clientPolicy.GetClientPolicy(),
@@ -150,7 +151,7 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			cfg := config.NewServerBackupServiceConfig(
 				nil,
 				bf.list.GetServerBackupList(),
-				nil,
+				nil, nil,
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
 				rc.clientPolicy.GetClientPolicy(),
@@ -192,7 +193,10 @@ func setHelpBackupList(cmd *cobra.Command, listFS, awsFS *pflag.FlagSet) {
 	usageFromHelp(cmd)
 }
 
-func newBackupProgressCmd(rc *runCtx, _ *backupCtx) *cobra.Command {
+func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
+	awsFlagSet := bf.aws.NewFlagSet()
+	progressFlagSet := bf.progress.NewFlagSet()
+
 	cmd := &cobra.Command{
 		Use:   UseProgress,
 		Short: ShortBackupProgress,
@@ -200,11 +204,12 @@ func newBackupProgressCmd(rc *runCtx, _ *backupCtx) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := config.NewServerBackupServiceConfig(
 				nil, nil, nil,
+				bf.progress.GetServerBackupProgress(),
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
 				rc.clientPolicy.GetClientPolicy(),
 				rc.secretAgent.GetSecretAgent(),
-				nil,
+				bf.aws.GetAwsS3(),
 			)
 
 			svc, err := newService(rc, cfg, nil)
@@ -220,17 +225,20 @@ func newBackupProgressCmd(rc *runCtx, _ *backupCtx) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().AddFlagSet(progressFlagSet)
+	cmd.Flags().AddFlagSet(awsFlagSet)
+
 	common := applyCommon(cmd, rc)
 
-	setHelpBackupProgress(cmd, common)
+	setHelpBackupProgress(cmd, common, progressFlagSet, awsFlagSet)
 
 	return cmd
 }
 
-func setHelpBackupProgress(cmd *cobra.Command, common commonFlagSets) {
+func setHelpBackupProgress(cmd *cobra.Command, common commonFlagSets, progressFs, awsFs *pflag.FlagSet) {
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageBackupProgress,
-		Sections: backupProgressHelpSections(common),
+		Sections: backupProgressHelpSections(common, progressFs, awsFs),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
@@ -252,6 +260,7 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			cfg := config.NewServerBackupServiceConfig(
 				nil, nil,
 				bf.validate.GetServerBackupValidate(),
+				nil,
 				rc.app.GetApp(),
 				rc.aerospike.NewAerospikeConfig(),
 				rc.clientPolicy.GetClientPolicy(),

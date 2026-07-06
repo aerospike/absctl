@@ -107,3 +107,24 @@ func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
 func (f *ServerBackupValidate) GetServerBackupValidate() *models.ServerBackupValidate {
 	return &f.ServerBackupValidate
 }
+
+type ServerBackupProgress struct {
+	models.ServerBackupProgress
+}
+
+func NewServerBackupProgress() *ServerBackupProgress {
+	return &ServerBackupProgress{}
+}
+
+func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
+	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
+
+	return flagSet
+}
+
+func (f *ServerBackupProgress) GetServerBackupProgress() *models.ServerBackupProgress {
+	return &f.ServerBackupProgress
+}

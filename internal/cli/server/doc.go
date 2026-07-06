@@ -64,10 +64,12 @@ func backupListHelpSections(listFS, awsFS *pflag.FlagSet) []HelpSection {
 	}
 }
 
-func backupProgressHelpSections(common commonFlagSets) []HelpSection {
+func backupProgressHelpSections(common commonFlagSets, progressFs, awsFS *pflag.FlagSet) []HelpSection {
 	return []HelpSection{
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{progressFs}},
+		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{awsFS}},
 		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
@@ -118,6 +120,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 	listFS := bc.list.NewFlagSet()
 	awsFS := bc.aws.NewFlagSet()
 	validationFS := bc.validate.NewFlagSet()
+	progressFS := bc.progress.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -139,7 +142,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Short:    ShortBackupProgress,
 			Long:     LongBackupProgress,
 			Usage:    flags.SectionTextUsageBackupProgress,
-			Sections: backupProgressHelpSections(common),
+			Sections: backupProgressHelpSections(common, progressFS, awsFS),
 		},
 		{
 			Name:     UseValidate,

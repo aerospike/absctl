@@ -75,7 +75,6 @@ func setHelpRestore(cmd *cobra.Command) {
 	usageFromHelp(cmd)
 }
 
-//nolint:dupl // Commands are all look the same.
 func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	startFlags := rf.start.NewFlagSet()
 	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()

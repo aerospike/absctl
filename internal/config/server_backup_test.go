@@ -61,6 +61,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		start        = &models.ServerBackup{}
 		list         = &models.ServerBackupList{}
 		validation   = &models.ServerBackupValidate{}
+		progress     = &models.ServerBackupProgress{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -73,6 +74,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		start      *models.ServerBackup
 		list       *models.ServerBackupList
 		validation *models.ServerBackupValidate
+		progress   *models.ServerBackupProgress
 		app        *models.App
 		clientCfg  *client.AerospikeConfig
 		clientPol  *models.ClientPolicy
@@ -84,6 +86,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			start:      start,
 			list:       list,
 			validation: validation,
+			progress:   progress,
 			app:        app,
 			clientCfg:  clientCfg,
 			clientPol:  clientPolicy,
@@ -113,6 +116,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 				tt.start,
 				tt.list,
 				tt.validation,
+				tt.progress,
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,
@@ -125,6 +129,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			assert.Same(t, tt.start, got.Start)
 			assert.Same(t, tt.list, got.List)
 			assert.Same(t, tt.validation, got.Validation)
+			assert.Same(t, tt.progress, got.Progress)
 			assert.Same(t, tt.app, got.App)
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)

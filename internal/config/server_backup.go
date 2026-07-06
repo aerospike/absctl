@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:dupl // Backup and restore looks the same and has same methods.
 package config
 
 import (
@@ -25,6 +24,7 @@ type ServerBackupServiceConfig struct {
 	Start      *models.ServerBackup
 	List       *models.ServerBackupList
 	Validation *models.ServerBackupValidate
+	Progress   *models.ServerBackupProgress
 
 	ServiceConfigCommon
 }
@@ -35,6 +35,7 @@ func NewServerBackupServiceConfig(
 	start *models.ServerBackup,
 	list *models.ServerBackupList,
 	validation *models.ServerBackupValidate,
+	progress *models.ServerBackupProgress,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -45,6 +46,7 @@ func NewServerBackupServiceConfig(
 		Start:      start,
 		List:       list,
 		Validation: validation,
+		Progress:   progress,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -70,6 +72,10 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 	}
 
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
+		return err
+	}
+
+	if err := s.Progress.Validate(); err != nil {
 		return err
 	}
 

@@ -109,3 +109,21 @@ func (s *ServerBackupValidate) Validate() error {
 
 	return nil
 }
+
+// ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
+type ServerBackupProgress struct {
+	JobID string
+	ServerCommon
+}
+
+func (s *ServerBackupProgress) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	return s.ServerCommon.Validate()
+}

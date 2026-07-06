@@ -30,6 +30,7 @@ import (
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/aerospike/backup-go/pkg/server"
+	sModels "github.com/aerospike/backup-go/pkg/server/models"
 	commonClient "github.com/aerospike/tools-common-go/client"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -119,7 +120,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
-	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
+	if err := logging.PrintMetadata(mds, false, s.backupCfg.App.LogJSON, s.logger); err != nil {
 		return err
 	}
 
@@ -271,6 +272,10 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		if errors.Is(err, asinfo.ErrNotFound) {
 			slog.Info(messageNoRunningBackup)
 
+			if err := s.getBackupState(ctx); err != nil {
+				return fmt.Errorf("failed to get backup state: %w", err)
+			}
+
 			return nil
 		}
 
@@ -280,11 +285,35 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 	if result >= 1.0 {
 		slog.Info(messageNoRunningBackup)
 
+		if err := s.getBackupState(ctx); err != nil {
+			return fmt.Errorf("failed to get backup state: %w", err)
+		}
+
 		return nil
 	}
 
 	s.logger.Info("Backup progress",
 		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
+
+	return nil
+}
+
+func (s *Service) getBackupState(ctx context.Context) error {
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
+
+	md, err := l.GetMetadata(ctx, s.backupCfg.Progress.JobID)
+	if err != nil {
+		return fmt.Errorf("failed to get backup metadata: %w", err)
+	}
+
+	if err := logging.PrintMetadata([]sModels.Metadata{md}, true, s.backupCfg.App.LogJSON, s.logger); err != nil {
+		return err
+	}
 
 	return nil
 }
