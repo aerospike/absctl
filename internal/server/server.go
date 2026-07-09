@@ -168,11 +168,12 @@ func (s *Service) StartBackup(ctx context.Context) error {
 			SecretKey: s.backupCfg.AwsS3.SecretAccessKey,
 			Endpoint:  s.backupCfg.AwsS3.Endpoint,
 		},
-		ModifiedAfter:  ma,
-		ModifiedBefore: mb,
-		SetList:        s.backupCfg.Start.SetList,
-		NoIndexes:      s.backupCfg.Start.NoIndexes,
-		NoUDFs:         s.backupCfg.Start.NoUDFs,
+		ModifiedAfter:      ma,
+		ModifiedBefore:     mb,
+		SetList:            s.backupCfg.Start.SetList,
+		NoIndexes:          s.backupCfg.Start.NoIndexes,
+		NoUDFs:             s.backupCfg.Start.NoUDFs,
+		EnableChangeStream: s.backupCfg.Start.EnableChangeStream,
 	}
 
 	JobID, err := client.StartServerBackup(ctx, bReq)

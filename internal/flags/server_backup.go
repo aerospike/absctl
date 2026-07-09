@@ -57,6 +57,9 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
 		models.DefaultCommonNoUDFs,
 		"Exclude user-defined functions from the backup.")
+	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
+		models.DefaultBackupEnableChangeStream,
+		"Enable backup of change stream.")
 
 	return flagSet
 }

@@ -169,6 +169,10 @@ const (
 	DefaultBackupTotalTimeout        = int64(0)
 	DefaultBackupParallel            = 1
 	DefaultBackupMaxRetries          = 5
+
+	// Server-specific backup.
+
+	DefaultBackupEnableChangeStream = false
 )
 
 // Restore.

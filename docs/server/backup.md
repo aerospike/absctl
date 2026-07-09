@@ -84,6 +84,7 @@ Backup Flags:
                                      If empty, include all sets.
   -i, --no-indexes                   Exclude indexes from the backup.
   -u, --no-udfs                      Exclude user-defined functions from the backup.
+      --enable-change-stream         Enable backup of change stream.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.

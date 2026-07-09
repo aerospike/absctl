@@ -22,12 +22,13 @@ import (
 // ServerBackup contains flags that will be mapped to ServerBackup.
 type ServerBackup struct {
 	ServerCommon
-	StorageType    string
-	ModifiedBefore string
-	ModifiedAfter  string
-	SetList        string
-	NoIndexes      bool
-	NoUDFs         bool
+	StorageType        string
+	ModifiedBefore     string
+	ModifiedAfter      string
+	SetList            string
+	NoIndexes          bool
+	NoUDFs             bool
+	EnableChangeStream bool
 }
 
 func (s *ServerBackup) Validate() error {
