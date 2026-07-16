@@ -579,6 +579,7 @@ jobs:
           OUTPUT: "type=image,push=true type=oci,dest=./cli-image.tar"
           REPO: ${{ vars.ARTIFACTORY_REGISTRY_URL }}/${{ vars.ARTIFACTORY_CONTAINER_DEV }}
           ARTIFACTORY_CONTAINER_DEV: ${{ vars.ARTIFACTORY_CONTAINER_DEV }}
+          ARTIFACTORY_REGISTRY_URL: ${{ vars.ARTIFACTORY_REGISTRY_URL }}
         run: |
           echo "Starting Docker image build and push process."
           echo "Image Name: $IMAGE_NAME"
@@ -589,7 +590,7 @@ jobs:
           echo "Context Directory: $CONTEXT"
 
           echo "Building Docker image with buildx bake."
-          jfrog docker buildx bake \
+          docker buildx bake \
             --file ${{ github.workspace }}/scripts/docker-bake.hcl \
             --metadata-file=build-metadata \
             --progress plain \
