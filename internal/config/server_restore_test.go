@@ -27,10 +27,10 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
 			ServerCommon: models.ServerCommon{
-				Namespace: testServerNamespace,
+				Namespace:   testServerNamespace,
+				StorageType: testServerStorage,
 			},
-			JobID:       testServerJobID,
-			StorageType: testServerStorage,
+			JobID: testServerJobID,
 		},
 		Prepare: &models.ServerRestorePrepare{
 			ServerCommon: models.ServerCommon{

@@ -22,7 +22,7 @@ import (
 // ServerBackup contains flags that will be mapped to ServerBackup.
 type ServerBackup struct {
 	ServerCommon
-	StorageType        string
+
 	ModifiedBefore     string
 	ModifiedAfter      string
 	SetList            string
@@ -34,10 +34,6 @@ type ServerBackup struct {
 func (s *ServerBackup) Validate() error {
 	if s == nil {
 		return nil
-	}
-
-	if s.StorageType == "" {
-		return fmt.Errorf("storage-type is required")
 	}
 
 	var modifiedAfter, modifiedBefore time.Time

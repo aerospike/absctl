@@ -35,6 +35,8 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
 		"Example: aws-s3")
 	flagSet.StringVar(&f.JobID, "backup-id", "", "Job id used for restore.")
+	flagSet.StringVar(&f.Path, "path", "", "Path to restore from.")
+	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore", false, "Fuzzy restore.")
 
 	return flagSet
 }

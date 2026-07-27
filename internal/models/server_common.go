@@ -18,12 +18,17 @@ import "fmt"
 
 // ServerCommon contains flags that will be mapped to ServerBackup and ServerRestore.
 type ServerCommon struct {
-	Namespace string
+	Namespace   string
+	StorageType string
 }
 
 func (s *ServerCommon) Validate() error {
 	if s.Namespace == "" {
 		return fmt.Errorf("namespace is required")
+	}
+
+	if s.StorageType == "" {
+		return fmt.Errorf("storage-type is required")
 	}
 
 	return nil

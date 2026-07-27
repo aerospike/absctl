@@ -19,8 +19,9 @@ import "fmt"
 // ServerRestore contains flags that will be mapped to ServerRestore.
 type ServerRestore struct {
 	ServerCommon
-	JobID       string
-	StorageType string
+	JobID        string
+	Path         string
+	FuzzyRestore bool
 }
 
 func (s *ServerRestore) Validate() error {

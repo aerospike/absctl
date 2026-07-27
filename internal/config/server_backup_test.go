@@ -34,9 +34,9 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
 			ServerCommon: models.ServerCommon{
-				Namespace: testServerNamespace,
+				Namespace:   testServerNamespace,
+				StorageType: testServerStorage,
 			},
-			StorageType: testServerStorage,
 		},
 		List: &models.ServerBackupList{
 			ListPath: testServerListPath,

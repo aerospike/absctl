@@ -31,9 +31,9 @@ const (
 func validServerBackup() *ServerBackup {
 	return &ServerBackup{
 		ServerCommon: ServerCommon{
-			Namespace: testServerNamespace,
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
 		},
-		StorageType: testServerStorage,
 	}
 }
 

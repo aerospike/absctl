@@ -215,7 +215,9 @@ func (s *Service) StartRestore(ctx context.Context) error {
 			SecretKey: s.restoreCfg.AwsS3.SecretAccessKey,
 			Endpoint:  s.restoreCfg.AwsS3.Endpoint,
 		},
-		JobID: s.restoreCfg.Start.JobID,
+		JobID:        s.restoreCfg.Start.JobID,
+		Path:         s.restoreCfg.Start.Path,
+		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
 	}
 
 	err = client.StartServerRestore(ctx, rReq)
