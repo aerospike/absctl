@@ -33,10 +33,8 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 			JobID: testServerJobID,
 		},
 		Prepare: &models.ServerRestorePrepare{
-			ServerCommon: models.ServerCommon{
-				Namespace: testServerNamespace,
-			},
-			JobID: testServerJobID,
+			Namespace: testServerNamespace,
+			JobID:     testServerJobID,
 		},
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          &models.App{},

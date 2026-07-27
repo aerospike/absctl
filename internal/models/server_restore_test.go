@@ -33,10 +33,8 @@ func validServerRestore() *ServerRestore {
 
 func validServerRestorePrepare() *ServerRestorePrepare {
 	return &ServerRestorePrepare{
-		ServerCommon: ServerCommon{
-			Namespace: testServerNamespace,
-		},
-		JobID: testServerJobID,
+		Namespace: testServerNamespace,
+		JobID:     testServerJobID,
 	}
 }
 

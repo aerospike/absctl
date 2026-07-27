@@ -33,21 +33,26 @@ func TestServerCommon_Validate(t *testing.T) {
 		{
 			name: "valid common fields",
 			common: ServerCommon{
-				Namespace: "test-ns",
+				Namespace:   testServerNamespace,
+				StorageType: testServerStorage,
 			},
 			wantErr: false,
 		},
 		{
-			name:       "missing namespace",
-			common:     ServerCommon{},
+			name: "missing namespace",
+			common: ServerCommon{
+				StorageType: testServerStorage,
+			},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
 		},
 		{
-			name:       "missing all fields",
-			common:     ServerCommon{},
+			name: "missing storage type",
+			common: ServerCommon{
+				Namespace: testServerNamespace,
+			},
 			wantErr:    true,
-			wantErrMsg: "namespace is required",
+			wantErrMsg: "storage-type is required",
 		},
 	}
 

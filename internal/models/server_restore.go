@@ -42,8 +42,8 @@ func (s *ServerRestore) Validate() error {
 
 // ServerRestorePrepare contains flags that will be mapped to ServerRestorePrepare.
 type ServerRestorePrepare struct {
-	ServerCommon
-	JobID string
+	Namespace string
+	JobID     string
 }
 
 func (s *ServerRestorePrepare) Validate() error {
@@ -55,7 +55,11 @@ func (s *ServerRestorePrepare) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
-	return s.ServerCommon.Validate()
+	if s.Namespace == "" {
+		return fmt.Errorf("namespace is required")
+	}
+
+	return nil
 }
 
 // ServerRestoreProgress contains flags that will be mapped to ServerRestorePrepare.
