@@ -38,7 +38,7 @@ jobs:
           cond: ${{ inputs.submodule != '' }}
           if_true: aerospike-tools/${{ inputs.submodule }} # In this case we are expecting to checkout the tools package.
           if_false: absctl
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: ${{ steps.checkout-dir.outputs.value }}
           fetch-depth: 0
