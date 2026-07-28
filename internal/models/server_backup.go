@@ -109,8 +109,8 @@ func (s *ServerBackupValidate) Validate() error {
 
 // ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
 type ServerBackupProgress struct {
-	JobID string
-	ServerCommon
+	Namespace string
+	JobID     string
 }
 
 func (s *ServerBackupProgress) Validate() error {
@@ -122,5 +122,9 @@ func (s *ServerBackupProgress) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
-	return s.ServerCommon.Validate()
+	if s.Namespace == "" {
+		return fmt.Errorf("namespace is required")
+	}
+
+	return nil
 }
