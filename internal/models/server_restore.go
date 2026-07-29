@@ -33,10 +33,6 @@ func (s *ServerRestore) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
-	if s.StorageType == "" {
-		return fmt.Errorf("storage-type is required")
-	}
-
 	return s.ServerCommon.Validate()
 }
 
@@ -72,5 +68,9 @@ func (s *ServerRestoreProgress) Validate() error {
 		return nil
 	}
 
-	return s.ServerCommon.Validate()
+	if s.Namespace == "" {
+		return fmt.Errorf("namespace is required")
+	}
+
+	return nil
 }
