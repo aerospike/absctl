@@ -131,7 +131,7 @@ func (v *Validator) Validate(ctx context.Context, backupID string, sampleSize in
 	}
 
 	if len(refs) == 0 {
-		return nil, fmt.Errorf("no segments found for backup %q", backupID)
+		return nil, fmt.Errorf("no segments found for backup %s", backupID)
 	}
 
 	selected := refs
@@ -171,7 +171,7 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 	}
 
 	if len(namespaces) == 0 {
-		return nil, fmt.Errorf("no namespaces found for backup %q", backupID)
+		return nil, fmt.Errorf("no namespaces found for backup %s", backupID)
 	}
 
 	// Collect all manifest keys across namespaces in parallel. Partitions that
@@ -191,12 +191,15 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 	lg.SetLimit(v.parallel)
 
 	for _, ns := range namespaces {
+		fmt.Println("--------ns: ", ns)
+
 		lg.Go(func() error {
 			found, err := v.listManifests(lctx, backupID, ns)
 			if err != nil {
-				return fmt.Errorf("list manifests for namespace %q: %w", ns, err)
+				return fmt.Errorf("list manifests for namespace %s: %w", ns, err)
 			}
 
+			fmt.Println("+++++found: ", found)
 			keysMu.Lock()
 			for _, key := range found {
 				keys = append(keys, manifestKey{namespace: ns, key: key})
@@ -220,11 +223,13 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 	fg, fctx := errgroup.WithContext(ctx)
 	fg.SetLimit(v.parallel)
 
+	fmt.Println("======keys: ", keys)
+
 	for _, mk := range keys {
 		fg.Go(func() error {
 			m, err := v.getManifest(fctx, mk.key)
 			if err != nil {
-				return fmt.Errorf("get manifest %q: %w", mk.key, err)
+				return fmt.Errorf("get manifest %s: %w", mk.key, err)
 			}
 
 			local := make([]segmentRef, 0, len(m.Segments))
@@ -256,7 +261,7 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 // listNamespaces returns the namespaces present under the manifest tree of a
 // backup.
 func (v *Validator) listNamespaces(ctx context.Context, backupID string) ([]string, error) {
-	prefix := backupID + "/manifest/ns/"
+	prefix := backupID + "/ns/"
 
 	pager := s3.NewListObjectsV2Paginator(v.client, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(v.bucket),
@@ -285,7 +290,7 @@ func (v *Validator) listNamespaces(ctx context.Context, backupID string) ([]stri
 
 // listManifests returns every manifest.json key under a namespace.
 func (v *Validator) listManifests(ctx context.Context, backupID, namespace string) ([]string, error) {
-	prefix := backupID + "/manifest/ns/" + namespace + "/"
+	prefix := backupID + "/ns/" + namespace + "/query-stream/manifest"
 
 	pager := s3.NewListObjectsV2Paginator(v.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(v.bucket),
@@ -405,7 +410,7 @@ func (v *Validator) validate(ctx context.Context, refs []segmentRef) (validation
 // is computed.
 func (v *Validator) validateSegment(ctx context.Context, ref segmentRef) segmentResult {
 	if !strings.EqualFold(ref.algorithm, checksumAlgorithmCRC32) {
-		return segmentResult{err: fmt.Errorf("unsupported checksum algorithm %q", ref.algorithm)}
+		return segmentResult{err: fmt.Errorf("unsupported checksum algorithm %s", ref.algorithm)}
 	}
 
 	expected := normalizeChecksum(ref.checksum)
@@ -450,7 +455,7 @@ func (v *Validator) metadataChecksum(ctx context.Context, key string) (checksum 
 
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return "", false, fmt.Errorf("decode checksum %q: %w", encoded, err)
+		return "", false, fmt.Errorf("decode checksum %s: %w", encoded, err)
 	}
 
 	if len(raw) != crc32.Size {

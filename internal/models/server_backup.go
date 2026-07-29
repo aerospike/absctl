@@ -118,10 +118,6 @@ func (s *ServerBackupProgress) Validate() error {
 		return nil
 	}
 
-	if s.JobID == "" {
-		return fmt.Errorf("backup-id is required")
-	}
-
 	if s.Namespace == "" {
 		return fmt.Errorf("namespace is required")
 	}

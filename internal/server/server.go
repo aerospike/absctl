@@ -285,7 +285,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	if result >= 1.0 {
+	if result >= 1.0 && s.backupCfg.Progress.JobID != "" {
 		s.logger.Info(messageNoRunningBackup)
 
 		if err := s.getBackupState(ctx); err != nil {
@@ -347,7 +347,7 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 	}
 
 	if err := s.checkBackupExists(ctx, client, s.backupCfg.AwsS3.BucketName, s.backupCfg.Validation.JobID); err != nil {
-		return fmt.Errorf("failed to check if backup exists: %w", err)
+		return err
 	}
 
 	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.logger)
