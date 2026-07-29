@@ -122,7 +122,7 @@ jobs:
           cache: false
 
       - name: setup GPG
-        uses: aerospike/shared-workflows/.github/actions/setup-gpg@a9e883e43e0d4679ff1a250ea1ef577332a81722 # v3.8.0
+        uses: aerospike/shared-workflows/.github/actions/setup-gpg@7ba63cd06166496290fef46abbe99fb1a0fb2772 # v3.8.0
         with:
           gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
           gpg-public-key: ${{ secrets.GPG_PUBLIC_KEY }}
