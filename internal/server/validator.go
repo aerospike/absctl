@@ -191,15 +191,12 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 	lg.SetLimit(v.parallel)
 
 	for _, ns := range namespaces {
-		fmt.Println("--------ns: ", ns)
-
 		lg.Go(func() error {
 			found, err := v.listManifests(lctx, backupID, ns)
 			if err != nil {
 				return fmt.Errorf("list manifests for namespace %s: %w", ns, err)
 			}
 
-			fmt.Println("+++++found: ", found)
 			keysMu.Lock()
 			for _, key := range found {
 				keys = append(keys, manifestKey{namespace: ns, key: key})
@@ -222,8 +219,6 @@ func (v *Validator) discover(ctx context.Context, backupID string) ([]segmentRef
 
 	fg, fctx := errgroup.WithContext(ctx)
 	fg.SetLimit(v.parallel)
-
-	fmt.Println("======keys: ", keys)
 
 	for _, mk := range keys {
 		fg.Go(func() error {
@@ -307,7 +302,7 @@ func (v *Validator) listManifests(ctx context.Context, backupID, namespace strin
 
 		for _, obj := range page.Contents {
 			key := aws.ToString(obj.Key)
-			if strings.HasSuffix(key, "/"+manifestFileName) {
+			if strings.HasSuffix(key, ".json") {
 				keys = append(keys, key)
 			}
 		}
