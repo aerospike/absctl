@@ -81,6 +81,8 @@ func printMetadataToTable(out io.Writer, data []models.Metadata, withNodes bool)
 }
 
 func printMetadataSummary(out io.Writer, data []models.Metadata) error {
+	fmt.Println("start printMetadataSummary")
+
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', tabwriter.Debug)
 
 	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
@@ -99,14 +101,20 @@ func printMetadataSummary(out io.Writer, data []models.Metadata) error {
 		)
 	}
 
+	fmt.Println("try to flush printMetadataSummary")
+
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("failed to flush output: %w", err)
 	}
+
+	fmt.Println("finished printMetadataSummary")
 
 	return nil
 }
 
 func printMetadataDetailed(out io.Writer, data []models.Metadata) error {
+	fmt.Println("start printMetadataDetailed")
+
 	for i := range data {
 		md := data[i]
 		stats := calcMetadataStats(md)
@@ -128,10 +136,14 @@ func printMetadataDetailed(out io.Writer, data []models.Metadata) error {
 		fmt.Fprintln(out) // blank line between backups.
 	}
 
+	fmt.Println("finished printMetadataDetailed")
+
 	return nil
 }
 
 func printNodes(out io.Writer, nodes []models.Node) error {
+	fmt.Println("start printNodes")
+
 	if len(nodes) == 0 {
 		fmt.Fprintln(out, "  no nodes")
 
@@ -161,9 +173,13 @@ func printNodes(out io.Writer, nodes []models.Node) error {
 		)
 	}
 
+	fmt.Println("try to flush printNodes")
+
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("failed to flush nodes output: %w", err)
 	}
+
+	fmt.Println("end printNodes")
 
 	return nil
 }

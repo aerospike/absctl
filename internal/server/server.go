@@ -120,9 +120,13 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
+	s.logger.Info("got list of all metadata for printing", slog.Int("count", len(mds)))
+
 	if err := logging.PrintMetadata(mds, false, s.backupCfg.App.LogJSON, s.logger); err != nil {
 		return err
 	}
+
+	s.logger.Info("metadata printed", slog.Int("count", len(mds)))
 
 	return nil
 }
