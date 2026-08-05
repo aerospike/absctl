@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
@@ -268,10 +269,24 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return err
 	}
 
-	result, err := client.GetBackupStatus(ctx, s.backupCfg.Progress.JobID)
-	if err != nil {
-		if errors.Is(err, asinfo.ErrNotFound) {
-			s.logger.Info("no running backup found")
+	for {
+		result, err := client.GetBackupStatus(ctx, s.backupCfg.Progress.JobID)
+		if err != nil {
+			if errors.Is(err, asinfo.ErrNotFound) {
+				s.logger.Info("no running backup found")
+
+				if err := s.getBackupState(ctx); err != nil {
+					return fmt.Errorf("failed to get backup state: %w", err)
+				}
+
+				return nil
+			}
+
+			return fmt.Errorf("failed to get backup status: %w", err)
+		}
+
+		if result.State == iModels.BackupStateComplete {
+			s.logger.Info("backup complete")
 
 			if err := s.getBackupState(ctx); err != nil {
 				return fmt.Errorf("failed to get backup state: %w", err)
@@ -280,25 +295,21 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 			return nil
 		}
 
-		return fmt.Errorf("failed to get backup status: %w", err)
-	}
+		s.logger.Info("backup progress",
+			slog.String("backup-id", result.JobID),
+			slog.String("state", result.State.Describe()),
+			slog.String("pct", fmt.Sprintf("%.1f%%", result.ProgressPct)))
 
-	if result.State == iModels.BackupStateComplete {
-		s.logger.Info("backup complete")
-
-		if err := s.getBackupState(ctx); err != nil {
-			return fmt.Errorf("failed to get backup state: %w", err)
+		if !s.backupCfg.Progress.Watch {
+			return nil
 		}
 
-		return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(s.backupCfg.Progress.WatchPoll) * time.Millisecond):
+		}
 	}
-
-	s.logger.Info("backup progress",
-		slog.String("backup-id", result.JobID),
-		slog.String("state", result.State.Describe()),
-		slog.String("pct", fmt.Sprintf("%.1f%%", result.ProgressPct)))
-
-	return nil
 }
 
 func (s *Service) getBackupState(ctx context.Context) error {

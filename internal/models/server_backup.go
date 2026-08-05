@@ -110,6 +110,8 @@ func (s *ServerBackupValidate) Validate() error {
 // ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
 type ServerBackupProgress struct {
 	JobID     string
+	Watch     bool
+	WatchPoll int64
 }
 
 func (s *ServerBackupProgress) Validate() error {

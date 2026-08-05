@@ -225,8 +225,9 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Backup Flags:
-      --namespace string   The namespace to be backed up.
       --backup-id string   Backup id used for validation.
+      --watch              Watch the progress of the backup.
+      --watch-poll int     Polling interval in milliseconds for watch. (default 1000)
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.

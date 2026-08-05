@@ -70,6 +70,8 @@ Restore Flags:
       --namespace string             The namespace to restore.
       --object-storage-type string   Type of object storage. Example: aws-s3
       --backup-id string             Job id used for restore.
+      --path string                  Path to restore from.
+      --fuzzy-restore                Fuzzy restore.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.

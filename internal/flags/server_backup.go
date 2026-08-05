@@ -115,6 +115,7 @@ type ServerBackupProgress struct {
 	models.ServerBackupProgress
 }
 
+// NewServerBackupProgress initializes and returns a new instance of ServerBackupProgress.
 func NewServerBackupProgress() *ServerBackupProgress {
 	return &ServerBackupProgress{}
 }
@@ -123,6 +124,8 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
 	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
+	flagSet.BoolVar(&f.Watch, "watch", false, "Watch the progress of the backup.")
+	flagSet.Int64Var(&f.WatchPoll, "watch-poll", 1000, "Polling interval in milliseconds for watch.")
 
 	return flagSet
 }
