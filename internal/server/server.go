@@ -35,8 +35,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-const messageNoRunningBackup = "No running backup found"
-
 // S3API is an interface for the S3 client.
 type S3API interface {
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
@@ -181,7 +179,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
-	s.logger.Info("Server integrated backup started",
+	s.logger.Info("server integrated backup started",
 		slog.String("backup-id", JobID))
 
 	return nil
@@ -225,7 +223,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
-	s.logger.Info("Server integrated restore started",
+	s.logger.Info("server integrated restore started",
 		slog.String("backup-id", s.restoreCfg.Start.JobID))
 
 	return nil
@@ -270,10 +268,10 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return err
 	}
 
-	result, err := client.GetBackupStatus(ctx)
+	result, err := client.GetBackupStatus(ctx, s.backupCfg.Progress.JobID)
 	if err != nil {
 		if errors.Is(err, asinfo.ErrNotFound) {
-			s.logger.Info(messageNoRunningBackup)
+			s.logger.Info("no running backup found")
 
 			if err := s.getBackupState(ctx); err != nil {
 				return fmt.Errorf("failed to get backup state: %w", err)
@@ -285,8 +283,8 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	if result >= 1.0 && s.backupCfg.Progress.JobID != "" {
-		s.logger.Info(messageNoRunningBackup)
+	if result.State == iModels.BackupStateComplete {
+		s.logger.Info("backup complete")
 
 		if err := s.getBackupState(ctx); err != nil {
 			return fmt.Errorf("failed to get backup state: %w", err)
@@ -295,8 +293,10 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return nil
 	}
 
-	s.logger.Info("Backup progress",
-		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
+	s.logger.Info("backup progress",
+		slog.String("backup-id", result.JobID),
+		slog.String("state", result.State.Describe()),
+		slog.String("pct", fmt.Sprintf("%.1f%%", result.ProgressPct)))
 
 	return nil
 }
@@ -333,7 +333,7 @@ func (s *Service) RestoreProgress(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	s.logger.Info("Restore progress",
+	s.logger.Info("restore progress",
 		slog.String("result", result))
 
 	return nil

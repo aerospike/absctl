@@ -122,7 +122,6 @@ func NewServerBackupProgress() *ServerBackupProgress {
 func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
 	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
 
 	return flagSet
