@@ -35,15 +35,8 @@ import (
 const (
 	testNamespace       = "test"
 	testSet             = "test"
-	testSetXDR          = "test-xdr"
 	testStateFile       = "state"
 	testASLoginPassword = "admin"
-	testDC              = "dc1"
-	testXDRHost         = "172.17.0.1"
-	testXDRPort         = 8066
-	testAckQueueSize    = 256
-	testResultQueueSize = 256
-	testRewind          = "all"
 	testHost            = "127.0.0.1"
 	testPort            = 3000
 )
@@ -97,64 +90,6 @@ func Test_BackupWithState(t *testing.T) {
 	}
 
 	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSet)
-	require.NoError(t, err)
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	asb, err := NewService(ctx, asbParams, logger)
-	require.NoError(t, err)
-
-	err = asb.Run(ctx)
-	require.NoError(t, err)
-}
-
-func Test_BackupXDR(t *testing.T) {
-	// Do not parallel this test. We have multiply xdr tests, so they should be executed sequentially.
-	ctx := t.Context()
-	dir := path.Join(t.TempDir(), "xdr")
-	hostPort := testHostPort()
-
-	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
-			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
-		},
-		BackupXDR: &models.BackupXDR{
-			FileLimit:                     100000,
-			InfoMaxRetries:                3,
-			InfoRetriesMultiplier:         1,
-			InfoRetryIntervalMilliseconds: 1000,
-			Directory:                     dir,
-			Namespace:                     testNamespace,
-			DC:                            testDC,
-			LocalAddress:                  testXDRHost,
-			LocalPort:                     testXDRPort,
-			MaxConnections:                10,
-			Rewind:                        testRewind,
-			InfoPolingPeriodMilliseconds:  100,
-			ReadTimeoutMilliseconds:       10000,
-			WriteTimeoutMilliseconds:      10000,
-			ResultQueueSize:               testAckQueueSize,
-			AckQueueSize:                  testResultQueueSize,
-			StartTimeoutMilliseconds:      10000,
-		},
-	}
-
-	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSetXDR)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -247,13 +182,6 @@ func newBackupCfg(b *models.Backup) *config.BackupServiceConfig {
 	}
 }
 
-func Test_RunNilService(t *testing.T) {
-	t.Parallel()
-
-	var s *Service
-	require.NoError(t, s.Run(t.Context()))
-}
-
 func Test_ErrHumanize(t *testing.T) {
 	t.Parallel()
 
@@ -298,7 +226,7 @@ func Test_ErrHumanize(t *testing.T) {
 	}
 }
 
-func Test_GetInfoPolicies_BackupScan(t *testing.T) {
+func Test_BackupInfoPolicies(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.BackupServiceConfig{
@@ -312,49 +240,13 @@ func Test_GetInfoPolicies_BackupScan(t *testing.T) {
 		},
 	}
 
-	info, retry := getInfoPolicies(cfg)
+	info, retry := cfg.Backup.InfoPolicy(), cfg.Backup.RetryPolicy()
 	require.NotNil(t, info)
 	require.NotNil(t, retry)
 	require.Equal(t, 1500*time.Millisecond, info.Timeout)
 	require.Equal(t, 250*time.Millisecond, retry.BaseTimeout)
 	require.InDelta(t, 2.0, retry.Multiplier, 0.0001)
 	require.EqualValues(t, 4, retry.MaxRetries)
-}
-
-func Test_GetInfoPolicies_BackupXDR(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.BackupServiceConfig{
-		BackupXDR: &models.BackupXDR{
-			InfoTimeout:                   5000,
-			InfoMaxRetries:                3,
-			InfoRetriesMultiplier:         1.5,
-			InfoRetryIntervalMilliseconds: 200,
-		},
-	}
-
-	info, retry := getInfoPolicies(cfg)
-	require.NotNil(t, info)
-	require.NotNil(t, retry)
-	require.Equal(t, 5*time.Second, info.Timeout)
-	require.Equal(t, 200*time.Millisecond, retry.BaseTimeout)
-	require.InDelta(t, 1.5, retry.Multiplier, 0.0001)
-	require.EqualValues(t, 3, retry.MaxRetries)
-}
-
-func Test_GetInfoPolicies_XDRTakesPrecedence(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.BackupServiceConfig{
-		Backup: &models.Backup{
-			Common: models.Common{InfoTimeout: 1000},
-		},
-		BackupXDR: &models.BackupXDR{InfoTimeout: 7000},
-	}
-
-	info, _ := getInfoPolicies(cfg)
-	require.Equal(t, 7*time.Second, info.Timeout,
-		"BackupXDR config must be used when both Backup and BackupXDR are set")
 }
 
 func Test_NewService_InvalidRackList(t *testing.T) {

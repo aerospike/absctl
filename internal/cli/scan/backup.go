@@ -112,12 +112,11 @@ func (r *backupRunner) NewServiceConfig(ctx context.Context, shared *subcmd.Shar
 		return cfg, nil
 	}
 
-	cfg, err := config.NewBackupServiceConfig(
+	return config.NewBackupServiceConfig(
 		shared.App.GetApp(),
 		shared.Aerospike.NewAerospikeConfig(),
 		shared.ClientPolicy.GetClientPolicy(),
 		r.flagsBackup.GetBackup(),
-		nil,
 		shared.Compression.GetCompression(),
 		shared.Encryption.GetEncryption(),
 		shared.SecretAgent.GetSecretAgent(),
@@ -125,23 +124,27 @@ func (r *backupRunner) NewServiceConfig(ctx context.Context, shared *subcmd.Shar
 		shared.Gcp.GetGcpStorage(),
 		shared.Azure.GetAzureBlob(),
 		r.flagsLocal.GetLocal(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
+	), nil
 }
 
 func (r *backupRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
-	backupCfg := cfg.(*config.BackupServiceConfig)
+	backupCfg, ok := cfg.(*config.BackupServiceConfig)
+	if !ok {
+		return fmt.Errorf("unexpected service config type %T", cfg)
+	}
 
-	asb, err := backup.NewService(ctx, backupCfg, logger)
+	svc, err := backup.NewService(ctx, backupCfg, logger)
 	if err != nil {
 		return fmt.Errorf("backup initialization failed: %w", err)
 	}
 
-	if err = asb.Run(ctx); err != nil {
+	// A nil service means --remove-artifacts was requested:
+	// the target was cleaned during initialization, nothing to run.
+	if svc == nil {
+		return nil
+	}
+
+	if err = svc.Run(ctx); err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
 
