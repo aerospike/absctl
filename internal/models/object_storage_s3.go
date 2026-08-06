@@ -12,30 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logging
+package models
 
 import (
-	"bytes"
-	"testing"
+	"fmt"
 )
 
-// captureOutput runs fn while swapping the package-level output writer with
-// an in-memory buffer and returns whatever fn wrote.
-//
-// Tests that exercise pretty-printers should not call SetOutWriter directly;
-// using this helper guarantees the previous writer is restored even when the
-// test fails.
-func captureOutput(t *testing.T, fn func()) string {
-	t.Helper()
+// ObjectStorageS3 represents the configuration for AWS S3 object storage, used by server integrated backup.
+type ObjectStorageS3 struct {
+	BucketName      string
+	Region          string
+	Profile         string
+	Endpoint        string
+	AccessKeyID     string
+	SecretAccessKey string
+}
 
-	buf := &bytes.Buffer{}
-	prev := SetOutWriter(buf)
+// Validate internal validation for struct params.
+func (o *ObjectStorageS3) Validate() error {
+	if o.BucketName == "" {
+		return fmt.Errorf("bucket name is required")
+	}
 
-	t.Cleanup(func() {
-		SetOutWriter(prev)
-	})
-
-	fn()
-
-	return buf.String()
+	return nil
 }

@@ -124,7 +124,6 @@ func Test_BackupRestore(t *testing.T) {
 		Restore: &models.Restore{
 			BatchSize:       1,
 			MaxAsyncBatches: 1,
-			Mode:            models.RestoreModeASB,
 			Common: models.Common{
 				Directory:                     dir,
 				Namespace:                     testNamespace,
@@ -193,62 +192,10 @@ func newRestoreCfg(r *models.Restore) *config.RestoreServiceConfig {
 	}
 }
 
-func Test_RunNilService(t *testing.T) {
-	t.Parallel()
-
-	var s *Service
-	require.NoError(t, s.Run(t.Context()))
-}
-
-// Test_Run_AutoMode_NoReaders covers the Run -> runAuto dispatch path
-// when neither an ASB nor an ASBX reader is configured. Both readers are nil,
-// so no goroutines are launched and the function should complete without error.
-func Test_Run_AutoMode_NoReaders(t *testing.T) {
-	t.Parallel()
-
-	s := &Service{
-		config:      &backup.ConfigRestore{},
-		logger:      quietLogger(),
-		reportToLog: true,
-	}
-
-	require.NoError(t, s.Run(t.Context()))
-}
-
-// Test_Run_AutoMode_NoReaders_ValidateOnly covers the validation-only branch
-// of the report logic in runAuto.
-func Test_Run_AutoMode_NoReaders_ValidateOnly(t *testing.T) {
-	t.Parallel()
-
-	s := &Service{
-		config:      &backup.ConfigRestore{ValidateOnly: true},
-		logger:      quietLogger(),
-		reportToLog: true,
-	}
-
-	require.NoError(t, s.Run(t.Context()))
-}
-
-// Test_Run_UnknownMode_FallsThroughToAuto verifies that an unrecognized mode
-// is dispatched to the auto-mode handler.
-func Test_Run_UnknownMode_FallsThroughToAuto(t *testing.T) {
-	t.Parallel()
-
-	s := &Service{
-		mode:        "something-unexpected",
-		config:      &backup.ConfigRestore{},
-		logger:      quietLogger(),
-		reportToLog: true,
-	}
-
-	require.NoError(t, s.Run(t.Context()))
-}
-
-func Test_NewService_ValidateOnly_ASBMode_EmptyDir(t *testing.T) {
+func Test_NewService_ValidateOnly_EmptyDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := newRestoreCfg(&models.Restore{
-		Mode:         models.RestoreModeASB,
 		ValidateOnly: true,
 		Common: models.Common{
 			Directory: t.TempDir(),
@@ -261,43 +208,6 @@ func Test_NewService_ValidateOnly_ASBMode_EmptyDir(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, svc)
 	require.Contains(t, err.Error(), "restore reader")
-}
-
-func Test_NewService_ValidateOnly_ASBXMode_EmptyDir(t *testing.T) {
-	t.Parallel()
-
-	cfg := newRestoreCfg(&models.Restore{
-		Mode:         models.RestoreModeASBX,
-		ValidateOnly: true,
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
-	})
-
-	svc, err := NewService(t.Context(), cfg, quietLogger())
-	require.Error(t, err)
-	require.Nil(t, svc)
-	require.Contains(t, err.Error(), "restore reader")
-}
-
-func Test_NewService_ValidateOnly_AutoMode_EmptyDir(t *testing.T) {
-	t.Parallel()
-
-	cfg := newRestoreCfg(&models.Restore{
-		Mode:         models.RestoreModeAuto,
-		ValidateOnly: true,
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
-	})
-
-	svc, err := NewService(t.Context(), cfg, quietLogger())
-	require.Error(t, err)
-	require.Nil(t, svc)
 }
 
 func TestGetWarmUp(t *testing.T) {

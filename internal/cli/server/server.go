@@ -17,28 +17,19 @@ package server
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
+	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/server"
 	asFlags "github.com/aerospike/tools-common-go/flags"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-const (
-	serverShort = "Manage server-integrated backups and restores"
-	serverLong  = "Commands for triggering and inspecting backups and restores that run inside the Aerospike server."
-
-	useBackup   = "backup"
-	useRestore  = "restore"
-	useStart    = "start"
-	useList     = "list"
-	useProgress = "progress"
-	usePrepare  = "prepare"
-)
-
-// runCtx is passed to all server subcommand constructors so they share the
-// flag objects collected on the parent commands and the lazily-initialized logger.
+// runCtx is shared by every server subcommand constructor. It owns the flag
+// holders collected on the parent command and the lazily-initialized logger.
 type runCtx struct {
 	flagsRoot    *flags.Root
 	app          *flags.App
@@ -53,10 +44,11 @@ type runCtx struct {
 	buildTime  string
 }
 
-// NewCmd creates the root "server" command with the flags shared by all
-// server-integrated backup and restore subcommands.
-func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
-	rc := &runCtx{
+// newRunCtx constructs a runCtx with freshly-allocated flag holders and a
+// default logger. Each top-level command (backup, restore) gets its own
+// runCtx; the logger is replaced by applyRootPersistent during PreRun.
+func newRunCtx(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *runCtx {
+	return &runCtx{
 		flagsRoot:    flagsRoot,
 		app:          flags.NewApp(),
 		aerospike:    asFlags.NewDefaultAerospikeFlags(),
@@ -67,26 +59,29 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 		commitHash:   commitHash,
 		buildTime:    buildTime,
 	}
+}
 
-	cmd := &cobra.Command{
-		Use:   "server",
-		Short: serverShort,
-		Long:  serverLong,
-	}
+// commonFlagSets holds the connection-related flag sets in help-display order.
+// Returning a named struct instead of a []*pflag.FlagSet keeps the help
+// builders readable (common.aerospike vs common[1]).
+type commonFlagSets struct {
+	app          *pflag.FlagSet
+	aerospike    *pflag.FlagSet
+	clientPolicy *pflag.FlagSet
+	secretAgent  *pflag.FlagSet
+}
 
-	cmd.PersistentFlags().SortFlags = false
+// applyRootPersistent attaches the application-wide persistent flags and the
+// logger lifecycle hooks to a top-level command (backup, restore).
+//
+// The logger is needed by every subcommand, so the hooks live on the parent
+// and are inherited by all children. This fixes the previous behavior where
+// subcommands that did not call applyCommon (list, validate) ran with the
+// default logger and without SilenceUsage.
+func applyRootPersistent(cmd *cobra.Command, rc *runCtx) {
 	cmd.SilenceUsage = true
-
-	appFlagSet := rc.app.NewFlagSet()
-	aerospikeFlagSet := rc.aerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapFlagsForSecrets(aerospikeFlagSet)
-	clientPolicyFlagSet := rc.clientPolicy.NewFlagSet()
-	secretAgentFlagSet := rc.secretAgent.NewFlagSet()
-
-	cmd.PersistentFlags().AddFlagSet(appFlagSet)
-	cmd.PersistentFlags().AddFlagSet(aerospikeFlagSet)
-	cmd.PersistentFlags().AddFlagSet(clientPolicyFlagSet)
-	cmd.PersistentFlags().AddFlagSet(secretAgentFlagSet)
+	cmd.PersistentFlags().SortFlags = false
+	cmd.PersistentFlags().AddFlagSet(rc.app.NewFlagSet())
 
 	var loggerClose func() error
 
@@ -120,68 +115,104 @@ func NewCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *co
 
 		return nil
 	}
-
-	cmd.AddCommand(newBackupCmd(rc))
-	cmd.AddCommand(newRestoreCmd(rc))
-
-	setParentHelp(cmd, appFlagSet, aerospikeFlagSet, clientPolicyFlagSet, secretAgentFlagSet)
-
-	return cmd
 }
 
-// setParentHelp overrides the root-inherited help for commands that have subcommands.
-func setParentHelp(cmd *cobra.Command, flagSets ...*pflag.FlagSet) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		fmt.Println(c.Short)
-		fmt.Printf("\nUsage:\n  %s [command]\n", c.CommandPath())
-		fmt.Println("\nAvailable Commands:")
+// applyCommon binds the Aerospike connection flag sets (aerospike, client
+// policy, secret agent) to a data-plane subcommand and returns all common
+// flag sets for help rendering. Unlike the previous version it no longer
+// installs lifecycle hooks — those belong on the parent (applyRootPersistent).
+func applyCommon(cmd *cobra.Command, rc *runCtx) commonFlagSets {
+	fs := commonFlagSets{
+		app:          rc.app.NewFlagSet(),
+		aerospike:    rc.aerospike.NewFlagSet(asFlags.DefaultWrapHelpString),
+		clientPolicy: rc.clientPolicy.NewFlagSet(),
+		secretAgent:  rc.secretAgent.NewFlagSet(),
+	}
+	flags.WrapFlagsForSecrets(fs.aerospike)
 
-		for _, sub := range c.Commands() {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
+	cmd.Flags().SortFlags = false
+	cmd.Flags().AddFlagSet(fs.aerospike)
+	cmd.Flags().AddFlagSet(fs.clientPolicy)
+	cmd.Flags().AddFlagSet(fs.secretAgent)
 
-			fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
+	return fs
+}
+
+// printSubcommandHelp writes the usage line and flag sections for a subcommand.
+//
+//nolint:gocritic // THis is doc gen function we don't need to optimize it and use pointer instead.
+func printSubcommandHelp(doc SubcommandDoc) {
+	printHelpHeader(doc.Usage)
+
+	for _, sec := range doc.Sections {
+		printSection(sec.Title, sec.FlagSets...)
+	}
+}
+
+// printHelpHeader writes the welcome banner, a matching underline and the
+// usage section for a command.
+func printHelpHeader(usage string) {
+	fmt.Println(textWelcomeMessage)
+	fmt.Println(strings.Repeat("-", len(textWelcomeMessage)))
+	fmt.Println(usage)
+}
+
+// printSection writes a section title followed by the defaults of one or more
+// flag sets, all routed to w so help output is testable and consistent.
+func printSection(title string, sets ...*pflag.FlagSet) {
+	fmt.Println(title)
+
+	for _, fs := range sets {
+		fs.PrintDefaults()
+	}
+}
+
+// printCommands lists the available subcommands of c in two-column form.
+func printCommands(c *cobra.Command) {
+	fmt.Println(flags.SectionAvailableCommands)
+
+	for _, sub := range c.Commands() {
+		if !sub.IsAvailableCommand() {
+			continue
 		}
 
-		if len(flagSets) > 0 {
-			fmt.Println("\nFlags:")
+		fmt.Printf("  %-25s %s\n", sub.Name(), sub.Short)
+	}
+}
 
-			for _, fs := range flagSets {
-				fmt.Print(fs.FlagUsages())
-			}
-		}
-
-		fmt.Printf("\nUse \"%s [command] --help\" for more information about a command.\n", c.CommandPath())
-	})
-
+// usageFromHelp wires SetUsageFunc to delegate to the command's help func so a
+// usage error and "--help" render identically.
+func usageFromHelp(cmd *cobra.Command) {
 	cmd.SetUsageFunc(func(c *cobra.Command) error {
 		c.HelpFunc()(c, nil)
 		return nil
 	})
 }
 
-// setLeafHelp overrides the root-inherited help for leaf commands.
-func setLeafHelp(cmd *cobra.Command) {
-	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		fmt.Println(c.Short)
-		fmt.Printf("\nUsage:\n  %s [flags]\n", c.CommandPath())
-
-		local := c.LocalFlags()
-		if local.HasFlags() {
-			fmt.Println("\nFlags:")
-			fmt.Print(local.FlagUsages())
+// newService validates cfg and constructs the server-side service, wrapping an
+// initialization failure with the supplied prefix (errInitBackup /
+// errInitRestore).
+func newService(
+	rc *runCtx,
+	backupCfg *config.ServerBackupServiceConfig,
+	restoreCfg *config.ServerRestoreServiceConfig,
+) (*server.Service, error) {
+	if backupCfg != nil {
+		if err := backupCfg.Validate(false); err != nil {
+			return nil, fmt.Errorf("failed to validate backup config: %w", err)
 		}
+	}
 
-		inherited := c.InheritedFlags()
-		if inherited.HasFlags() {
-			fmt.Println("\nGlobal Flags:")
-			fmt.Print(inherited.FlagUsages())
+	if restoreCfg != nil {
+		if err := restoreCfg.Validate(false); err != nil {
+			return nil, fmt.Errorf("failed to validate restore config: %w", err)
 		}
-	})
+	}
 
-	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		c.HelpFunc()(c, nil)
-		return nil
-	})
+	svc, err := server.NewService(backupCfg, restoreCfg, rc.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create service: %w", err)
+	}
+
+	return svc, nil
 }
