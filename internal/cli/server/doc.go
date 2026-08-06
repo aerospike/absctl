@@ -53,7 +53,7 @@ func backupStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common commo
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{startFS}},
 		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{objectStoreFS}},
-		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+		{Title: flags.SectionTextSecretAgentSnapshotBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 
@@ -70,7 +70,7 @@ func backupProgressHelpSections(common commonFlagSets, progressFs, awsFS *pflag.
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{progressFs}},
 		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{awsFS}},
-		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+		{Title: flags.SectionTextSecretAgentSnapshotBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 
@@ -87,7 +87,7 @@ func restoreStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common comm
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{startFS}},
 		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{objectStoreFS}},
-		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 
@@ -96,7 +96,7 @@ func restorePrepareHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets)
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
-		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 
@@ -105,7 +105,7 @@ func restoreProgressHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
-		{Title: flags.SectionTextSecretAgentBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 

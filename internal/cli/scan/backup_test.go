@@ -69,9 +69,9 @@ func TestNewBackupCmd_Structure(t *testing.T) {
 
 	require.NotNil(t, cmd)
 	require.NotNil(t, shared)
-	assert.Equal(t, "export", cmd.Use)
-	assert.Equal(t, backupWelcomeMessageShort, cmd.Short)
-	assert.Equal(t, backupWelcomeMessage, cmd.Long)
+	assert.Equal(t, UseBackup, cmd.Use)
+	assert.Equal(t, ShortBackup, cmd.Short)
+	assert.Equal(t, LongBackup, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
 	assert.NotNil(t, cmd.RunE)
 }
@@ -146,6 +146,6 @@ func TestNewBackupHelpFunction_Output(t *testing.T) {
 	)
 
 	out := captureStdout(t, helpFn)
-	assert.Contains(t, out, backupWelcomeMessage)
-	assert.Contains(t, out, strings.Repeat("-", len(backupWelcomeMessage)))
+	assert.Contains(t, out, textWelcomeMessageBackup)
+	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageBackup)))
 }

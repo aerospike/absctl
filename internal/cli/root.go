@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/aerospike/absctl/internal/cli/scan"
 	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
@@ -73,19 +74,17 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	rootCmd.PersistentFlags().AddFlagSet(rootFlagSet)
 
 	// Add subcommands - they will initialize their own operation-specific flags
-	// exportCmd, _ := scan.NewExportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	// importCmd, _ := scan.NewImportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	scanBackupCmd, _ := scan.NewExportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	scanRestoreCmd, _ := scan.NewImportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	backupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	restoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	serverBackupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	serverRestoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	// Commented for now, who knows what will be released.
-	// rootCmd.AddCommand(exportCmd)
-	// rootCmd.AddCommand(importCmd)
-	// rootCmd.AddCommand(serviceCmd)
+	rootCmd.AddCommand(scanBackupCmd)
+	rootCmd.AddCommand(scanRestoreCmd)
 
-	rootCmd.AddCommand(backupCmd)
-	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(serverBackupCmd)
+	rootCmd.AddCommand(serverRestoreCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
@@ -127,13 +126,10 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
-		//nolint:gocritic // This lines are commented as they belong to not released features.
-		// fmt.Println("  export    Aerospike scan-based export")
-		// fmt.Println("  import    Aerospike scan-based import")
-		fmt.Println("  backup    Manage server-integrated backups")
-		fmt.Println("  restore   Manage server-integrated restores")
-		//nolint:gocritic // This lines are commented as they belong to not released features.
-		// fmt.Println("  service   Interact with Aerospike Backup Service REST API")
+		fmt.Println("  backup             Aerospike scan-based export")
+		fmt.Println("  restore            Aerospike scan-based import")
+		fmt.Println("  snapshot-backup    Manage server-integrated backups")
+		fmt.Println("  snapshot-restore   Manage server-integrated restores")
 
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()

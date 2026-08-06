@@ -29,13 +29,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	backupWelcomeMessage      = "Welcome to the Aerospike backup CLI tool!"
-	backupWelcomeMessageShort = "Aerospike backup CLI tool"
-
-	useExport = "export"
-)
-
 type backupRunner struct {
 	flagsBackup *flags.Backup
 	flagsCommon *flags.Common
@@ -57,7 +50,7 @@ func NewExportCmd(
 	r.flagsCommon = flags.NewCommon(&r.flagsBackup.Common, flags.OperationBackup)
 
 	return subcmd.BuildCommand(
-		useExport, backupWelcomeMessageShort, backupWelcomeMessage,
+		UseBackup, ShortBackup, LongBackup,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationBackup, r,
 	)
@@ -170,8 +163,8 @@ func newBackupHelpFunction(
 	localFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
-		fmt.Println(backupWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(backupWelcomeMessage)))
+		fmt.Println(textWelcomeMessageBackup)
+		fmt.Println(strings.Repeat("-", len(textWelcomeMessageBackup)))
 		fmt.Println(flags.SectionTextUsageBackup)
 
 		// Print section: App Flags

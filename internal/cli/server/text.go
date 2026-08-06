@@ -24,13 +24,13 @@ const textWelcomeMessage = "Welcome to the Aerospike backup CLI tool!"
 
 // Command names (cobra "Use" values).
 const (
-	UseBackup   = "backup"
-	UseRestore  = "restore"
-	UseStart    = "start"
-	UseList     = "list"
-	UseProgress = "progress"
-	UsePrepare  = "prepare"
-	UseValidate = "validate"
+	UseSnapshotBackup  = "snapshot-backup"
+	UseSnapshotRestore = "snapshot-restore"
+	UseStart           = "start"
+	UseList            = "list"
+	UseProgress        = "progress"
+	UsePrepare         = "prepare"
+	UseValidate        = "validate"
 )
 
 // Short descriptions (cobra "Short" values).

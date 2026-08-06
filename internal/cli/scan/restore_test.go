@@ -31,9 +31,9 @@ func TestNewRestoreCmd_Structure(t *testing.T) {
 
 	require.NotNil(t, cmd)
 	require.NotNil(t, shared)
-	assert.Equal(t, "import", cmd.Use)
-	assert.Equal(t, restoreWelcomeMessageShort, cmd.Short)
-	assert.Equal(t, restoreWelcomeMessage, cmd.Long)
+	assert.Equal(t, UseRestore, cmd.Use)
+	assert.Equal(t, ShortRestore, cmd.Short)
+	assert.Equal(t, LongRestore, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
 	assert.NotNil(t, cmd.RunE)
 }
@@ -103,6 +103,6 @@ func TestNewRestoreHelpFunction_Output(t *testing.T) {
 	)
 
 	out := captureStdout(t, helpFn)
-	assert.Contains(t, out, restoreWelcomeMessage)
-	assert.Contains(t, out, strings.Repeat("-", len(restoreWelcomeMessage)))
+	assert.Contains(t, out, textWelcomeMessageRestore)
+	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageRestore)))
 }

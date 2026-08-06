@@ -1,6 +1,6 @@
-# Aerospike server-integrated restore (`absctl restore`)
+# Aerospike server-integrated restore (`absctl snapshot-restore`)
 
-This page describes the server-integrated restore commands exposed by `absctl restore`.
+This page describes the server-integrated restore commands exposed by `absctl snapshot-restore`.
 These commands coordinate restores through the Aerospike cluster rather than importing records from a client.
 
 <!-- docgen -->
@@ -15,7 +15,7 @@ Start a server-integrated restore on the Aerospike cluster.
 ```bash
 
 Usage:
-  absctl restore start [flags]
+  absctl snapshot-restore start [flags]
 
 General Flags:
   -Z, --help               Display help information.
@@ -91,7 +91,7 @@ See documentation here: https://aerospike.com/docs/tools/secret-agent.
 Both backup and restore commands support getting all the cloud configuration parameters
 from the Aerospike Secret Agent.
 To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
-Example: absctl backup --azure-account-name secret:resource1:azaccount
+Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
       --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
       --sa-port int                 Secret Agent port (only for TCP connection).
@@ -113,7 +113,7 @@ Prepare a server-integrated restore on the Aerospike cluster.
 ```bash
 
 Usage:
-  absctl restore prepare [flags]
+  absctl snapshot-restore prepare [flags]
 
 General Flags:
   -Z, --help               Display help information.
@@ -174,7 +174,7 @@ See documentation here: https://aerospike.com/docs/tools/secret-agent.
 Both backup and restore commands support getting all the cloud configuration parameters
 from the Aerospike Secret Agent.
 To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
-Example: absctl backup --azure-account-name secret:resource1:azaccount
+Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
       --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
       --sa-port int                 Secret Agent port (only for TCP connection).
@@ -196,7 +196,7 @@ Show the status of a currently running server-integrated restore.
 ```bash
 
 Usage:
-  absctl restore progress [flags]
+  absctl snapshot-restore progress [flags]
 
 General Flags:
   -Z, --help               Display help information.
@@ -256,7 +256,7 @@ See documentation here: https://aerospike.com/docs/tools/secret-agent.
 Both backup and restore commands support getting all the cloud configuration parameters
 from the Aerospike Secret Agent.
 To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
-Example: absctl backup --azure-account-name secret:resource1:azaccount
+Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
       --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
       --sa-port int                 Secret Agent port (only for TCP connection).

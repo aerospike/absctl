@@ -50,7 +50,7 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 	rf := newRestoreCtx()
 
 	cmd := &cobra.Command{
-		Use:   UseRestore,
+		Use:   UseSnapshotRestore,
 		Short: ShortRestore,
 	}
 

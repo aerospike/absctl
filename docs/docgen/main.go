@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// docgen generates README.md files for scan backup/restore and server backup/restore commands.
+// docgen generates markdown docs for scan backup/restore and server backup/restore commands.
 // Flag descriptions and default values are pulled from the flag definitions
 // in internal/flags, and the YAML configuration schema is built from the
 // DTO structs in internal/config/dto with comments derived from flag usage text.
@@ -50,7 +50,7 @@ const (
 	sectionConfigSchema = "\n## Configuration file schema with example values\n"
 
 	// Path where to save scan backup/restore docs.
-	docPath = "./docs"
+	scanDocPath = "./docs/scan"
 	// Path where to save server backup/restore docs.
 	serverDocPath = "./docs/server"
 
@@ -72,7 +72,7 @@ type docSection struct {
 func main() {
 	for _, op := range []string{opBackup, opRestore} {
 		if err := generateScan(op); err != nil {
-			log.Fatalf("failed to generate scan %s readme: %v", op, err)
+			log.Fatalf("failed to generate scan %s docs: %v", op, err)
 		}
 	}
 
@@ -89,18 +89,18 @@ func main() {
 	}
 }
 
-// generateScan reads the existing README, preserves the static header, and regenerates all dynamic sections.
+// generateScan reads the existing markdown file, preserves the static header, and regenerates all dynamic sections.
 func generateScan(operation string) error {
-	readmePath := filepath.Join(docPath, operation, "readme.md")
+	docFilePath := filepath.Join(scanDocPath, operation+".md")
 
-	existing, err := os.ReadFile(readmePath)
+	existing, err := os.ReadFile(docFilePath)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", readmePath, err)
+		return fmt.Errorf("read %s: %w", docFilePath, err)
 	}
 
 	idx := strings.Index(string(existing), sectionSupportedFlags)
 	if idx == -1 {
-		return fmt.Errorf("marker %q not found in %s", sectionSupportedFlags, readmePath)
+		return fmt.Errorf("marker %q not found in %s", sectionSupportedFlags, docFilePath)
 	}
 
 	// Keep everything before the marker, plus its leading newline.
@@ -143,7 +143,7 @@ func generateScan(operation string) error {
 	sb.WriteString(yamlContent)
 	sb.WriteString("```\n")
 
-	return os.WriteFile(readmePath, []byte(sb.String()), 0o644)
+	return os.WriteFile(docFilePath, []byte(sb.String()), 0o644)
 }
 
 // generateServer reads the existing markdown file, preserves the static header,

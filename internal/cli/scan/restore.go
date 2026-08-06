@@ -30,13 +30,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	restoreWelcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
-	restoreWelcomeMessageShort = "Aerospike restore CLI tool"
-
-	useImport = "import"
-)
-
 type restoreRunner struct {
 	flagsRestore *flags.Restore
 	flagsCommon  *flags.Common
@@ -55,7 +48,7 @@ func NewImportCmd(
 	r.flagsCommon = flags.NewCommon(&r.flagsRestore.Common, flags.OperationRestore)
 
 	return subcmd.BuildCommand(
-		useImport, restoreWelcomeMessageShort, restoreWelcomeMessage,
+		UseRestore, ShortRestore, LongRestore,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationRestore, r,
 	)
@@ -175,8 +168,8 @@ func newRestoreHelpFunction(
 	azureFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
-		fmt.Println(restoreWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(restoreWelcomeMessage)))
+		fmt.Println(textWelcomeMessageRestore)
+		fmt.Println(strings.Repeat("-", len(textWelcomeMessageRestore)))
 		fmt.Println(flags.SectionTextUsageRestore)
 
 		// Print section: App Flags

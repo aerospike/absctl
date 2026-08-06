@@ -55,7 +55,7 @@ func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime strin
 	bc := newBackupCtx()
 
 	cmd := &cobra.Command{
-		Use:   UseBackup,
+		Use:   UseSnapshotBackup,
 		Short: ShortBackup,
 	}
 
