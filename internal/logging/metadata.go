@@ -27,19 +27,19 @@ import (
 // PrintMetadata displays backup metadata either as a formatted table
 // (to stdout) or as structured log records. When withNodes is true,
 // per-node details are included as well.
-func PrintMetadata(data []models.Metadata, withNodes, toLog bool, logger *slog.Logger) error {
+func PrintMetadata(data []models.Metadata, toLog bool, logger *slog.Logger) error {
 	if toLog {
 		for i := range data {
-			printMetadataToLog(data[i], withNodes, logger)
+			printMetadataToLog(data[i], logger)
 		}
 
 		return nil
 	}
 
-	return printMetadataToTable(os.Stdout, data, withNodes)
+	return printMetadataToTable(os.Stdout, data)
 }
 
-func printMetadataToLog(md models.Metadata, withNodes bool, logger *slog.Logger) {
+func printMetadataToLog(md models.Metadata, logger *slog.Logger) {
 	attrs := []any{
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
@@ -48,21 +48,22 @@ func printMetadataToLog(md models.Metadata, withNodes bool, logger *slog.Logger)
 	logger.Info("backup entry", attrs...)
 }
 
-func printMetadataToTable(out io.Writer, data []models.Metadata, withNodes bool) error {
+func printMetadataToTable(out io.Writer, data []models.Metadata) error {
 	return printMetadataSummary(out, data)
 }
 
 func printMetadataSummary(out io.Writer, data []models.Metadata) error {
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', tabwriter.Debug)
 
-	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE")
+	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tSTATUS")
 
 	for i := range data {
 		md := data[i]
 
-		fmt.Fprintf(w, "%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\n",
 			md.BackupID,
 			md.Namespace,
+			md.Status,
 		)
 	}
 

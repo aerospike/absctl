@@ -119,7 +119,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
-	if err := logging.PrintMetadata(mds, false, s.backupCfg.App.LogJSON, s.logger); err != nil {
+	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
 		return err
 	}
 
@@ -325,7 +325,7 @@ func (s *Service) getBackupState(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup metadata: %w", err)
 	}
 
-	if err := logging.PrintMetadata([]sModels.Metadata{md}, true, s.backupCfg.App.LogJSON, s.logger); err != nil {
+	if err := logging.PrintMetadata([]sModels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger); err != nil {
 		return err
 	}
 
