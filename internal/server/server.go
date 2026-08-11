@@ -313,6 +313,9 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 }
 
 func (s *Service) getBackupState(ctx context.Context) error {
+	// Set timeout for metadata fetch.
+	s.backupCfg.AwsS3.RequestTimeout = 10000
+
 	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
