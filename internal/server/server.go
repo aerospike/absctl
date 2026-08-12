@@ -27,6 +27,7 @@ import (
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
+	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
 const messageNoRunningBackup = "No running backup found"
@@ -115,17 +116,20 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	JobID, err := client.StartServerBackup(
-		ctx,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
-		"",
-	)
+	bReq := &iModels.RequestBackup{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.config.ServerBackup.Namespace,
+			Storage:   s.config.ServerBackup.StorageType,
+			Bucket:    s.config.AwsS3.BucketName,
+			Region:    s.config.AwsS3.Region,
+			Profile:   s.config.AwsS3.Profile,
+			AccessKey: s.config.AwsS3.AccessKeyID,
+			SecretKey: s.config.AwsS3.SecretAccessKey,
+			Endpoint:  s.config.AwsS3.Endpoint,
+		},
+	}
+
+	JobID, err := client.StartServerBackup(ctx, bReq)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
@@ -143,18 +147,21 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	err = client.StartServerRestore(
-		ctx,
-		s.config.ServerBackup.JobID,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
-		"",
-	)
+	rReq := &iModels.RequestRestore{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.config.ServerBackup.Namespace,
+			Storage:   s.config.ServerBackup.StorageType,
+			Bucket:    s.config.AwsS3.BucketName,
+			Region:    s.config.AwsS3.Region,
+			Profile:   s.config.AwsS3.Profile,
+			AccessKey: s.config.AwsS3.AccessKeyID,
+			SecretKey: s.config.AwsS3.SecretAccessKey,
+			Endpoint:  s.config.AwsS3.Endpoint,
+		},
+		JobID: s.config.ServerBackup.JobID,
+	}
+
+	err = client.StartServerRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
