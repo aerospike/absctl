@@ -1,0 +1,105 @@
+name: Promote Release Bundle to PROD
+
+on:
+  release:
+    types:
+      - released
+  workflow_dispatch:
+    inputs:
+      bundle_version:
+        description: Release bundle version (must match the git tag, e.g. v1.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote-to-prod:
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    env:
+      BUNDLE_NAME: ${{ github.event.repository.name }}
+      BUNDLE_VERSION: ${{ github.event.release.tag_name || github.event.inputs.bundle_version }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Log trigger context
+        run: |
+          set -x
+          echo "Event name: ${{ github.event_name }}"
+          echo "BUNDLE_NAME: ${BUNDLE_NAME}"
+          echo "BUNDLE_VERSION: ${BUNDLE_VERSION}"
+          echo "Release tag_name (if release event): ${{ github.event.release.tag_name }}"
+          echo "workflow_dispatch bundle_version input (if dispatched): ${{ github.event.inputs.bundle_version }}"
+
+      - name: Login to JFrog
+        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        env:
+          JF_URL: ${{ vars.ARTIFACTORY_URL }}
+          JF_PROJECT: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
+        with:
+          oidc-provider-name: gh-aerospike
+          oidc-audience: aerospike
+
+      - name: Check release bundle exists in JFrog
+        id: check-bundle
+        env:
+          JF_PROJECT: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
+        run: |
+          set -euxo pipefail
+          if [ -z "${BUNDLE_VERSION}" ]; then
+            echo "::error::Bundle version is required (release tag or workflow_dispatch input)."
+            exit 1
+          fi
+
+          echo "Checking if release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} exists in JFrog (project: ${JF_PROJECT})..."
+
+          # Same lookup pattern used by shared-workflows' promote-release-bundle action.
+          BUNDLE_VERSIONS_JSON=$(jf release-bundle-search versions "$BUNDLE_NAME" --project="$JF_PROJECT" --format=json)
+          echo "All known versions for ${BUNDLE_NAME}:"
+          echo "$BUNDLE_VERSIONS_JSON" | jq -r '.release_bundles[].release_bundle_version'
+
+          MATCH_COUNT=$(echo "$BUNDLE_VERSIONS_JSON" | \
+            jq --arg v "$BUNDLE_VERSION" '[.release_bundles[] | select(.release_bundle_version == $v)] | length')
+
+          if [ "$MATCH_COUNT" -ge 1 ]; then
+            echo "Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} exists in JFrog"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} not found in JFrog"
+            exit 1
+          fi
+
+      - name: Promote to JFrog PROD
+        uses: aerospike/shared-workflows/.github/actions/promote-release-bundle@82b197fa01cafc1b1d5a82a77ad039e6e8e44545 # v4.0.0
+        with:
+          bundle-name: ${{ env.BUNDLE_NAME }}
+          version: ${{ env.BUNDLE_VERSION }}
+          environment: PROD
+          jf-project: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
+
+      - name: Summarize external publication
+        if: always()
+        run: |
+          {
+            echo "### PROD promotion summary"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Triggered by | \`${{ github.event_name }}\` |"
+            echo "| Bundle name | \`${BUNDLE_NAME}\` |"
+            echo "| Bundle version | \`${BUNDLE_VERSION}\` |"
+            echo "| JFrog project | \`${{ vars.JFROG_CLI_BUILD_PROJECT }}\` |"
+            echo ""
+            echo "Promoted **${BUNDLE_NAME}:${BUNDLE_VERSION}** to JFrog PROD."
+            echo ""
+            echo "Docker Hub mirroring is handled by [artifact-publisher](https://github.com/citrusleaf/artifact-publisher/actions)"
+            echo "after the PROD promotion webhook fires."
+            echo ""
+            echo "Expected image: \`aerospike/${BUNDLE_NAME}:${BUNDLE_VERSION#v}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
