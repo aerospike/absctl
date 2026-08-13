@@ -36,9 +36,9 @@ import (
 )
 
 const (
-	testS3Bucket     = "aerospike-backup"
-	testFileNameASBX = "0_test_1.asbx"
-	testStdinType    = "stdin"
+	testS3Bucket    = "aerospike-backup"
+	testFileNameASB = "0_test_1.asb"
+	testStdinType   = "stdin"
 )
 
 func TestNewLocalReader(t *testing.T) {
@@ -54,7 +54,7 @@ func TestNewLocalReader(t *testing.T) {
 		AzureBlob:  &models.AzureBlob{},
 	}
 
-	err := createTmpFileLocal(dir, testFileNameASBX)
+	err := createTmpFileLocal(dir, testFileNameASB)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -63,7 +63,6 @@ func TestNewLocalReader(t *testing.T) {
 		ctx,
 		params,
 		dir, "", "", "", 0,
-		true,
 		false,
 		logger,
 	)
@@ -74,8 +73,7 @@ func TestNewLocalReader(t *testing.T) {
 	reader, err = NewReader(
 		ctx,
 		params,
-		"", dir+testFileNameASBX, "", "", 0,
-		false,
+		"", dir+testFileNameASB, "", "", 0,
 		false,
 		logger,
 	)
@@ -87,7 +85,6 @@ func TestNewLocalReader(t *testing.T) {
 		ctx,
 		params,
 		"", "", "", "", 0,
-		false,
 		false,
 		logger,
 	)
@@ -133,7 +130,7 @@ func TestNewS3Reader(t *testing.T) {
 	ctx := t.Context()
 	client, err := NewS3Client(ctx, params.AwsS3)
 	require.NoError(t, err)
-	err = createTmpFileS3(ctx, client, dir, testFileNameASBX)
+	err = createTmpFileS3(ctx, client, dir, testFileNameASB)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -142,7 +139,6 @@ func TestNewS3Reader(t *testing.T) {
 		ctx,
 		params,
 		dir, "", "", "", 0,
-		true,
 		false,
 		logger,
 	)
@@ -165,7 +161,6 @@ func TestNewS3Reader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
-		false,
 		false,
 		logger,
 	)
@@ -208,7 +203,7 @@ func TestNewGcpReader(t *testing.T) {
 	ctx := t.Context()
 	client, err := newGcpClient(ctx, params.GcpStorage)
 	require.NoError(t, err)
-	err = createTmpFileGcp(ctx, client, dir, testFileNameASBX)
+	err = createTmpFileGcp(ctx, client, dir, testFileNameASB)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -217,7 +212,6 @@ func TestNewGcpReader(t *testing.T) {
 		ctx,
 		params,
 		dir, "", "", "", 0,
-		true,
 		false,
 		logger,
 	)
@@ -238,7 +232,6 @@ func TestNewGcpReader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
-		false,
 		false,
 		logger,
 	)
@@ -287,7 +280,7 @@ func TestNewAzureReader(t *testing.T) {
 	ctx := t.Context()
 	client, err := newAzureClient(params.AzureBlob)
 	require.NoError(t, err)
-	err = createTmpFileAzure(ctx, client, dir, testFileNameASBX)
+	err = createTmpFileAzure(ctx, client, dir, testFileNameASB)
 	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -296,7 +289,6 @@ func TestNewAzureReader(t *testing.T) {
 		ctx,
 		params,
 		dir, "", "", "", 0,
-		true,
 		false,
 		logger,
 	)
@@ -319,7 +311,6 @@ func TestNewAzureReader(t *testing.T) {
 		ctx,
 		params,
 		"", dir+testFileName, "", "", 0,
-		false,
 		false,
 		logger,
 	)
@@ -448,14 +439,13 @@ func newLocalRestoreCfg(restore *models.Restore) *config.RestoreServiceConfig {
 	}
 }
 
-func TestNewRestoreReader_ASBMode(t *testing.T) {
+func TestNewRestoreReader_Directory(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, dir, "0_test_1.asb")
+	writeFile(t, dir, testFileNameASB)
 
 	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: models.RestoreModeASB,
 		Common: models.Common{
 			Directory: dir,
 			Namespace: "test",
@@ -463,18 +453,16 @@ func TestNewRestoreReader_ASBMode(t *testing.T) {
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
+	reader, err := NewRestoreReader(t.Context(), cfg, logger)
 	require.NoError(t, err)
 	require.NotNil(t, reader)
-	assert.Nil(t, xdrReader)
 	assert.Equal(t, testLocalType, reader.GetType())
 }
 
-func TestNewRestoreReader_ASBMode_EmptyDir(t *testing.T) {
+func TestNewRestoreReader_EmptyDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: models.RestoreModeASB,
 		Common: models.Common{
 			Directory: t.TempDir(),
 			Namespace: "test",
@@ -482,158 +470,9 @@ func TestNewRestoreReader_ASBMode_EmptyDir(t *testing.T) {
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
+	reader, err := NewRestoreReader(t.Context(), cfg, logger)
 	require.Error(t, err)
 	assert.Nil(t, reader)
-	assert.Nil(t, xdrReader)
-	assert.Contains(t, err.Error(), "asb reader")
-}
-
-func TestNewRestoreReader_ASBXMode(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeFile(t, dir, testFileNameASBX)
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: models.RestoreModeASBX,
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.NoError(t, err)
-	assert.Nil(t, reader)
-	require.NotNil(t, xdrReader)
-	assert.Equal(t, testLocalType, xdrReader.GetType())
-}
-
-func TestNewRestoreReader_ASBXMode_EmptyDir(t *testing.T) {
-	t.Parallel()
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: models.RestoreModeASBX,
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.Error(t, err)
-	assert.Nil(t, reader)
-	assert.Nil(t, xdrReader)
-	assert.Contains(t, err.Error(), "asbx reader")
-}
-
-func TestNewRestoreReader_AutoMode_BothFiles(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeFile(t, dir, "0_test_1.asb")
-	writeFile(t, dir, testFileNameASBX)
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: models.RestoreModeAuto,
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	// Auto mode dispatches to the ASB branch first (RestoreModeAuto shares the
-	// case with RestoreModeASB), so the xdrReader is always nil here.
-	require.NoError(t, err)
-	require.NotNil(t, reader)
-	assert.Nil(t, xdrReader)
-}
-
-func TestNewRestoreReader_UnknownMode_OnlyASB(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeFile(t, dir, "0_test_1.asb")
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: "weird-mode",
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.NoError(t, err)
-	require.NotNil(t, reader)
-	assert.Nil(t, xdrReader, "no .asbx files present, xdr reader should be nil")
-}
-
-func TestNewRestoreReader_UnknownMode_OnlyASBX(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeFile(t, dir, testFileNameASBX)
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: "weird-mode",
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.NoError(t, err)
-	assert.Nil(t, reader, "no .asb files present, asb reader should be nil")
-	require.NotNil(t, xdrReader)
-}
-
-func TestNewRestoreReader_UnknownMode_BothFiles(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeFile(t, dir, "0_test_1.asb")
-	writeFile(t, dir, testFileNameASBX)
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: "weird-mode",
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.NoError(t, err)
-	require.NotNil(t, reader)
-	require.NotNil(t, xdrReader)
-}
-
-func TestNewRestoreReader_UnknownMode_EmptyDir(t *testing.T) {
-	t.Parallel()
-
-	cfg := newLocalRestoreCfg(&models.Restore{
-		Mode: "weird-mode",
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: "test",
-		},
-	})
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	reader, xdrReader, err := NewRestoreReader(t.Context(), cfg, logger)
-	require.Error(t, err)
-	assert.Nil(t, reader)
-	assert.Nil(t, xdrReader)
 }
 
 func newStateBackupCfg(b *models.Backup) *config.BackupServiceConfig {
@@ -736,7 +575,6 @@ func TestNewStdReader(t *testing.T) {
 		ctx,
 		params,
 		"", config.StdPlaceholder, "", "", 0,
-		true,
 		false,
 		logger,
 	)

@@ -18,29 +18,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
-	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/backup-go"
-	bModels "github.com/aerospike/backup-go/models"
 )
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
 type Service struct {
 	backupClient *backup.Client
 	config       *backup.ConfigRestore
-
-	reader    backup.StreamingReader
-	readerXdr backup.StreamingReader
-	// Restore Mode: auto, asb, asbx
-	mode string
-
-	reportToLog bool
-
-	logger *slog.Logger
+	reader       backup.StreamingReader
+	logger       *slog.Logger
+	reportToLog  bool
 }
 
 // NewService initializes and returns a new Service instance,
@@ -50,17 +41,16 @@ func NewService(
 	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
+	// Important! Describe the variable as an interface, not the exact *aerospike.Client,
+	// so we can run backup files validation with a nil aerospike client.
 	var (
-		// Important! To describe variable as interface not exact *a.Client.
-		// So we can run backup files validation with the 'nil' aerospike client.
 		aerospikeClient backup.AerospikeClient
 		err             error
 	)
 
-	// Initializations.
 	restoreConfig := config.NewRestoreConfig(cfg, logger)
 
-	// Skip this part on validation.
+	// Skip client initialization in validation mode.
 	if !restoreConfig.ValidateOnly {
 		warmUp := GetWarmUp(cfg.Restore.WarmUp, cfg.Restore.MaxAsyncBatches)
 		logger.Debug("warm up is set", slog.Int("value", warmUp))
@@ -77,21 +67,18 @@ func NewService(
 		}
 	}
 
-	reader, xdrReader, err := storage.NewRestoreReader(ctx, cfg, logger)
+	reader, err := storage.NewRestoreReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore reader: %w", err)
 	}
 
 	logger.Info("initializing restore client")
 
-	infoRetryPolicy := cfg.Restore.RetryPolicy()
-
-	infoPolicy := cfg.Restore.InfoPolicy()
-
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithInfoPolicies(infoPolicy, infoRetryPolicy))
+		backup.WithInfoPolicies(cfg.Restore.InfoPolicy(), cfg.Restore.RetryPolicy()),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore client: %w", err)
 	}
@@ -100,141 +87,33 @@ func NewService(
 		backupClient: backupClient,
 		config:       restoreConfig,
 		reader:       reader,
-		readerXdr:    xdrReader,
-		mode:         cfg.Restore.Mode,
 		logger:       logger,
 		reportToLog:  cfg.App.LogJSON || cfg.App.LogFile != "",
 	}, nil
 }
 
-// Run executes the restore process based on the configured mode, handling ASB, ASBX, or Auto restore modes.
+// Run executes the restore or validation process based on the configured mode.
 func (r *Service) Run(ctx context.Context) error {
-	if r == nil {
-		return nil
-	}
-
-	// For restore and validation we init different header for log messages.
+	// For restore and validation we use a different header for log messages.
 	logMessage := "restore"
 	if r.config.ValidateOnly {
 		logMessage = "validation"
 	}
 
-	switch r.mode {
-	case models.RestoreModeASB, models.RestoreModeAuto:
-		return r.run(ctx, backup.EncoderTypeASB, logMessage)
-	case models.RestoreModeASBX:
-		return r.run(ctx, backup.EncoderTypeASBX, logMessage)
-	default:
-		return r.runAuto(ctx)
-	}
-}
+	r.logger.Info("starting " + logMessage)
 
-func (r *Service) run(ctx context.Context, encoderType backup.EncoderType, logMessage string) error {
-	restoreType := "asb"
-	if encoderType == backup.EncoderTypeASBX {
-		restoreType = "asbx"
-	}
+	r.config.EncoderType = backup.EncoderTypeASB
 
-	r.logger.Info(fmt.Sprintf("starting %s %s", restoreType, logMessage))
-
-	r.config.EncoderType = encoderType
-	// Run restore / validation.
 	h, err := r.backupClient.Restore(ctx, r.config, r.reader)
 	if err != nil {
-		return fmt.Errorf("failed to start %s %s: %w", restoreType, logMessage, err)
+		return fmt.Errorf("failed to start %s: %w", logMessage, err)
 	}
 
-	// Wait for restore / validation to finish.
 	if err = h.Wait(ctx); err != nil {
-		return fmt.Errorf("failed to perform %s %s: %w", restoreType, logMessage, err)
+		return fmt.Errorf("failed to perform %s: %w", logMessage, err)
 	}
 
-	// Print report.
 	logging.ReportRestore(h.GetStats(), r.config.ValidateOnly, r.reportToLog, r.logger)
-
-	return nil
-}
-
-func (r *Service) runAuto(ctx context.Context) error {
-	r.logger.Info("starting auto restore")
-	// If one of restore operations fails, we cancel another.
-	ctx, cancel := context.WithCancel(ctx)
-
-	var (
-		wg              sync.WaitGroup
-		xdrStats, stats *bModels.RestoreStats
-	)
-
-	errChan := make(chan error, 2)
-
-	if r.reader != nil {
-		wg.Go(func() {
-			restoreCfg := *r.config
-			restoreCfg.EncoderType = backup.EncoderTypeASB
-
-			h, err := r.backupClient.Restore(ctx, &restoreCfg, r.reader)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to start asb restore: %w", err)
-
-				cancel()
-
-				return
-			}
-
-			if err = h.Wait(ctx); err != nil {
-				errChan <- fmt.Errorf("failed to perform asb restore: %w", err)
-
-				cancel()
-
-				return
-			}
-
-			stats = h.GetStats()
-		})
-	}
-
-	if r.readerXdr != nil {
-		wg.Go(func() {
-			restoreXdrCfg := *r.config
-			restoreXdrCfg.EncoderType = backup.EncoderTypeASBX
-
-			hXdr, err := r.backupClient.Restore(ctx, &restoreXdrCfg, r.readerXdr)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to start asbx restore: %w", err)
-
-				cancel()
-
-				return
-			}
-
-			if err = hXdr.Wait(ctx); err != nil {
-				errChan <- fmt.Errorf("failed to perform asbx restore: %w", err)
-
-				cancel()
-
-				return
-			}
-
-			xdrStats = hXdr.GetStats()
-		})
-	}
-
-	wg.Wait()
-	close(errChan)
-
-	// Return the first error encountered
-	for err := range errChan {
-		if err != nil {
-			cancel()
-			return err
-		}
-	}
-
-	restStats := bModels.SumRestoreStats(xdrStats, stats)
-	logging.ReportRestore(restStats, r.config.ValidateOnly, r.reportToLog, r.logger)
-
-	// To prevent context leaking.
-	cancel()
 
 	return nil
 }
@@ -242,10 +121,9 @@ func (r *Service) runAuto(ctx context.Context) error {
 // GetWarmUp calculates and returns the warm-up value based on the provided warmUp and maxAsyncBatches parameters.
 // If warmUp is 0, it returns one greater than maxAsyncBatches. Otherwise, it returns the warmUp value.
 func GetWarmUp(warmUp, maxAsyncBatches int) int {
-	switch warmUp {
-	case 0:
+	if warmUp == 0 {
 		return maxAsyncBatches + 1
-	default:
-		return warmUp
 	}
+
+	return warmUp
 }

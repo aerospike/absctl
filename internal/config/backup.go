@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
-	"runtime"
-	"time"
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
@@ -31,26 +29,26 @@ const (
 	MaxRack = 1000000
 	// StdPlaceholder is the placeholder for stdout file name.
 	StdPlaceholder = "-"
+
+	// bytesInMiB is used to convert MiB flag values to bytes.
+	bytesInMiB = 1024 * 1024
 )
 
 // BackupServiceConfig represents the configuration structure for the backup service
 // involving various policies and integrations.
 type BackupServiceConfig struct {
-	Backup    *models.Backup
-	BackupXDR *models.BackupXDR
+	Backup *models.Backup
 
 	ServiceConfigCommon
 }
 
 // NewBackupServiceConfig initializes and returns a BackupServiceConfig struct
-// with the provided configuration components. It optionally loads configuration from a file
-// if specified in the app.ConfigFilePath.
+// with the provided configuration components.
 func NewBackupServiceConfig(
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
 	backupScan *models.Backup,
-	backupXDR *models.BackupXDR,
 	compression *models.Compression,
 	encryption *models.Encryption,
 	secretAgent *models.SecretAgent,
@@ -58,10 +56,9 @@ func NewBackupServiceConfig(
 	gcpStorage *models.GcpStorage,
 	azureBlob *models.AzureBlob,
 	local *models.Local,
-) (*BackupServiceConfig, error) {
-	serviceConfig := &BackupServiceConfig{
-		Backup:    backupScan,
-		BackupXDR: backupXDR,
+) *BackupServiceConfig {
+	return &BackupServiceConfig{
+		Backup: backupScan,
 		ServiceConfigCommon: *NewServiceConfigCommon(
 			app,
 			clientConfig,
@@ -75,13 +72,6 @@ func NewBackupServiceConfig(
 			local,
 		),
 	}
-
-	return serviceConfig, nil
-}
-
-// IsXDR determines if the backup configuration is an XDR backup by checking if BackupXDR is non-nil and Backup is nil.
-func (b *BackupServiceConfig) IsXDR() bool {
-	return b.BackupXDR != nil && b.Backup == nil
 }
 
 // IsContinue determines if the backup configuration is a continue backup
@@ -90,44 +80,25 @@ func (b *BackupServiceConfig) IsContinue() bool {
 	return b.Backup != nil && b.Backup.Continue != ""
 }
 
-// IsStopXDR checks if the backup operation should stop XDR by verifying that BackupXDR is non-nil and StopXDR is true.
-func (b *BackupServiceConfig) IsStopXDR() bool {
-	return b.BackupXDR != nil && b.BackupXDR.StopXDR
-}
-
-// IsUnblockMRT checks if the backup operation should unblock MRT writes
-// by verifying that BackupXDR is non-nil and UnblockMRT is true.
-func (b *BackupServiceConfig) IsUnblockMRT() bool {
-	return b.BackupXDR != nil && b.BackupXDR.UnblockMRT
-}
-
-// SkipWriterInit checks if the backup operation should skip writer initialization
-// by verifying that Backup is non-nil and Estimate is false.
-func (b *BackupServiceConfig) SkipWriterInit() bool {
-	if b.Backup != nil {
-		return !b.Backup.Estimate
+// ShouldInitWriter reports whether the backup writer must be initialized.
+// The writer is not needed for estimate runs.
+func (b *BackupServiceConfig) ShouldInitWriter() bool {
+	if b.Backup == nil {
+		return true
 	}
 
-	return true
+	return !b.Backup.Estimate
 }
 
 // IsStdout checks if the backup operation should write to stdout
 // by verifying that Backup is non-nil and OutputFile is StdPlaceholder.
 func (b *BackupServiceConfig) IsStdout() bool {
-	if b.Backup != nil && b.Backup.OutputFile == StdPlaceholder {
-		return true
-	}
-
-	return false
+	return b.Backup != nil && b.Backup.OutputFile == StdPlaceholder
 }
 
 // Validate validates the backup configuration and returns an error if any validation fails.
 func (b *BackupServiceConfig) Validate() error {
 	if err := b.Backup.Validate(); err != nil {
-		return err
-	}
-
-	if err := b.BackupXDR.Validate(); err != nil {
 		return err
 	}
 
@@ -138,48 +109,26 @@ func (b *BackupServiceConfig) Validate() error {
 	return nil
 }
 
-// NewBackupConfigs creates and returns a new ConfigBackup and ConfigBackupXDR object,
-// initialized with given backup parameters.
-// This function sets various backup parameters including namespace, file limits, parallelism options, bandwidth,
-// compression, encryption, and partition filters. It returns an error if any validation or parsing fails.
-// If the backup is an XDR backup, it will return a ConfigBackupXDR object.
-// Otherwise, it will return a ConfigBackup object.
-func NewBackupConfigs(serviceConfig *BackupServiceConfig, logger *slog.Logger,
-) (*backup.ConfigBackup, *backup.ConfigBackupXDR, error) {
-	var (
-		backupConfig    *backup.ConfigBackup
-		backupXDRConfig *backup.ConfigBackupXDR
-		err             error
-	)
-
+// NewBackupConfig creates and returns a new ConfigBackup object
+// initialized with the given backup parameters.
+// It sets namespace, file limits, parallelism options, bandwidth,
+// compression, encryption, and partition filters.
+// It returns an error if any validation or parsing fails.
+func NewBackupConfig(serviceConfig *BackupServiceConfig, logger *slog.Logger,
+) (*backup.ConfigBackup, error) {
 	logger.Info("initializing backup config")
 
-	switch serviceConfig.IsXDR() {
-	case false:
-		backupConfig, err = newBackupConfig(serviceConfig)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to map backup config: %w", err)
-		}
-
-		logBackupConfig(logger, serviceConfig, backupConfig)
-	case true:
-		backupXDRConfig = newBackupXDRConfig(serviceConfig)
-
-		// On xdr backup we backup only uds and indexes.
-		backupConfig = backup.NewDefaultBackupConfig()
-
-		backupConfig.NoRecords = true
-		backupConfig.Namespace = backupXDRConfig.Namespace
-
-		logXdrBackupConfig(logger, serviceConfig, backupXDRConfig)
+	backupConfig, err := newBackupConfig(serviceConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to map backup config: %w", err)
 	}
 
-	return backupConfig, backupXDRConfig, nil
+	logBackupConfig(logger, serviceConfig, backupConfig)
+
+	return backupConfig, nil
 }
 
 // newBackupConfig initializes and returns a configured instance of ConfigBackup based on the provided params.
-// This function sets various backup parameters including namespace, file limits, parallelism options, bandwidth,
-// compression, encryption, and partition filters. It returns an error if any validation or parsing fails.
 func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) {
 	c := backup.NewDefaultBackupConfig()
 	c.Namespace = config.Backup.Namespace
@@ -188,14 +137,14 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 	c.NoRecords = config.Backup.NoRecords
 	c.NoIndexes = config.Backup.NoIndexes
 	c.RecordsPerSecond = config.Backup.RecordsPerSecond
-	c.FileLimit = config.Backup.FileLimit * 1024 * 1024
+	c.FileLimit = config.Backup.FileLimit * bytesInMiB
 	c.NoUDFs = config.Backup.NoUDFs
 	// The original backup tools have a single parallelism configuration property.
 	// We may consider splitting the configuration in the future.
 	c.ParallelWrite = config.Backup.Parallel
 	c.ParallelRead = config.Backup.Parallel
-	// As we set --bandwidth in MiB we must convert it to bytes
-	c.Bandwidth = config.Backup.Bandwidth * 1024 * 1024
+	// As we set --bandwidth in MiB we must convert it to bytes.
+	c.Bandwidth = config.Backup.Bandwidth * bytesInMiB
 	c.Compact = config.Backup.Compact
 	c.NoTTLOnly = config.Backup.NoTTLOnly
 	c.OutputFilePrefix = config.Backup.OutputFilePrefix
@@ -203,10 +152,11 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 
 	// Reconfigure params for stdout or single file backup.
 	if config.IsStdout() || config.Backup.OutputFile != "" {
-		// If we back up to stdout, file limit can break the input stream because it will file headers and close descriptors.
-		// So the file limit is disabled for stdout.
+		// If we back up to stdout, file limit can break the output stream
+		// because it will write file headers and close descriptors,
+		// so the file limit is disabled.
 		c.FileLimit = 0
-		// Parallel write can be only 1 to stdout, otherwise records data will be mixed and corrupted.
+		// Parallel write must be 1 for stdout, otherwise records data will be mixed and corrupted.
 		c.ParallelWrite = 1
 	}
 
@@ -273,41 +223,6 @@ func newBackupConfig(config *BackupServiceConfig) (*backup.ConfigBackup, error) 
 	return c, nil
 }
 
-// newBackupXDRConfig creates a ConfigBackupXDR instance based on the provided backup parameters.
-func newBackupXDRConfig(params *BackupServiceConfig) *backup.ConfigBackupXDR {
-	parallelWrite := runtime.NumCPU()
-	if params.BackupXDR.ParallelWrite > 0 {
-		parallelWrite = params.BackupXDR.ParallelWrite
-	}
-
-	c := &backup.ConfigBackupXDR{
-		EncryptionPolicy:  params.Encryption.Policy(),
-		CompressionPolicy: params.Compression.Policy(),
-		SecretAgentConfig: params.SecretAgent.Config(),
-		EncoderType:       backup.EncoderTypeASBX,
-		FileLimit:         params.BackupXDR.FileLimit * 1024 * 1024,
-		ParallelWrite:     parallelWrite,
-		DC:                params.BackupXDR.DC,
-		LocalAddress:      params.BackupXDR.LocalAddress,
-		LocalPort:         params.BackupXDR.LocalPort,
-		Namespace:         params.BackupXDR.Namespace,
-		Rewind:            params.BackupXDR.Rewind,
-		TLSConfig:         nil,
-		ReadTimeout:       time.Duration(params.BackupXDR.ReadTimeoutMilliseconds) * time.Millisecond,
-		WriteTimeout:      time.Duration(params.BackupXDR.WriteTimeoutMilliseconds) * time.Millisecond,
-		ResultQueueSize:   params.BackupXDR.ResultQueueSize,
-		AckQueueSize:      params.BackupXDR.AckQueueSize,
-		MaxConnections:    params.BackupXDR.MaxConnections,
-		InfoPollingPeriod: time.Duration(params.BackupXDR.InfoPolingPeriodMilliseconds) * time.Millisecond,
-		StartTimeout:      time.Duration(params.BackupXDR.StartTimeoutMilliseconds) * time.Millisecond,
-		MaxThroughput:     params.BackupXDR.MaxThroughput,
-		Forward:           params.BackupXDR.Forward,
-		MetricsEnabled:    true,
-	}
-
-	return c
-}
-
 func logBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backupConfig *backup.ConfigBackup) {
 	logger.Info("initialized scan backup config",
 		slog.String("namespace", backupConfig.Namespace),
@@ -318,7 +233,7 @@ func logBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backupCon
 		slog.Any("set-list", backupConfig.SetList),
 		slog.Any("bin-list", backupConfig.BinList),
 		slog.Any("rack-list", backupConfig.RackList),
-		// ParallelRead and ParallelWrite are the same for scan backup
+		// ParallelRead and ParallelWrite are the same for scan backup.
 		slog.Any("parallel", backupConfig.ParallelRead),
 		slog.Bool("no-records", backupConfig.NoRecords),
 		slog.Bool("no-indexes", backupConfig.NoIndexes),
@@ -332,25 +247,5 @@ func logBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backupCon
 		slog.Bool("continue", backupConfig.Continue),
 		slog.Int64("scan-page-size", backupConfig.PageSize),
 		slog.String("output-file-prefix", backupConfig.OutputFilePrefix),
-	)
-}
-
-func logXdrBackupConfig(logger *slog.Logger, params *BackupServiceConfig, backupXDRConfig *backup.ConfigBackupXDR) {
-	logger.Info("initialized xdr backup config",
-		slog.String("namespace", backupXDRConfig.Namespace),
-		getEncryptionLog(params.Encryption),
-		getCompressionLog(params.Compression),
-		slog.Any("parallel-write", backupXDRConfig.ParallelWrite),
-		slog.Uint64("file-limit", backupXDRConfig.FileLimit),
-		slog.String("dc", backupXDRConfig.DC),
-		slog.String("local-address", backupXDRConfig.LocalAddress),
-		slog.Int("local-port", backupXDRConfig.LocalPort),
-		slog.String("rewind", backupXDRConfig.Rewind),
-		slog.Int("max-throughput", backupXDRConfig.MaxThroughput),
-		slog.Duration("read-timeout", backupXDRConfig.ReadTimeout),
-		slog.Duration("write-imeout", backupXDRConfig.WriteTimeout),
-		slog.Int("results-queue-size", backupXDRConfig.ResultQueueSize),
-		slog.Int("ack-queue-size", backupXDRConfig.AckQueueSize),
-		slog.Int("max-connections", backupXDRConfig.MaxConnections),
 	)
 }

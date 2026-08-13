@@ -19,34 +19,30 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
-// ServerBackupServiceConfig holds the configuration for the server-integrated Start service.
-type ServerBackupServiceConfig struct {
-	Start      *models.ServerBackup
-	List       *models.ServerBackupList
-	Validation *models.ServerBackupValidate
-	Progress   *models.ServerBackupProgress
+// ServerRestoreServiceConfig holds the configuration for the server-integrated Start service.
+type ServerRestoreServiceConfig struct {
+	Start    *models.ServerRestore
+	Prepare  *models.ServerRestorePrepare
+	Progress *models.ServerRestoreProgress
 
 	ServiceConfigCommon
 }
 
-// NewServerBackupServiceConfig initializes a new ServerBackupServiceConfig
-// using the provided parameters for backup service configuration.
-func NewServerBackupServiceConfig(
-	start *models.ServerBackup,
-	list *models.ServerBackupList,
-	validation *models.ServerBackupValidate,
-	progress *models.ServerBackupProgress,
+// NewServerRestoreServiceConfig initializes a new ServerRestoreServiceConfig.
+func NewServerRestoreServiceConfig(
+	start *models.ServerRestore,
+	prepare *models.ServerRestorePrepare,
+	progress *models.ServerRestoreProgress,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
 	secretAgent *models.SecretAgent,
 	awsS3 *models.AwsS3,
-) *ServerBackupServiceConfig {
-	return &ServerBackupServiceConfig{
-		Start:      start,
-		List:       list,
-		Validation: validation,
-		Progress:   progress,
+) *ServerRestoreServiceConfig {
+	return &ServerRestoreServiceConfig{
+		Start:    start,
+		Prepare:  prepare,
+		Progress: progress,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -58,24 +54,20 @@ func NewServerBackupServiceConfig(
 }
 
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
-func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
+func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 	if err := s.Start.Validate(); err != nil {
 		return err
 	}
 
-	if err := s.List.Validate(); err != nil {
-		return err
-	}
-
-	if err := s.Validation.Validate(); err != nil {
-		return err
-	}
-
-	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
+	if err := s.Prepare.Validate(); err != nil {
 		return err
 	}
 
 	if err := s.Progress.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
 

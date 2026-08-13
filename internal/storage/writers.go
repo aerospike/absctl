@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/io/encoding/asb"
-	"github.com/aerospike/backup-go/io/encoding/asbx"
 	"github.com/aerospike/backup-go/io/storage/aws/s3"
 	"github.com/aerospike/backup-go/io/storage/azure/blob"
 	"github.com/aerospike/backup-go/io/storage/gcp/storage"
@@ -34,19 +34,21 @@ import (
 
 // NewBackupWriter initializes and returns a backup.Writer
 // based on the provided parameters or cleans up artifacts if required.
+// It returns a nil writer without an error if the backup was launched
+// with --remove-artifacts: the target is cleaned during writer initialization
+// and no further work is needed.
 func NewBackupWriter(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
 	logger *slog.Logger,
 ) (backup.Writer, error) {
-	// We initialize a writer only if output is configured.
 	writer, err := newWriter(ctx, params, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup writer: %w", err)
 	}
 
-	// If backup was launched with --remove-artifacts, we don't need to initialize all clients.
-	// We clean the folder on writer initialization and exit.
+	// If backup was launched with --remove-artifacts, the folder is cleaned
+	// on writer initialization, so we return nil to signal the caller to exit.
 	if params.Backup != nil && params.Backup.RemoveArtifacts {
 		return nil, nil
 	}
@@ -60,16 +62,19 @@ func newWriter(
 	logger *slog.Logger,
 ) (backup.Writer, error) {
 	if params == nil {
-		return nil, fmt.Errorf("params cannot be nil")
+		return nil, errors.New("params cannot be nil")
 	}
 
 	if logger == nil {
-		return nil, fmt.Errorf("logger cannot be nil")
+		return nil, errors.New("logger cannot be nil")
 	}
 
-	directory, outputFile := getDirectoryOutputFile(params)
-	shouldClearTarget, continueBackup := getShouldCleanContinue(params)
-	opts := newWriterOpts(directory, outputFile, shouldClearTarget, continueBackup, params.IsXDR(), logger)
+	directory := params.Backup.Directory
+	outputFile := params.Backup.OutputFile
+	shouldClearTarget := params.Backup.ShouldClearTarget()
+	continueBackup := params.IsContinue()
+
+	opts := newWriterOpts(directory, outputFile, shouldClearTarget, continueBackup, logger)
 
 	logger.Info("initializing storage for writer",
 		slog.String("directory", directory),
@@ -114,32 +119,14 @@ func newWriter(
 	}
 }
 
-func getDirectoryOutputFile(params *config.BackupServiceConfig) (directory, outputFile string) {
-	if params.Backup != nil {
-		return params.Backup.Directory, params.Backup.OutputFile
-	}
-	// Xdr backup.
-	return params.BackupXDR.Directory, ""
-}
-
-func getShouldCleanContinue(params *config.BackupServiceConfig) (shouldClearTarget, continueBackup bool) {
-	if params.Backup != nil {
-		return params.Backup.ShouldClearTarget(), params.Backup.Continue != ""
-	}
-	// Xdr backup.
-
-	return params.BackupXDR.RemoveFiles, false
-}
-
 func newWriterOpts(
 	directory,
 	outputFile string,
 	shouldClearTarget,
-	continueBackup,
-	isXDR bool,
+	continueBackup bool,
 	logger *slog.Logger,
 ) []options.Opt {
-	opts := make([]options.Opt, 0)
+	opts := make([]options.Opt, 0, 6)
 
 	if directory != "" && outputFile == "" {
 		opts = append(opts, options.WithDir(directory))
@@ -157,15 +144,10 @@ func newWriterOpts(
 		opts = append(opts, options.WithSkipDirCheck())
 	}
 
-	if isXDR {
-		opts = append(opts, options.WithValidator(asbx.NewValidator()))
-	} else {
-		opts = append(opts, options.WithValidator(asb.NewValidator()))
-	}
-
-	opts = append(opts, options.WithLogger(logger))
-
-	return opts
+	return append(opts,
+		options.WithValidator(asb.NewValidator()),
+		options.WithLogger(logger),
+	)
 }
 
 func newLocalWriter(ctx context.Context, l *models.Local, opts []options.Opt) (backup.Writer, error) {
@@ -198,8 +180,10 @@ func newS3Writer(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := toBytes(a.ChunkSize)
-	opts = append(opts, options.WithChunkSize(chunkSize), options.WithUploadConcurrency(a.UploadConcurrency))
+	opts = append(opts,
+		options.WithChunkSize(toBytes(a.ChunkSize)),
+		options.WithUploadConcurrency(a.UploadConcurrency),
+	)
 
 	return s3.NewWriter(ctx, client, a.BucketName, opts...)
 }
@@ -218,8 +202,7 @@ func newGcpWriter(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := toBytes(g.ChunkSize)
-	opts = append(opts, options.WithChunkSize(chunkSize))
+	opts = append(opts, options.WithChunkSize(toBytes(g.ChunkSize)))
 
 	return storage.NewWriter(ctx, client, g.BucketName, opts...)
 }
@@ -242,8 +225,10 @@ func newAzureWriter(
 		opts = append(opts, options.WithChecksum())
 	}
 
-	chunkSize := toBytes(a.BlockSize)
-	opts = append(opts, options.WithChunkSize(chunkSize), options.WithUploadConcurrency(a.UploadConcurrency))
+	opts = append(opts,
+		options.WithChunkSize(toBytes(a.BlockSize)),
+		options.WithUploadConcurrency(a.UploadConcurrency),
+	)
 
 	return blob.NewWriter(ctx, client, a.ContainerName, opts...)
 }

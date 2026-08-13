@@ -31,16 +31,16 @@ const (
 
 // ReportBackup prints the backup report.
 // if toLog is true, it prints the report to log, but logger must be passed
-func ReportBackup(stats *bModels.BackupStats, isXdr, toLog bool, logger *slog.Logger) {
+func ReportBackup(stats *bModels.BackupStats, toLog bool, logger *slog.Logger) {
 	if toLog {
-		logBackupReport(stats, isXdr, logger)
+		logBackupReport(stats, logger)
 		return
 	}
 
-	printBackupReport(stats, isXdr)
+	printBackupReport(stats)
 }
 
-func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
+func printBackupReport(stats *bModels.BackupStats) {
 	printToOutWriter("")
 	printToOutWriter(headerBackupReport)
 	printToOutWriter(strings.Repeat("-", len(headerBackupReport)))
@@ -50,13 +50,7 @@ func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
 
 	printToOutWriter("")
 
-	recordsMetric := "Records Read"
-	if isXdr {
-		recordsMetric = "Records Received"
-	}
-
-	printMetric(recordsMetric, stats.GetReadRecords())
-
+	printMetric("Records Read", stats.GetReadRecords())
 	printMetric("sIndex Read", stats.GetSIndexes())
 	printMetric("UDFs Read", stats.GetUDFs())
 
@@ -66,16 +60,11 @@ func printBackupReport(stats *bModels.BackupStats, isXdr bool) {
 	printMetric("Files Written", stats.GetFileCount())
 }
 
-func logBackupReport(stats *bModels.BackupStats, isXdr bool, logger *slog.Logger) {
-	recordsMetric := "records-read"
-	if isXdr {
-		recordsMetric = "records-received"
-	}
-
+func logBackupReport(stats *bModels.BackupStats, logger *slog.Logger) {
 	logger.Info(strings.ToLower(headerBackupReport),
 		slog.Time("start-time", stats.StartTime),
 		slog.Duration("duration", stats.GetDuration()),
-		slog.Uint64(recordsMetric, stats.GetReadRecords()),
+		slog.Uint64("records-read", stats.GetReadRecords()),
 		slog.Uint64("s-index-read", uint64(stats.GetSIndexes())),
 		slog.Uint64("udf-read", uint64(stats.GetUDFs())),
 		slog.Uint64("bytes-written", stats.GetBytesWritten()),

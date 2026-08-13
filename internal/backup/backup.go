@@ -16,7 +16,6 @@ package backup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,14 +24,8 @@ import (
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
-	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
-	bModels "github.com/aerospike/backup-go/models"
-	"github.com/aerospike/backup-go/pkg/asinfo"
-	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
-
-var xdrSupportedVersion = iModels.AerospikeVersion{Major: 8}
 
 // Service represents a struct that encapsulates components for backup and logging functionalities.
 // It is responsible for managing backup clients, configurations,
@@ -40,7 +33,6 @@ var xdrSupportedVersion = iModels.AerospikeVersion{Major: 8}
 type Service struct {
 	backupClient *backup.Client
 	config       *backup.ConfigBackup
-	configXdr    *backup.ConfigBackupXDR
 
 	writer backup.Writer
 	// reader is used to read a state file.
@@ -57,20 +49,21 @@ type Service struct {
 
 // NewService initializes and returns a new Service instance,
 // configuring all necessary components for a backup process.
+// It returns a nil Service without an error if the backup was launched
+// with --remove-artifacts and no backup should run.
 func NewService(
 	ctx context.Context,
 	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	// Initializations.
-	backupConfig, backupXDRConfig, err := config.NewBackupConfigs(cfg, logger)
+	backupConfig, err := config.NewBackupConfig(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	// We don't need a writer for estimates.
 	var writer backup.Writer
-	if cfg.SkipWriterInit() {
+	if cfg.ShouldInitWriter() {
 		writer, err = storage.NewBackupWriter(ctx, cfg, logger)
 		if err != nil {
 			return nil, err
@@ -97,30 +90,20 @@ func NewService(
 		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
 	}
 
-	infoPolicy, retryInfoPolicy := getInfoPolicies(cfg)
-
-	// Process XDR.
-	shouldExit, err := initXdr(ctx, cfg, backupXDRConfig, aerospikeClient, infoPolicy, retryInfoPolicy, logger)
-	// If we should exit, err will be nil.
-	if shouldExit || err != nil {
-		return nil, err
-	}
-
 	logger.Info("initializing backup client")
 
 	backupClient, err := backup.NewClient(
 		aerospikeClient,
 		backup.WithLogger(logger),
-		backup.WithInfoPolicies(infoPolicy, retryInfoPolicy),
+		backup.WithInfoPolicies(cfg.Backup.InfoPolicy(), cfg.Backup.RetryPolicy()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup client: %w", err)
 	}
 
-	asb := &Service{
+	svc := &Service{
 		backupClient: backupClient,
 		config:       backupConfig,
-		configXdr:    backupXDRConfig,
 		writer:       writer,
 		reader:       reader,
 		logger:       logger,
@@ -128,185 +111,50 @@ func NewService(
 	}
 
 	if cfg.Backup != nil {
-		asb.isEstimate = cfg.Backup.Estimate
-		asb.estimatesSamples = cfg.Backup.EstimateSamples
+		svc.isEstimate = cfg.Backup.Estimate
+		svc.estimatesSamples = cfg.Backup.EstimateSamples
 	}
 
-	return asb, nil
+	return svc, nil
 }
 
-func initXdr(
-	ctx context.Context,
-	params *config.BackupServiceConfig,
-	backupXDRConfig *backup.ConfigBackupXDR,
-	aerospikeClient *aerospike.Client,
-	infoPolicy *aerospike.InfoPolicy,
-	retryInfoPolicy *bModels.RetryPolicy,
-	logger *slog.Logger) (bool, error) {
-	if params.BackupXDR == nil {
-		return false, nil
-	}
-	// To pass version check and stop XDR and unblock MRT we need asinfo client without backup client.
-	// So we init it separately in old fashion way.
-	infoClient, err := asinfo.NewClient(
-		aerospikeClient.Cluster(),
-		infoPolicy,
-		retryInfoPolicy,
-	)
-	if err != nil {
-		return false, fmt.Errorf("failed to create info client: %w", err)
-	}
-
-	version, err := infoClient.GetVersion(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to get version: %w", err)
-	}
-
-	// TODO: move this logic to XDR handler.
-	if xdrSupportedVersion.IsGreater(version) {
-		return false, fmt.Errorf("version %s is unsupported, only databse version %d+ is supported",
-			version.String(), xdrSupportedVersion)
-	}
-
-	// Stop xdr.
-	if params.IsStopXDR() {
-		logger.Info("stopping XDR on the database")
-
-		if err = stopXDR(ctx, infoClient, backupXDRConfig.DC, backupXDRConfig.Namespace); err != nil {
-			return false, fmt.Errorf("failed to stop XDR: %w", err)
-		}
-
-		return true, nil
-	}
-
-	// Unblock mRT.
-	if params.IsUnblockMRT() {
-		logger.Info("enabling MRT writes on the database")
-
-		if err = unblockMrt(ctx, infoClient, backupXDRConfig.Namespace); err != nil {
-			return false, fmt.Errorf("failed to enable MRT writes: %w", err)
-		}
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// Run executes the backup process for the Service based on its configuration and context,
-// handling both XDR and scan backups.
+// Run executes the scan backup process for the Service
+// based on its configuration and context.
 // Returns an error if the backup process encounters issues.
 func (s *Service) Run(ctx context.Context) error {
-	// If backup was called with --remove-artifacts, it would be nil.
-	if s == nil {
-		return nil
-	}
-
-	switch {
-	case s.isEstimate:
+	if s.isEstimate {
 		s.logger.Info("calculating backup estimate")
-		// Calculating estimates.
+
 		estimates, err := s.backupClient.Estimate(ctx, s.config, s.estimatesSamples)
 		if err != nil {
 			return fmt.Errorf("failed to calculate backup estimate: %w", err)
 		}
 
 		logging.ReportEstimate(estimates, s.reportToLog, s.logger)
-	case s.configXdr != nil:
-		s.logger.Info("starting xdr backup")
-		// Running xdr backup.
-		hXdr, err := s.backupClient.BackupXDR(ctx, s.configXdr, s.writer)
-		if err != nil {
-			return fmt.Errorf("failed to start xdr backup: %w", err)
-		}
-		// Backup indexes and udfs.
-		h, err := s.backupClient.Backup(ctx, s.config, s.writer, s.reader)
-		if err != nil {
-			return fmt.Errorf("failed to start backup of indexes and udfs: %w", err)
-		}
 
-		if err = hXdr.Wait(ctx); err != nil {
-			return fmt.Errorf("failed to xdr backup: %w", err)
-		}
-
-		if err = h.Wait(ctx); err != nil {
-			return fmt.Errorf("failed to backup indexes and udfs: %w", err)
-		}
-
-		stats := bModels.SumBackupStats(h.GetStats(), hXdr.GetStats())
-		logging.ReportBackup(stats, true, s.reportToLog, s.logger)
-	default:
-		s.logger.Info("starting scan backup")
-		// Running ordinary backup.
-		h, err := s.backupClient.Backup(ctx, s.config, s.writer, s.reader)
-		if err != nil {
-			return fmt.Errorf("failed to start backup: %w", errHumanize(err))
-		}
-
-		if err = h.Wait(ctx); err != nil {
-			return fmt.Errorf("failed to backup: %w", err)
-		}
-
-		logging.ReportBackup(h.GetStats(), false, s.reportToLog, s.logger)
+		return nil
 	}
+
+	s.logger.Info("starting scan backup")
+
+	h, err := s.backupClient.Backup(ctx, s.config, s.writer, s.reader)
+	if err != nil {
+		return fmt.Errorf("failed to start backup: %w", errHumanize(err))
+	}
+
+	if err = h.Wait(ctx); err != nil {
+		return fmt.Errorf("failed to backup: %w", err)
+	}
+
+	logging.ReportBackup(h.GetStats(), s.reportToLog, s.logger)
 
 	return nil
-}
-
-func stopXDR(ctx context.Context, infoClient *asinfo.Client, dc, namespace string) error {
-	nodes := infoClient.GetNodesNames()
-
-	var errs []error
-
-	for _, node := range nodes {
-		// Check before stopping if DC exists.
-		_, err := infoClient.GetStats(ctx, node, dc, namespace)
-		if err != nil && strings.Contains(err.Error(), "DC not found") {
-			continue
-		}
-
-		if err = infoClient.StopXDR(ctx, node, dc); err != nil {
-			errs = append(errs, fmt.Errorf("failed to stop XDR on node %s: %w", node, err))
-		}
-	}
-
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
-}
-
-func unblockMrt(ctx context.Context, infoClient *asinfo.Client, namespace string) error {
-	nodes := infoClient.GetNodesNames()
-
-	var errs []error
-
-	for _, node := range nodes {
-		if err := infoClient.UnBlockMRTWrites(ctx, node, namespace); err != nil {
-			errs = append(errs, fmt.Errorf("failed to unblock mrts on node %s: %w", node, err))
-		}
-	}
-
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
-}
-
-func getInfoPolicies(params *config.BackupServiceConfig) (*aerospike.InfoPolicy, *bModels.RetryPolicy) {
-	if params.BackupXDR != nil {
-		return params.BackupXDR.InfoPolicy(), params.BackupXDR.RetryPolicy()
-	}
-
-	return params.Backup.InfoPolicy(), params.Backup.RetryPolicy()
 }
 
 // errHumanize simplifies technical error messages.
 func errHumanize(err error) error {
 	// This error is returned from the info command, so it is not aerospike.Error.
-	// Because if that, we can check only string.
+	// Because of that, we can check only the string.
 	if strings.Contains(err.Error(), models.ErrNodeNotFoundText) {
 		return models.ErrNodeNotFound
 	}

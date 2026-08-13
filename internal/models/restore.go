@@ -15,18 +15,12 @@
 package models
 
 import (
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/models"
-)
-
-const (
-	RestoreModeAuto = "auto"
-	RestoreModeASB  = "asb"
-	RestoreModeASBX = "asbx"
 )
 
 // Restore contains flags that will be mapped to restore config.
@@ -52,66 +46,60 @@ type Restore struct {
 	RetryMultiplier   float64
 	RetryMaxAttempts  uint
 
-	Mode string
-
 	ValidateOnly      bool
 	ApplyMetadataLast bool
 }
 
+// IsDirectoryRestore reports whether the restore source is a single directory
+// rather than an input file or a directory list.
 func (r *Restore) IsDirectoryRestore() bool {
 	return r.DirectoryList == "" && r.InputFile == ""
 }
 
+// Validate validates the restore configuration and returns an error if any validation fails.
 func (r *Restore) Validate() error {
 	if r == nil {
 		return nil
 	}
 
-	switch r.Mode {
-	case RestoreModeAuto, RestoreModeASB, RestoreModeASBX:
-		// ok.
-	default:
-		return fmt.Errorf("invalid restore mode: %s", r.Mode)
-	}
-
 	if r.InputFile == "" &&
 		r.Directory == "" &&
 		r.DirectoryList == "" {
-		return fmt.Errorf("input file or directory required")
+		return errors.New("input file or directory required")
 	}
 
 	if r.Directory != "" && r.InputFile != "" {
-		return fmt.Errorf("only one of directory and input-file may be configured at the same time")
+		return errors.New("only one of directory and input-file may be configured at the same time")
 	}
 
 	if r.DirectoryList != "" && (r.Directory != "" || r.InputFile != "") {
-		return fmt.Errorf("only one of directory, input-file and directory-list may be configured at the same time")
+		return errors.New("only one of directory, input-file and directory-list may be configured at the same time")
 	}
 
 	if r.ParentDirectory != "" && r.DirectoryList == "" {
-		return fmt.Errorf("must specify directory-list list")
+		return errors.New("parent-directory requires directory-list to be set")
 	}
 
 	if r.WarmUp < 0 {
-		return fmt.Errorf("warm-up must be non-negative")
+		return errors.New("warm-up must be non-negative")
 	}
 
 	if !r.ValidateOnly {
-		// Validate common backup only if restore is not in validate only mode.
+		// Validate common backup config only if restore is not in validate-only mode.
 		if err := r.Common.Validate(); err != nil {
 			return err
 		}
 	}
 
 	if r.Uniq && r.Replace {
-		return fmt.Errorf("replace and unique are mutually exclusive")
+		return errors.New("replace and unique are mutually exclusive")
 	}
 
 	return nil
 }
 
 // NamespaceConfig creates and returns a RestoreNamespaceConfig with source and destination namespaces
-// derived from input. Took value from r.Namespace. If one namespace is provided,
+// derived from r.Namespace. If one namespace is provided,
 // it sets both source and destination to the same value.
 // Returns nil if invalid input (e.g., more than two namespaces) is provided.
 func (r *Restore) NamespaceConfig() *backup.RestoreNamespaceConfig {
@@ -134,7 +122,7 @@ func (r *Restore) NamespaceConfig() *backup.RestoreNamespaceConfig {
 	}
 }
 
-// WritePolicy map restore config to write policy.
+// WritePolicy maps restore config to a write policy.
 func (r *Restore) WritePolicy() *aerospike.WritePolicy {
 	p := aerospike.NewWritePolicy(0, 0)
 
@@ -169,7 +157,7 @@ func (r *Restore) RetryPolicy() *models.RetryPolicy {
 	)
 }
 
-// Sets converts the Sets string into a slice of set names by splitting it using commas.
+// Sets converts the SetList string into a slice of set names by splitting it using commas.
 // Returns nil if empty.
 func (r *Restore) Sets() []string {
 	return SplitByComma(r.SetList)

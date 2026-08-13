@@ -128,7 +128,7 @@ func TestPrintBackupReport(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	output := captureOutput(t, func() {
-		printBackupReport(stats, false)
+		printBackupReport(stats)
 	})
 
 	assert.Contains(t, output, headerBackupReport)
@@ -147,25 +147,13 @@ func TestPrintBackupReport(t *testing.T) {
 	assert.Contains(t, output, "10")
 }
 
-func TestPrintBackupReportXdr(t *testing.T) {
-	stats := newSampleBackupStats()
-
-	output := captureOutput(t, func() {
-		printBackupReport(stats, true)
-	})
-
-	assert.Contains(t, output, headerBackupReport)
-	assert.Contains(t, output, "Records Received")
-	assert.NotContains(t, output, "Records Read")
-}
-
 func TestLogBackupReport(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	var buf bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logBackupReport(stats, false, logger)
+	logBackupReport(stats, logger)
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
@@ -178,26 +166,12 @@ func TestLogBackupReport(t *testing.T) {
 	assert.Contains(t, logOutput, "files-written=10")
 }
 
-func TestLogBackupReportXdr(t *testing.T) {
-	stats := newSampleBackupStats()
-
-	var buf bytes.Buffer
-
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logBackupReport(stats, true, logger)
-
-	logOutput := buf.String()
-	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "records-received=1000")
-	assert.NotContains(t, logOutput, "records-read=")
-}
-
 func TestReportBackup(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	t.Run("Console output", func(t *testing.T) {
 		output := captureOutput(t, func() {
-			ReportBackup(stats, false, false, nil)
+			ReportBackup(stats, false, nil)
 		})
 
 		assert.Contains(t, output, headerBackupReport)
@@ -208,7 +182,7 @@ func TestReportBackup(t *testing.T) {
 		var buf bytes.Buffer
 
 		logger := slog.New(slog.NewTextHandler(&buf, nil))
-		ReportBackup(stats, false, true, logger)
+		ReportBackup(stats, true, logger)
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "backup report")
