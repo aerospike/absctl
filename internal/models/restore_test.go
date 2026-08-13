@@ -36,7 +36,6 @@ func TestValidateRestore(t *testing.T) {
 			name: "Valid restore configuration with input file",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
 				Common: Common{
 					Namespace: testNamespace,
 				},
@@ -46,7 +45,6 @@ func TestValidateRestore(t *testing.T) {
 		{
 			name: "Valid restore configuration with directory",
 			restore: &Restore{
-				Mode: RestoreModeASB,
 				Common: Common{
 					Directory: "restore-dir",
 					Namespace: "test",
@@ -59,7 +57,6 @@ func TestValidateRestore(t *testing.T) {
 			restore: &Restore{
 				DirectoryList:   "dir1,dir2",
 				ParentDirectory: "parent",
-				Mode:            RestoreModeASB,
 				Common: Common{
 					Namespace: "test",
 				},
@@ -67,21 +64,8 @@ func TestValidateRestore(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "Invalid restore mode",
-			restore: &Restore{
-				InputFile: "backup.asb",
-				Mode:      "invalid-mode",
-				Common: Common{
-					Namespace: "test",
-				},
-			},
-			wantErr: true,
-			errMsg:  "invalid restore mode: invalid-mode",
-		},
-		{
 			name: "Missing input source",
 			restore: &Restore{
-				Mode: RestoreModeASB,
 				Common: Common{
 					Namespace: "test",
 				},
@@ -93,7 +77,6 @@ func TestValidateRestore(t *testing.T) {
 			name: "Invalid restore restore - both input file and directory",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
 				Common: Common{
 					Directory: "restore-dir",
 					Namespace: "test",
@@ -103,10 +86,21 @@ func TestValidateRestore(t *testing.T) {
 			errMsg:  "only one of directory and input-file may be configured at the same time",
 		},
 		{
+			name: "Invalid restore - parent directory without directory list",
+			restore: &Restore{
+				ParentDirectory: "parent",
+				Common: Common{
+					Directory: "restore-dir",
+					Namespace: "test",
+				},
+			},
+			wantErr: true,
+			errMsg:  "parent-directory requires directory-list to be set",
+		},
+		{
 			name: "Invalid common restore - missing namespace",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
 			},
 			wantErr: true,
 			errMsg:  "namespace is required",
@@ -114,7 +108,6 @@ func TestValidateRestore(t *testing.T) {
 		{
 			name: "Replace and uniq are mutually exclusive",
 			restore: &Restore{
-				Mode: RestoreModeASB,
 				Common: Common{
 					Directory: "restore-dir",
 					Namespace: "test",

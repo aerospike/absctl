@@ -16,8 +16,6 @@ package storage
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"path"
 	"time"
@@ -26,10 +24,8 @@ import (
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/io/encoding/asb"
-	"github.com/aerospike/backup-go/io/encoding/asbx"
 	"github.com/aerospike/backup-go/io/storage/aws/s3"
 	"github.com/aerospike/backup-go/io/storage/azure/blob"
-	"github.com/aerospike/backup-go/io/storage/common"
 	"github.com/aerospike/backup-go/io/storage/gcp/storage"
 	"github.com/aerospike/backup-go/io/storage/local"
 	"github.com/aerospike/backup-go/io/storage/options"
@@ -42,100 +38,22 @@ func NewRestoreReader(
 	ctx context.Context,
 	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
-) (reader, xdrReader backup.StreamingReader, err error) {
-	directory, inputFile := cfg.Restore.Directory, cfg.Restore.InputFile
-	parentDirectory, directoryList := cfg.Restore.ParentDirectory, cfg.Restore.DirectoryList
-
-	switch cfg.Restore.Mode {
-	case models.RestoreModeASB, models.RestoreModeAuto:
-		reader, err = NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			directory,
-			inputFile,
-			parentDirectory,
-			directoryList,
-			cfg.Restore.StdBufferSize,
-			false,
-			false,
-			logger,
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create asb reader: %w", err)
-		}
-
-		return reader, nil, nil
-	case models.RestoreModeASBX:
-		xdrReader, err = NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			directory,
-			inputFile,
-			parentDirectory,
-			directoryList,
-			cfg.Restore.StdBufferSize,
-			true,
-			false,
-			logger,
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create asbx reader: %w", err)
-		}
-
-		return nil, xdrReader, nil
-	default:
-		reader, err = NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			directory,
-			inputFile,
-			parentDirectory,
-			directoryList,
-			cfg.Restore.StdBufferSize,
-			false,
-			false,
-			logger,
-		)
-
-		switch {
-		case errors.Is(err, common.ErrEmptyStorage):
-			reader = nil
-		case err != nil:
-			return nil, nil, fmt.Errorf("failed to create asb reader: %w", err)
-		default:
-		}
-
-		xdrReader, err = NewReader(
-			ctx,
-			&cfg.ServiceConfigCommon,
-			directory,
-			inputFile,
-			parentDirectory,
-			directoryList,
-			cfg.Restore.StdBufferSize,
-			true,
-			false,
-			logger,
-		)
-
-		switch {
-		case errors.Is(err, common.ErrEmptyStorage):
-			xdrReader = nil
-		case err != nil:
-			return nil, nil, fmt.Errorf("failed to create asbx reader: %w", err)
-		default:
-		}
-
-		// If both readers are nil return an error, as no files were found.
-		if reader == nil && xdrReader == nil {
-			return nil, nil, err
-		}
-
-		return reader, xdrReader, nil
-	}
+) (backup.StreamingReader, error) {
+	return NewReader(
+		ctx,
+		&cfg.ServiceConfigCommon,
+		cfg.Restore.Directory,
+		cfg.Restore.InputFile,
+		cfg.Restore.ParentDirectory,
+		cfg.Restore.DirectoryList,
+		cfg.Restore.StdBufferSize,
+		false,
+		logger,
+	)
 }
 
-// NewStateReader initialize reader for a state file.
+// NewStateReader initializes a reader for a state file.
+// It returns a nil reader without an error if the state file is not used.
 func NewStateReader(
 	ctx context.Context,
 	cfg *config.BackupServiceConfig,
@@ -147,22 +65,16 @@ func NewStateReader(
 		return nil, nil
 	}
 
-	stateFile := cfg.Backup.StateFileDst
-	if cfg.Backup.Continue != "" {
-		stateFile = cfg.Backup.Continue
-	}
-
-	logger.Info("initializing state file", slog.String("path", stateFile))
+	logger.Info("initializing state file", slog.String("path", cfg.Backup.Continue))
 
 	return NewReader(
 		ctx,
 		&cfg.ServiceConfigCommon,
 		cfg.Backup.Directory,
-		stateFile,
+		cfg.Backup.Continue,
 		"",
 		"",
 		0,
-		false,
 		false,
 		logger,
 	)
@@ -177,11 +89,10 @@ func NewReader(
 	parentDirectory,
 	directoryList string,
 	stdBufferSize int,
-	isXdr,
 	skipCheck bool,
 	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
-	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, isXdr, skipCheck, logger)
+	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, skipCheck, logger)
 
 	logger.Info("initializing storage for reader",
 		slog.String("directory", directory),
@@ -198,7 +109,7 @@ func NewReader(
 			slog.String("endpoint", cfg.AwsS3.Endpoint),
 		)
 
-		return newS3Reader(ctx, cfg.AwsS3, opts, logger)
+		return newS3Reader(ctx, cfg.AwsS3, opts)
 	case cfg.GcpStorage != nil && cfg.GcpStorage.BucketName != "":
 		defer logger.Info("initialized GCP storage reader",
 			slog.String("bucket", cfg.GcpStorage.BucketName),
@@ -213,7 +124,7 @@ func NewReader(
 			slog.String("endpoint", cfg.AzureBlob.Endpoint),
 		)
 
-		return newAzureReader(ctx, cfg.AzureBlob, opts, logger)
+		return newAzureReader(ctx, cfg.AzureBlob, opts)
 	case inputFile == config.StdPlaceholder:
 		defer logger.Info("initialized standard input reader")
 		return newStdReader(ctx, stdBufferSize)
@@ -228,13 +139,12 @@ func newReaderOpts(
 	inputFile,
 	parentDirectory,
 	directoryList string,
-	isXDR,
 	skipCheck bool,
 	logger *slog.Logger,
 ) []options.Opt {
-	opts := make([]options.Opt, 0)
+	opts := make([]options.Opt, 0, 5)
 
-	// As we validate this field in validation function, we can switch here.
+	// As we validate these fields in the validation function, we can switch here.
 	switch {
 	case directory != "":
 		opts = append(opts, options.WithDir(directory))
@@ -248,19 +158,12 @@ func newReaderOpts(
 	if skipCheck {
 		opts = append(opts, options.WithSkipDirCheck(), options.WithNestedDir())
 	} else {
-		// Append Validator always. As it is not applied to direct file reading.
-		if isXDR {
-			opts = append(opts, options.WithValidator(asbx.NewValidator()), options.WithSorting())
-		} else {
-			opts = append(opts, options.WithValidator(asb.NewValidator()))
-		}
+		opts = append(opts, options.WithValidator(asb.NewValidator()))
 	}
 
-	// options.WithCalculateTotalSize() is required for estimating total size of backup.
+	// options.WithCalculateTotalSize() is required for estimating the total size of a backup.
 	// Without it, restore will hang forever.
-	opts = append(opts, options.WithLogger(logger), options.WithCalculateTotalSize())
-
-	return opts
+	return append(opts, options.WithLogger(logger), options.WithCalculateTotalSize())
 }
 
 func newLocalReader(ctx context.Context, opts []options.Opt) (backup.StreamingReader, error) {
@@ -268,15 +171,13 @@ func newLocalReader(ctx context.Context, opts []options.Opt) (backup.StreamingRe
 }
 
 func newStdReader(ctx context.Context, bufferSizeMiB int) (backup.StreamingReader, error) {
-	bufferSizeBytes := bufferSizeMiB * 1024 * 1024
-	return std.NewReader(ctx, bufferSizeBytes)
+	return std.NewReader(ctx, toBytes(bufferSizeMiB))
 }
 
 func newS3Reader(
 	ctx context.Context,
 	a *models.AwsS3,
 	opts []options.Opt,
-	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
 	client, err := NewS3Client(ctx, a)
 	if err != nil {
@@ -284,19 +185,14 @@ func newS3Reader(
 	}
 
 	if a.AccessTier != "" {
-		opts = append(
-			opts,
+		opts = append(opts,
 			options.WithAccessTier(a.AccessTier),
-			options.WithLogger(logger),
 			options.WithWarmPollDuration(time.Duration(a.RestorePollDuration)*time.Millisecond),
 		)
 	}
 
 	opts = append(opts, options.WithRetryPolicy(
-		bModels.NewRetryPolicy(
-			time.Duration(a.RetryReadBackoff)*time.Millisecond,
-			a.RetryReadMultiplier,
-			a.RetryReadMaxAttempts),
+		newReadRetryPolicy(a.RetryReadBackoff, a.RetryReadMultiplier, a.RetryReadMaxAttempts),
 	))
 
 	return s3.NewReader(ctx, client, a.BucketName, opts...)
@@ -313,10 +209,7 @@ func newGcpReader(
 	}
 
 	opts = append(opts, options.WithRetryPolicy(
-		bModels.NewRetryPolicy(
-			time.Duration(g.RetryReadBackoff)*time.Millisecond,
-			g.RetryReadMultiplier,
-			g.RetryReadMaxAttempts),
+		newReadRetryPolicy(g.RetryReadBackoff, g.RetryReadMultiplier, g.RetryReadMaxAttempts),
 	))
 
 	return storage.NewReader(ctx, client, g.BucketName, opts...)
@@ -326,7 +219,6 @@ func newAzureReader(
 	ctx context.Context,
 	a *models.AzureBlob,
 	opts []options.Opt,
-	logger *slog.Logger,
 ) (backup.StreamingReader, error) {
 	client, err := newAzureClient(a)
 	if err != nil {
@@ -334,25 +226,29 @@ func newAzureReader(
 	}
 
 	if a.AccessTier != "" {
-		opts = append(
-			opts,
+		opts = append(opts,
 			options.WithAccessTier(a.AccessTier),
-			options.WithLogger(logger),
 			options.WithWarmPollDuration(time.Duration(a.RestorePollDuration)*time.Millisecond),
 		)
 	}
 
 	opts = append(opts, options.WithRetryPolicy(
-		bModels.NewRetryPolicy(
-			time.Duration(a.RetryReadBackoff)*time.Millisecond,
-			a.RetryReadMultiplier,
-			a.RetryReadMaxAttempts),
+		newReadRetryPolicy(a.RetryReadBackoff, a.RetryReadMultiplier, a.RetryReadMaxAttempts),
 	))
 
 	return blob.NewReader(ctx, client, a.ContainerName, opts...)
 }
 
-// prepareDirectoryList parses command line parameters and return slice of strings.
+// newReadRetryPolicy builds a read retry policy from millisecond-based flag values.
+func newReadRetryPolicy(backoffMs int, multiplier float64, maxAttempts uint) *bModels.RetryPolicy {
+	return bModels.NewRetryPolicy(
+		time.Duration(backoffMs)*time.Millisecond,
+		multiplier,
+		maxAttempts,
+	)
+}
+
+// prepareDirectoryList parses command line parameters and returns a slice of directory paths.
 func prepareDirectoryList(parentDir, dirList string) []string {
 	result := models.SplitByComma(dirList)
 	if parentDir != "" {

@@ -12,30 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logging
+package models
 
-import (
-	"bytes"
-	"testing"
-)
+import "fmt"
 
-// captureOutput runs fn while swapping the package-level output writer with
-// an in-memory buffer and returns whatever fn wrote.
-//
-// Tests that exercise pretty-printers should not call SetOutWriter directly;
-// using this helper guarantees the previous writer is restored even when the
-// test fails.
-func captureOutput(t *testing.T, fn func()) string {
-	t.Helper()
+// ServerCommon contains flags that will be mapped to ServerBackup and ServerRestore.
+type ServerCommon struct {
+	Namespace   string
+	StorageType string
+}
 
-	buf := &bytes.Buffer{}
-	prev := SetOutWriter(buf)
+func (s *ServerCommon) Validate() error {
+	if s.Namespace == "" {
+		return fmt.Errorf("namespace is required")
+	}
 
-	t.Cleanup(func() {
-		SetOutWriter(prev)
-	})
+	if s.StorageType == "" {
+		return fmt.Errorf("storage-type is required")
+	}
 
-	fn()
-
-	return buf.String()
+	return nil
 }

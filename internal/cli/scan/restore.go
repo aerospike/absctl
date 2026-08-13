@@ -23,16 +23,10 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
-	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/restore"
 	"github.com/aerospike/absctl/internal/subcmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-)
-
-const (
-	restoreWelcomeMessage      = "Welcome to the Aerospike restore CLI tool!"
-	restoreWelcomeMessageShort = "Aerospike restore CLI tool"
 )
 
 type restoreRunner struct {
@@ -43,8 +37,8 @@ type restoreRunner struct {
 	restoreFlagSet *pflag.FlagSet
 }
 
-// NewRestoreCmd builds the top-level "restore" command for scan-based restores.
-func NewRestoreCmd(
+// NewImportCmd builds the top-level command for scan-based restores.
+func NewImportCmd(
 	flagsRoot *flags.Root, appVersion, commitHash, buildTime string,
 ) (*cobra.Command, *subcmd.SharedFlags) {
 	r := &restoreRunner{
@@ -53,7 +47,7 @@ func NewRestoreCmd(
 	r.flagsCommon = flags.NewCommon(&r.flagsRestore.Common, flags.OperationRestore)
 
 	return subcmd.BuildCommand(
-		"restore", restoreWelcomeMessageShort, restoreWelcomeMessage,
+		UseRestore, ShortRestore, LongRestore,
 		flagsRoot, appVersion, commitHash, buildTime,
 		flags.OperationRestore, r,
 	)
@@ -103,56 +97,52 @@ func (r *restoreRunner) SetHelpUsage(cmd *cobra.Command, shared *subcmd.SharedFl
 
 func (r *restoreRunner) NewServiceConfig(ctx context.Context, shared *subcmd.SharedFlags,
 ) (subcmd.ServiceConfig, error) {
-	var (
-		cfg *config.RestoreServiceConfig
-		err error
-	)
-
 	app := shared.App.GetApp()
 	if app != nil && app.ConfigFilePath != "" {
-		cfg, err = config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
+		cfg, err := config.DecodeRestoreServiceConfig(ctx, app.ConfigFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
 		}
-	} else {
-		cfg, err = config.NewRestoreServiceConfig(
-			shared.App.GetApp(),
-			shared.Aerospike.NewAerospikeConfig(),
-			shared.ClientPolicy.GetClientPolicy(),
-			r.flagsRestore.GetRestore(),
-			shared.Compression.GetCompression(),
-			shared.Encryption.GetEncryption(),
-			shared.SecretAgent.GetSecretAgent(),
-			shared.Aws.GetAwsS3(),
-			shared.Gcp.GetGcpStorage(),
-			shared.Azure.GetAzureBlob(),
-		)
-		if err != nil {
-			return nil, err
-		}
+
+		return cfg, nil
 	}
 
-	// Set default restore mode to asb.
-	// This should be removed once asbx is released.
-	cfg.Restore.Mode = models.RestoreModeASB
+	cfg, err := config.NewRestoreServiceConfig(
+		shared.App.GetApp(),
+		shared.Aerospike.NewAerospikeConfig(),
+		shared.ClientPolicy.GetClientPolicy(),
+		r.flagsRestore.GetRestore(),
+		shared.Compression.GetCompression(),
+		shared.Encryption.GetEncryption(),
+		shared.SecretAgent.GetSecretAgent(),
+		shared.Aws.GetAwsS3(),
+		shared.Gcp.GetGcpStorage(),
+		shared.Azure.GetAzureBlob(),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
 
 func (r *restoreRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig, logger *slog.Logger) error {
-	restoreCfg := cfg.(*config.RestoreServiceConfig)
+	restoreCfg, ok := cfg.(*config.RestoreServiceConfig)
+	if !ok {
+		return fmt.Errorf("unexpected service config type %T", cfg)
+	}
 
 	logMsg := "restore"
 	if restoreCfg.Restore.ValidateOnly {
 		logMsg = "validation"
 	}
 
-	asr, err := restore.NewService(ctx, restoreCfg, logger)
+	svc, err := restore.NewService(ctx, restoreCfg, logger)
 	if err != nil {
 		return fmt.Errorf("%s initialization failed: %w", logMsg, err)
 	}
 
-	if err = asr.Run(ctx); err != nil {
+	if err = svc.Run(ctx); err != nil {
 		return fmt.Errorf("%s failed: %w", logMsg, err)
 	}
 
@@ -173,8 +163,8 @@ func newRestoreHelpFunction(
 	azureFlagSet *pflag.FlagSet,
 ) func() {
 	return func() {
-		fmt.Println(restoreWelcomeMessage)
-		fmt.Println(strings.Repeat("-", len(restoreWelcomeMessage)))
+		fmt.Println(textWelcomeMessageRestore)
+		fmt.Println(strings.Repeat("-", len(textWelcomeMessageRestore)))
 		fmt.Println(flags.SectionTextUsageRestore)
 
 		// Print section: App Flags
