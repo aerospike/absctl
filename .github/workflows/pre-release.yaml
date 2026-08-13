@@ -11,6 +11,13 @@ permissions:
 # NOTE: every aerospike/shared-workflows `uses: ...@<sha>` below is pinned to v4.0.0.
 # The `env` context isn't available in `with:` for reusable-workflow-call jobs, so gh-workflows-ref
 # can't be centralized here — bump the sha and the "v4.0.0" gh-workflows-ref value together by hand.
+#
+# NOTE: this still targets the `ecosystem` JFrog project (vars.JFROG_CLI_BUILD_PROJECT) and the
+# `absctl` package name. Per https://aerospike.slack.com/archives/C021FHS23HD/p1786135856448879,
+# absctl is expected to move to the `database` project (and possibly rename to `aerospike-absctl`,
+# unconfirmed as of writing) so it's reachable through the public deb/rpm virtual repos like the
+# other CLI tools. That move needs new `database`-project vars/OIDC onboarding that don't exist yet
+# for this repo, and the package rename is still unconfirmed — revisit this once those land.
 
 jobs:
   go-releaser:

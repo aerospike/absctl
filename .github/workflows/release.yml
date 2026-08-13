@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
 
+# NOTE: still targets the `ecosystem` JFrog project — see the same note in pre-release.yaml
+# regarding the pending, unconfirmed move to the `database` project.
+
 jobs:
   promote-to-prod:
     permissions:
