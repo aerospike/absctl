@@ -117,6 +117,33 @@ absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 
 Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-example-values) and [restore](docs/restore/readme.md#configuration-file-schema-with-example-values) readme files for details.
 
+## Releasing
+
+Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PROD`) before anything is made public. The
+GitHub Actions side is split into two workflows:
+[`pre-release.yml`](.github/workflows/pre-release.yml) (developer owned, builds and promotes up to `TEST`) and
+[`release.yml`](.github/workflows/release.yml) (run once the release is fully approved, publishes it).
+
+1. Tag the release commit on `main` with a semver tag: `git tag v1.x.y && git push origin v1.x.y`. This triggers
+   `pre-release.yml`, which:
+   1. Runs GoReleaser to build and publish the cross-platform binary archives directly to GitHub (unchanged by the
+      flow below — GoReleaser's output bypasses JFrog entirely).
+   2. Builds the DEB/RPM packages and Docker image.
+   3. Signs the packages and deploys everything to JFrog `DEV`.
+   4. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
+2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
+   promoted from `TEST` to `STAGE` (manually, via the JFrog UI — not automated).
+3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PROD` via the JFrog UI. This is
+   the gate that makes a release public; automation intentionally stops before this step.
+4. Once the bundle is on `PROD`:
+   - Docker Hub mirroring happens automatically and externally (JFrog's existing promotion webhook feeds
+     `artifact-publisher`) — nothing to trigger here.
+   - Someone with repo access (not necessarily the same PM/EM from step 3) manually runs `release.yml`
+     (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
+     `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
+     publishes them as a new, immutable GitHub Release — nothing is rebuilt, re-signed, or re-checksummed at this
+     point.
+
 ## License
 
 Apache License, Version 2.0. See [LICENSE](LICENSE) file for details.
