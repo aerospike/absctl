@@ -232,6 +232,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 		aerospikeClient.Cluster(),
 		aerospike.NewInfoPolicy(),
 		models.NewDefaultRetryPolicy(),
+		s.logger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create info client: %w", err)

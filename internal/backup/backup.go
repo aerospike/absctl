@@ -152,6 +152,7 @@ func initXdr(
 		aerospikeClient.Cluster(),
 		infoPolicy,
 		retryInfoPolicy,
+		logger,
 	)
 	if err != nil {
 		return false, fmt.Errorf("failed to create info client: %w", err)
