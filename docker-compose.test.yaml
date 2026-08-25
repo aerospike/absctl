@@ -1,0 +1,88 @@
+# Services required by the integration tests.
+#
+# These mirror the containers started by .github/workflows/tests.yml, so that a
+# local run behaves the same as CI. Keep the image versions in sync with that
+# workflow: if they drift, a green local run stops predicting a green CI run.
+#
+#   make test-env-up
+#   make test-integration
+#   make test-env-down
+#
+# Ports are published on the host because the tests connect to 127.0.0.1.
+
+services:
+  # Aerospike Enterprise ships an evaluation feature key that covers a
+  # single-node cluster, so no license file is needed.
+  aerospike:
+    image: aerospike/aerospike-server-enterprise:8.1.2.4
+    container_name: absctl-aerospike
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD", "asinfo", "-v", "build"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: absctl-minio
+    command: server /data
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadminpassword
+      MINIO_BROWSER: "off"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Creates the buckets the tests read and write. The workflow runs the same mc
+  # commands via docker exec; this uses the server image because it bundles mc,
+  # which keeps the file down to one MinIO version to pin.
+  #
+  # It sits behind a profile so that it is excluded from `up --wait`, which
+  # reports failure when a container exits even with status 0. `make test-env-up`
+  # runs it separately; if you start the stack by hand, run it yourself:
+  #
+  #   docker compose -f docker-compose.test.yaml run --rm minio-init
+  minio-init:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: absctl-minio-init
+    profiles: ["init"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadminpassword
+        mc mb --ignore-existing local/backup
+        mc mb --ignore-existing local/aerospike-backup
+        mc anonymous set public local/backup
+        mc anonymous set public local/aerospike-backup
+
+  # -public-host must match the endpoint the tests use, otherwise the server
+  # hands back download URLs pointing at a host the client cannot resolve.
+  fake-gcs-server:
+    image: fsouza/fake-gcs-server:1.56.1
+    container_name: absctl-fake-gcs
+    command: ["-data", "/data", "-scheme", "http", "-public-host", "127.0.0.1:4443"]
+    ports:
+      - "4443:4443"
+
+  # --skipApiVersionCheck keeps Azurite from rejecting newer Azure SDK releases.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
+    container_name: absctl-azurite
+    command: azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+    ports:
+      - "10000:10000"

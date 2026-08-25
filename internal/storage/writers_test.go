@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2024-2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,14 +16,12 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,9 +103,7 @@ func TestNewLocalWriter(t *testing.T) {
 
 func TestNewS3Writer(t *testing.T) {
 	t.Parallel()
-
-	err := createAwsCredentials()
-	require.NoError(t, err)
+	testutil.RequireIntegration(t, testutil.ServiceS3)
 
 	params := &config.BackupServiceConfig{
 		Backup: &models.Backup{
@@ -160,39 +156,9 @@ func TestNewS3Writer(t *testing.T) {
 	assert.Equal(t, testS3Type, writer.GetType())
 }
 
-func createAwsCredentials() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("error getting home directory: %w", err)
-	}
-
-	awsDir := filepath.Join(home, ".aws")
-
-	err = os.MkdirAll(awsDir, 0o700)
-	if err != nil {
-		return fmt.Errorf("error creating .aws directory: %w", err)
-	}
-
-	filePath := filepath.Join(awsDir, "credentials")
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		credentialsFileBytes := []byte(`[minio]
-aws_access_key_id = minioadmin
-aws_secret_access_key = minioadminpassword`)
-
-		err = os.WriteFile(filePath, credentialsFileBytes, 0o600)
-		if err != nil {
-			return fmt.Errorf("error writing ~/.aws/credentials file: %w", err)
-		}
-
-		fmt.Println("Credentials file created successfully!")
-	}
-
-	return nil
-}
-
 func TestGcpWriter(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceGCP)
 
 	err := createGcpBucket()
 	require.NoError(t, err)
@@ -263,6 +229,7 @@ func createGcpBucket() error {
 
 func TestAzureWriter(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAzure)
 
 	err := createAzureContainer()
 	require.NoError(t, err)
