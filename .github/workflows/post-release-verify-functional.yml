@@ -1,0 +1,158 @@
+# Post-release functional smoke test: spins up Aerospike + MinIO, seeds real records, installs
+# the released absctl package and runs a real backup-to-MinIO then restore, verifying the record
+# count matches. absctl's released `backup`/`restore` commands talk directly to Aerospike +
+# storage -- they do not need aerospike-backup-service running (confirmed: the REST-client
+# `service` subcommand is disabled/unreleased, out of scope here). amd64 only -- architecture
+# coverage already lives in post-release-verify-artifacts.yml's install matrix.
+
+name: Post-Release Verify Functional
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released version to smoke-test (e.g. v1.3.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RECORD_COUNT: 1000
+  NAMESPACE: test
+  BUCKET: absctl-smoke-test
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadminpassword
+
+jobs:
+  backup-restore-smoke-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Start Aerospike
+        run: |
+          docker run -d --name aerospike --network host \
+            aerospike/aerospike-server-enterprise:8.0.0.7
+          for i in $(seq 1 20); do
+            if docker exec aerospike asinfo -p 3000 -v build >/dev/null 2>&1; then break; fi
+            [ "$i" -eq 20 ] && { echo "::error::Aerospike never became ready"; docker logs aerospike; exit 1; }
+            sleep 3
+          done
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio --network host \
+            -e "MINIO_ROOT_USER=${{ env.S3_ACCESS_KEY }}" \
+            -e "MINIO_ROOT_PASSWORD=${{ env.S3_SECRET_KEY }}" \
+            -e "MINIO_BROWSER=off" \
+            minio/minio:latest server /data
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then break; fi
+            [ "$i" -eq 20 ] && { echo "::error::MinIO never became ready"; docker logs minio; exit 1; }
+            sleep 3
+          done
+          docker run --rm --network host minio/mc sh -c \
+            "mc alias set myminio http://127.0.0.1:9000 ${{ env.S3_ACCESS_KEY }} ${{ env.S3_SECRET_KEY }} && \
+             mc mb myminio/${{ env.BUCKET }} && mc anonymous set public myminio/${{ env.BUCKET }}"
+
+      - name: Seed records and verify seed count
+        uses: ./.github/actions/seed-and-verify-aerospike
+        with:
+          mode: seed
+          namespace: ${{ env.NAMESPACE }}
+          record-count: ${{ env.RECORD_COUNT }}
+          host: 127.0.0.1:3000
+
+      - name: Confirm seeded count before proceeding
+        id: seed-count
+        uses: ./.github/actions/seed-and-verify-aerospike
+        with:
+          mode: count
+          namespace: ${{ env.NAMESPACE }}
+          host: 127.0.0.1:3000
+
+      - name: Fail fast if seeding itself didn't work
+        run: |
+          if [ "${{ steps.seed-count.outputs.record_count }}" != "${{ env.RECORD_COUNT }}" ]; then
+            echo "::error::Expected ${{ env.RECORD_COUNT }} records after seeding, got ${{ steps.seed-count.outputs.record_count }}"
+            exit 1
+          fi
+
+      - name: Download and install the released absctl package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "${{ inputs.version }}" --repo "${{ github.repository }}" \
+            --pattern '*amd64_ubuntu24.04.deb' --dir release-assets --clobber
+          pkg="$(ls -1 release-assets/*.deb | head -1)"
+          sudo apt-get update
+          sudo apt-get install -y "$pkg"
+          absctl --version
+
+      - name: Trigger backup
+        run: |
+          absctl backup -h 127.0.0.1:3000 -n "${{ env.NAMESPACE }}" \
+            --s3-bucket-name "${{ env.BUCKET }}" \
+            --s3-endpoint-override "http://127.0.0.1:9000" \
+            --s3-access-key-id "${{ env.S3_ACCESS_KEY }}" --s3-secret-access-key "${{ env.S3_SECRET_KEY }}" \
+            -d absctl-smoke-test/
+
+      - name: Verify backup files landed in MinIO
+        run: |
+          docker run --rm --network host minio/mc sh -c \
+            "mc alias set myminio http://127.0.0.1:9000 ${{ env.S3_ACCESS_KEY }} ${{ env.S3_SECRET_KEY }} && \
+             mc ls --recursive myminio/${{ env.BUCKET }}/absctl-smoke-test/" | tee minio-ls.txt
+          [ -s minio-ls.txt ] || { echo "::error::No objects found under absctl-smoke-test/ in MinIO after backup"; exit 1; }
+
+      - name: Truncate namespace before restore
+        run: |
+          docker run --rm --network host aerospike/aerospike-tools:latest \
+            asinfo -h 127.0.0.1:3000 -v "truncate-namespace:namespace=${{ env.NAMESPACE }}"
+
+      - name: Confirm namespace is empty before restore
+        id: pre-restore-count
+        uses: ./.github/actions/seed-and-verify-aerospike
+        with:
+          mode: count
+          namespace: ${{ env.NAMESPACE }}
+          host: 127.0.0.1:3000
+
+      - name: Fail if truncate didn't work
+        run: |
+          if [ "${{ steps.pre-restore-count.outputs.record_count }}" != "0" ]; then
+            echo "::error::Namespace still has ${{ steps.pre-restore-count.outputs.record_count }} records after truncate"
+            exit 1
+          fi
+
+      - name: Trigger restore
+        run: |
+          absctl restore -h 127.0.0.1:3000 -n "${{ env.NAMESPACE }}" \
+            --s3-bucket-name "${{ env.BUCKET }}" \
+            --s3-endpoint-override "http://127.0.0.1:9000" \
+            --s3-access-key-id "${{ env.S3_ACCESS_KEY }}" --s3-secret-access-key "${{ env.S3_SECRET_KEY }}" \
+            -d absctl-smoke-test/
+
+      - name: Verify record count matches the original seed
+        id: final-count
+        uses: ./.github/actions/seed-and-verify-aerospike
+        with:
+          mode: count
+          namespace: ${{ env.NAMESPACE }}
+          host: 127.0.0.1:3000
+
+      - name: Assert final count
+        run: |
+          if [ "${{ steps.final-count.outputs.record_count }}" != "${{ env.RECORD_COUNT }}" ]; then
+            echo "::error::Expected ${{ env.RECORD_COUNT }} records after restore, got ${{ steps.final-count.outputs.record_count }}"
+            exit 1
+          fi
+          echo "Backup/restore smoke test passed: ${{ env.RECORD_COUNT }} records survived a full backup+restore round trip."
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f aerospike minio 2>/dev/null || true
