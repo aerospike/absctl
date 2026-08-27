@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 # This workflow is run manually, once the release bundle has already been promoted all the way to
-# JFrog PROD via the JFrog UI by a PM/EM (see the "Releasing" section in README.md -- gates past
+# JFrog PROD via the JFrog UI by a PM/EM (see the "Cutting a release" section in README.md -- gates past
 # TEST are product-owned and intentionally not automated in CI). It never promotes anything itself;
 # it only verifies the PROD promotion happened, then republishes the already-signed artifacts as an
 # immutable GitHub Release. Nothing is rebuilt, re-signed, or re-checksummed here -- JFrog is the

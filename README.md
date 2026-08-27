@@ -117,7 +117,7 @@ absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 
 Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-example-values) and [restore](docs/restore/readme.md#configuration-file-schema-with-example-values) readme files for details.
 
-## Releasing
+## Cutting a release
 
 Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PREVIEW -> PROD`) before anything is made public. The
 GitHub Actions side is split into two workflows:
@@ -154,11 +154,11 @@ GitHub Actions side is split into two workflows:
    link.
 8. A PM or EM promotes the release bundle from `PREVIEW` to `PROD`, either by dispatching
    [`promote-to-prod.yml`](.github/workflows/promote-to-prod.yml) or manually via the same JFrog UI link. This is
-   the gate that makes a release public; automation intentionally stops before this step.
+   the gate that makes a release public.
 9. Once the bundle is on `PROD`:
    - Docker Hub mirroring happens automatically and externally (JFrog's existing promotion webhook feeds
      `artifact-publisher`) — nothing to trigger here.
-   - Someone with repo access manually runs `release.yml`
+   - A dev or PM/EM manually runs `release.yml`
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
      `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
      publishes them as a new, immutable GitHub Release — nothing is rebuilt, re-signed, or re-checksummed at this
