@@ -30,8 +30,10 @@ import (
 	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
-	"github.com/aerospike/backup-go/pkg/server"
-	sModels "github.com/aerospike/backup-go/pkg/server/models"
+	"github.com/aerospike/backup-go/pkg/server/lister"
+	sModels "github.com/aerospike/backup-go/pkg/server/lister/models"
+	"github.com/aerospike/backup-go/pkg/server/segvalidator"
+	"github.com/aerospike/backup-go/pkg/server/segvalidator/streamers"
 	commonClient "github.com/aerospike/tools-common-go/client"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -112,7 +114,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
 
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
@@ -321,7 +323,7 @@ func (s *Service) getBackupState(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, s.backupCfg.Progress.JobID)
 	if err != nil {
@@ -364,9 +366,22 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return err
 	}
 
-	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.logger)
+	streamer, err := streamers.NewS3(
+		client,
+		s.backupCfg.AwsS3.BucketName,
+		s.backupCfg.Progress.JobID,
+		streamers.WithLogger(s.logger),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 streamer: %w", err)
+	}
 
-	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
+	v, err := segvalidator.NewSegValidator(streamer, segvalidator.WithLogger(s.logger))
+	if err != nil {
+		return fmt.Errorf("failed to create seg validator: %w", err)
+	}
+
+	report, err := v.Validate(ctx, s.backupCfg.Validation.SampleSize)
 	if err != nil {
 		return fmt.Errorf("failed to validate: %w", err)
 	}
@@ -401,7 +416,7 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 
 // checkBackupExists validates the backup exists for RESTORE only.
 func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
-	l := server.NewLister(client, bucket, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, bucket, "", lister.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, jobID)
 	if err != nil {
