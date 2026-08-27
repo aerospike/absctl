@@ -150,6 +150,16 @@ GitHub Actions side is split into two workflows:
      `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
      publishes them as a new, immutable GitHub Release — nothing is rebuilt, re-signed, or re-checksummed at this
      point.
+6. Post-release actions:
+   1. **Snyk**:
+      - Add the new version to the `aerospike-applications` Snyk org.
+      - Remove the oldest maintenance version from the same org if no longer supported.
+   2. **Slack**:
+      - Post the release announcement to the internal **`#releases`** channel.
+      - Use the link to the GitHub Release.
+      - **Important**: Remove link previews before sending to keep the channel clean.
+   3. **Email**: Send the release announcement email.
+7. If the release added commits that exist only on `main` (for example a hotfix), back-merge `main` into `dev`.
 
 ## License
 
