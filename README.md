@@ -119,7 +119,7 @@ Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-exa
 
 ## Releasing
 
-Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PROD`) before anything is made public. The
+Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PREVIEW -> PROD`) before anything is made public. The
 GitHub Actions side is split into two workflows:
 [`pre-release.yml`](.github/workflows/pre-release.yml) (developer owned, builds and promotes up to `TEST`) and
 [`release.yml`](.github/workflows/release.yml) (run once the release is fully approved, publishes it).
@@ -133,16 +133,19 @@ GitHub Actions side is split into two workflows:
    4. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
 2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
    promoted from `TEST` to `STAGE`, either by dispatching
-   [`promote-to-stage.yml`](.github/workflows/promote-to-stage.yml) or manually via the
+   [`promote-to-preview.yml`](.github/workflows/promote-to-preview.yml) with `environment: STAGE` or manually via the
    [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2).
-3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PROD`, either by dispatching
-   [`promote-to-prod.yml`](.github/workflows/promote-to-prod.yml) or manually via the same
+3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PREVIEW`, either by dispatching
+   [`promote-to-preview.yml`](.github/workflows/promote-to-preview.yml) with `environment: PREVIEW` or manually via the same
    [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2)
-   link. This is the gate that makes a release public; automation intentionally stops before this step.
-4. Once the bundle is on `PROD`:
+   link.
+4. A PM or EM promotes the release bundle from `PREVIEW` to `PROD`, either by dispatching
+   [`promote-to-prod.yml`](.github/workflows/promote-to-prod.yml) or manually via the same JFrog UI link. This is
+   the gate that makes a release public; automation intentionally stops before this step.
+5. Once the bundle is on `PROD`:
    - Docker Hub mirroring happens automatically and externally (JFrog's existing promotion webhook feeds
      `artifact-publisher`) — nothing to trigger here.
-   - Someone with repo access (not necessarily the same PM/EM from step 3) manually runs `release.yml`
+   - Someone with repo access (not necessarily the same PM/EM from step 4) manually runs `release.yml`
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
      `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
      publishes them as a new, immutable GitHub Release — nothing is rebuilt, re-signed, or re-checksummed at this
