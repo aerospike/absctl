@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2024-2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
@@ -107,9 +108,7 @@ func createTmpFileLocal(dir, fileName string) error {
 
 func TestNewS3Reader(t *testing.T) {
 	t.Parallel()
-
-	err := createAwsCredentials()
-	require.NoError(t, err)
+	testutil.RequireIntegration(t, testutil.ServiceS3)
 
 	dir := t.TempDir()
 	dir = strings.TrimPrefix(dir, "/")
@@ -184,6 +183,7 @@ func createTmpFileS3(ctx context.Context, client *s3.Client, dir, fileName strin
 
 func TestNewGcpReader(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceGCP)
 
 	err := createGcpBucket()
 	require.NoError(t, err)
@@ -257,6 +257,7 @@ func createTmpFileGcp(ctx context.Context, client *storage.Client, dir, fileName
 
 func TestNewAzureReader(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAzure)
 
 	err := createAzureContainer()
 	require.NoError(t, err)
