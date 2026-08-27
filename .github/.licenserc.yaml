@@ -2,7 +2,6 @@ header:
   license:
     spdx-id: Apache-2.0
     copyright-owner: Aerospike, Inc.
-    copyright-year: '2024'
 
   paths:
     - '**/*.go'

@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2024-2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
@@ -50,6 +51,7 @@ func testHostPort() *client.HostTLSPort {
 
 func Test_BackupWithState(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	dir := path.Join(t.TempDir(), "plain")
@@ -103,6 +105,7 @@ func Test_BackupWithState(t *testing.T) {
 
 func Test_BackupEstimates(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	hostPort := testHostPort()

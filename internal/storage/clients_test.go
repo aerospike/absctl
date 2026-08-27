@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2024-2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/stretchr/testify/assert"
@@ -45,6 +46,7 @@ func testHostPort() *client.HostTLSPort {
 
 func TestClients_newAerospikeClient(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	hostPort := testHostPort()
 	cfg := &client.AerospikeConfig{
@@ -97,9 +99,6 @@ func TestClients_newAerospikeClient(t *testing.T) {
 func TestClients_newS3Client(t *testing.T) {
 	t.Parallel()
 
-	err := createAwsCredentials()
-	require.NoError(t, err)
-
 	cfg := &models.AwsS3{
 		Region:   testS3Region,
 		Profile:  testS3Profile,
@@ -107,7 +106,7 @@ func TestClients_newS3Client(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	_, err = NewS3Client(ctx, cfg)
+	_, err := NewS3Client(ctx, cfg)
 	require.NoError(t, err)
 }
 

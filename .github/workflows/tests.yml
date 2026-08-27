@@ -19,7 +19,7 @@ jobs:
     services:
       # Aerospike service container
       aerospike:
-        image: aerospike/aerospike-server-enterprise:8.0.0.7
+        image: aerospike/aerospike-server-enterprise:8.1.2.4
         ports:
           - 3000:3000
           - 3001:3001
@@ -27,12 +27,12 @@ jobs:
 
       # Fake GCS server
       fake-gcs-server:
-        image: fsouza/fake-gcs-server:1.52.2
+        image: fsouza/fake-gcs-server:1.56.1
         ports:
           - 4443:4443
         options: >-
           --entrypoint sh
-          fsouza/fake-gcs-server:1.52.2
+          fsouza/fake-gcs-server:1.56.1
           -c "/bin/fake-gcs-server -data /data -scheme http -public-host 127.0.0.1:4443"
 
     steps:
@@ -57,7 +57,7 @@ jobs:
           docker run -d \
             -p 10000:10000 \
             --name azurite \
-            mcr.microsoft.com/azure-storage/azurite:3.35.0 \
+            mcr.microsoft.com/azure-storage/azurite:3.37.0 \
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck \
           && until curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10000/devstoreaccount1 | grep -qE "400|403"; do \
               echo "Waiting for Azurite..."; sleep 1; \
@@ -73,13 +73,17 @@ jobs:
           -e "MINIO_ACCESS_KEY=minioadmin" \
           -e "MINIO_SECRET_KEY=minioadminpassword" \
           -e "MINIO_BROWSER=off" \
-          minio/minio:latest server /data \
+          minio/minio:RELEASE.2025-09-07T16-13-09Z server /data \
           && until (curl -I http://127.0.0.1:9000/minio/health/live | grep "OK"); do echo "Waiting for MinIO server to be ready..."; sleep 3; done \
           && docker exec minio sh -c "mc alias set myminio http://127.0.0.1:9000 minioadmin minioadminpassword && mc mb myminio/backup && mc mb myminio/aerospike-backup \
           && mc anonymous set upload myminio/backup && mc anonymous set download myminio/backup && mc anonymous set public myminio/backup \
           && mc anonymous set upload myminio/aerospike-backup && mc anonymous set download myminio/aerospike-backup && mc anonymous set public myminio/aerospike-backup"
 
       - name: Test with coverage
+        env:
+          # Enables the tests that need the services started above. Without it
+          # they skip, and TestIntegrationEnabledInCI fails the build.
+          ABSCTL_INTEGRATION: "1"
         run: |
           make coverage
 
