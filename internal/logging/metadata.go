@@ -21,7 +21,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/aerospike/backup-go/pkg/server/models"
+	"github.com/aerospike/backup-go/pkg/server/lister/models"
 )
 
 // PrintMetadata displays backup metadata either as a formatted table
