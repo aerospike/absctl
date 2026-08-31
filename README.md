@@ -1,60 +1,46 @@
-# Aerospike Backup Service Control
+# Aerospike Backup CLI
+
 [![Tests](https://github.com/aerospike/absctl/actions/workflows/tests.yml/badge.svg)](https://github.com/aerospike/absctl/actions/workflows/tests.yml/badge.svg)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/aerospike/absctl)](https://pkg.go.dev/github.com/aerospike/absctl)
 [![codecov](https://codecov.io/gh/aerospike/absctl/graph/badge.svg?token=29G65BU7QX)](https://codecov.io/gh/aerospike/absctl)
 
-The repository includes the [backup](docs/backup/readme.md) and [restore](docs/restore/readme.md) CLI tools,
-built using [backup-go](https://github.com/aerospike/backup-go) library.
-Refer to their respective README files for usage instructions.
-Binaries for various platforms are released alongside the library and can be found under
-[releases](https://github.com/aerospike/absctl/releases).
+`absctl` is a unified command-line tool for Aerospike backup and restore. It supports:
 
-## Core Features
+- **Scan-based backup and restore** — client-side scan of the cluster, writing `.asb` files to local disk or object storage.
+- **Server-integrated snapshot backup and restore** — backup and restore work executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
 
-### Standard Operations
-- **Full backups**: Complete namespace or set backups
-- **Incremental backups**: Time-based filtering for changed records
-- **Parallel processing**: Configurable workers for optimal performance
-- **Resume capability**: Continue interrupted backups from state files
+The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. Pre-built binaries for multiple platforms are available on [GitHub Releases](https://github.com/aerospike/absctl/releases).
 
-### Advanced Filtering
-- **Set-based**: Backup specific sets within namespaces
-- **Bin filtering**: Include only specified bins
-- **Time windows**: Records modified within date ranges
-- **Partition filtering**: Backup specific partition ranges
-- **Node/Rack targeting**: Geographic or hardware-specific backups
+## Table of Contents
 
-### Enterprise Features
-- **Compression**: ZSTD compression for reduced storage
-- **Encryption**: AES-128/256 encryption for data security
-- **Cloud storage**: Direct backup to AWS S3, GCP Storage, Azure Blob
-- **Secret management**: Integration with Aerospike Secret Agent
-- **Rate limiting**: Bandwidth and RPS controls
+- [Commands](#commands)
+- [Installation](#installation)
+- [Scan-Based Backup and Restore](#scan-based-backup-and-restore)
+- [Server-Integrated Snapshot Backup and Restore](#server-integrated-snapshot-backup-and-restore)
+- [Build from Source](#build-from-source)
+- [Configuration](#configuration)
+- [License](#license)
+- [Support](#support)
 
-## Build from Source
-```bash
-# Build release binaries (default)
-make build
+## Commands
 
-# Build debug binaries (includes pprof profiler on localhost:6060)
-make build BUILD_MODE=debug
-
-# Install to /usr/bin (Linux only)
-make install
-
-# Uninstall (Linux only)
-make uninstall
 ```
-### Linux Packages
-To generate `.rpm` and `.deb` packages for supported Linux architectures (`linux/amd64`, `linux/arm64`):
-```bash
-make packages
+absctl [command] [flags]
 ```
-The generated packages and their `sha256` checksum files will be located in the `/target` directory.
+
+| Command | Description |
+|---------|-------------|
+| `backup` | Scan the cluster and write backup data to local disk or object storage |
+| `restore` | Restore scan-based backups into an Aerospike cluster |
+| `snapshot-backup` | Manage server-integrated backups |
+| `snapshot-restore` | Manage server-integrated restores |
+
+Run `absctl <command> --help` for flags and usage details.
 
 ## Installation
 
 ### From Releases
+
 Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/absctl/releases):
 
 ```bash
@@ -68,54 +54,252 @@ tar -xzvf absctl-<version>-<arch>.tar.gz
 chmod +x absctl
 ```
 
-Download linux pakages from [GitHub Releases](https://github.com/aerospike/absctl/releases):
+#### Linux packages
 
-deb:
+**deb:**
+
 ```bash
-# Linux x64
 wget https://github.com/aerospike/absctl/releases/download/<version>/absctl_<version>_<arch>.deb
-
-# Install
 sudo dpkg -i absctl_<version>_<arch>.deb
 ```
-rpm:
-```bash
-# Linux x64
-wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.rpm
 
-# Install
+**rpm:**
+
+```bash
+wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.rpm
 sudo rpm -i absctl-<version>-<arch>.rpm
 ```
-docker:
+
+#### Docker
+
 ```bash
-# Pull
 docker pull aerospike/absctl:<version>
 
-# Run backup
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl backup -h <aerospike-address>  -n <namespace> -d <container-path>
+# Scan-based backup
+docker run -v <host-path>:<container-path> aerospike/absctl:<version> \
+  absctl backup -h <aerospike-address> -n <namespace> -d <container-path>
 
-# Run restore
-docker run -v <host-path>:<container-path>  aerospike/absctl:<version> absctl restore -h <aerospike-address>  -n <namespace> -d <container-path>
+# Scan-based restore
+docker run -v <host-path>:<container-path> aerospike/absctl:<version> \
+  absctl restore -h <aerospike-address> -n <namespace> -d <container-path>
+
+# Server-integrated backup
+docker run aerospike/absctl:<version> absctl snapshot-backup start \
+  -h <aerospike-address> \
+  --namespace <namespace> \
+  --object-storage-type aws-s3 \
+  --s3-bucket-name <bucket>
+
+# Server-integrated restore
+docker run aerospike/absctl:<version> absctl snapshot-restore start \
+  -h <aerospike-address> \
+  --namespace <namespace> \
+  --object-storage-type aws-s3 \
+  --backup-id <backup-id> \
+  --s3-bucket-name <bucket>
 ```
 
-## Quick Start
+## Scan-Based Backup and Restore
 
-### Basic Backup
+Scan-based commands connect to the cluster as a client, scan records according to your scope, and serialize them into `.asb` backup files. Use these commands for flexible, client-driven backups to local paths or cloud storage.
+
+### Features
+
+**Standard operations**
+
+- Full namespace or set backups
+- Incremental backups with time-based filtering
+- Parallel scan workers for higher throughput
+- Resume interrupted backups from state files
+
+**Advanced filtering**
+
+- Set, bin, partition, and time-window filters
+- Node and rack targeting
+
+**Enterprise capabilities**
+
+- ZSTD compression
+- AES-128/256 encryption
+- Direct backup to AWS S3, GCP Storage, or Azure Blob
+- Aerospike Secret Agent integration
+- Bandwidth and records-per-second rate limits
+
+### Quick Start
+
+**Backup a namespace to a local directory:**
+
 ```bash
-# Simple namespace backup
 absctl backup -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 ```
 
-### Basic Restore
+**Restore from a backup directory:**
+
 ```bash
-# Restore from backup directory
 absctl restore -h 127.0.0.1:3000 -n test -d /backup/test-namespace
 ```
 
+**Backup to S3:**
 
-## Configuration Reference
+```bash
+absctl backup \
+  -h 127.0.0.1:3000 \
+  -n test \
+  --s3-bucket-name my-backup-bucket \
+  --directory my-backups/test
+```
 
-Please look at [backup](docs/backup/readme.md#configuration-file-schema-with-example-values) and [restore](docs/restore/readme.md#configuration-file-schema-with-example-values) readme files for details.
+For the full flag reference, configuration file schema, and examples, see:
+
+- [Scan backup documentation](docs/scan/backup.md)
+- [Scan restore documentation](docs/scan/restore.md)
+
+## Server-Integrated Snapshot Backup and Restore
+
+Server-integrated commands trigger backup and restore operations that run inside Aerospike Server. Data is written to and read from configured object storage. These commands are suited to namespace snapshot workflows coordinated through the cluster.
+
+### Subcommands
+
+#### `absctl snapshot-backup`
+
+| Subcommand | Description |
+|------------|-------------|
+| `start` | Start a server-integrated backup on the Aerospike cluster |
+| `list` | List available server-integrated backups from configured storage |
+| `progress` | Show the progress of a running backup |
+| `validate` | Validate server-integrated backups in configured storage |
+
+#### `absctl snapshot-restore`
+
+| Subcommand | Description |
+|------------|-------------|
+| `prepare` | Prepare a server-integrated restore on the Aerospike cluster |
+| `start` | Start a server-integrated restore on the Aerospike cluster |
+| `progress` | Show the progress of a running restore |
+
+### Features
+
+- **Backup start**: Trigger a namespace backup executed by Aerospike Server
+- **Backup list**: Inspect available backups in object storage
+- **Backup progress**: Monitor an in-progress backup
+- **Backup validate**: Check backup integrity in object storage
+- **Restore prepare**: Prepare the cluster for a server-integrated restore
+- **Restore start**: Restore a namespace from a backup ID
+- **Restore progress**: Monitor an in-progress restore
+- **Object storage**: AWS S3 (including MinIO via `--s3-endpoint-override`)
+- **Secret management**: Integration with Aerospike Secret Agent for credentials
+- **TLS**: Secure connections to the Aerospike cluster
+
+### Quick Start
+
+**Start a backup:**
+
+```bash
+absctl snapshot-backup start \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --object-storage-type aws-s3 \
+  --s3-bucket-name my-backup-bucket
+```
+
+**List backups:**
+
+```bash
+absctl snapshot-backup list \
+  --s3-bucket-name my-backup-bucket
+```
+
+**Monitor backup progress:**
+
+```bash
+absctl snapshot-backup progress \
+  -h 127.0.0.1:3000
+```
+
+**Restore from a backup:**
+
+```bash
+# Optional: prepare the cluster before restore
+absctl snapshot-restore prepare \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --backup-id <backup-id>
+
+# Start the restore
+absctl snapshot-restore start \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --object-storage-type aws-s3 \
+  --backup-id <backup-id> \
+  --s3-bucket-name my-backup-bucket
+```
+
+For the full flag reference and configuration file schema, see:
+
+- [Server backup documentation](docs/server/backup.md)
+- [Server restore documentation](docs/server/restore.md)
+
+## Build from Source
+
+```bash
+# Build release binaries (default)
+make build
+
+# Build debug binaries (includes pprof profiler on localhost:6060)
+make build BUILD_MODE=debug
+
+# Install to /usr/bin (Linux only)
+make install
+
+# Uninstall (Linux only)
+make uninstall
+```
+
+### Linux Packages
+
+To generate `.rpm` and `.deb` packages for supported Linux architectures (`linux/amd64`, `linux/arm64`):
+
+```bash
+make packages
+```
+
+The generated packages and their `sha256` checksum files are written to the `target/` directory.
+
+### Running Tests
+
+```bash
+# Unit tests. No external services required.
+make test
+```
+
+Some tests exercise a live Aerospike cluster and the S3, GCS and Azure Blob
+backends. They skip unless `ABSCTL_INTEGRATION` is set, so `make test` passes on
+a fresh checkout. Each skip message names the service it needs.
+
+[docker-compose.test.yaml](docker-compose.test.yaml) provides those services —
+Aerospike, MinIO, Azurite and fake-gcs-server — using the same images as CI:
+
+```bash
+# Start the services and wait until they are ready
+make test-env-up
+
+# Run everything, including the integration tests
+make test-integration
+
+# Stop the services and delete their data
+make test-env-down
+```
+
+Coverage reported locally will be lower than the CI badge when these tests skip.
+
+## Configuration
+
+Configuration can be supplied via command-line flags or a YAML file using `--config`.
+
+- Scan-based commands: see [docs/scan/backup.md](docs/scan/backup.md) and [docs/scan/restore.md](docs/scan/restore.md)
+- Server-integrated commands: see [docs/server/backup.md](docs/server/backup.md) and [docs/server/restore.md](docs/server/restore.md)
+
+Run `absctl <command> --help` for the complete flag list.
 
 ## Cutting a release
 
@@ -195,7 +379,7 @@ The following steps apply to both regular releases and hotfixes:
 
 ## License
 
-Apache License, Version 2.0. See [LICENSE](LICENSE) file for details.
+Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
 ## Support
 

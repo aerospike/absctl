@@ -20,82 +20,55 @@ import (
 	"log/slog"
 	"os"
 	"text/tabwriter"
-	"time"
 
-	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go/pkg/server/models"
 )
 
-// PrintMetadata displays the node data in a formatted table.
-func PrintMetadata(w io.Writer, data models.Metadata, toLog bool, logger *slog.Logger) {
-	// count totals.
-	var (
-		totalRecords int64
-		totalBytes   int64
-		minCreated   time.Time
-		maxFinished  time.Time
-	)
-
-	// Initialize with the values of the first node
-	if len(data.Nodes) != 0 {
-		minCreated = data.Nodes[0].Created
-		maxFinished = data.Nodes[0].Finished
-	}
-
-	for _, node := range data.Nodes {
-		totalRecords += node.RecordCount
-		totalBytes += node.ByteCount
-
-		if node.Created.Before(minCreated) {
-			minCreated = node.Created
+// PrintMetadata displays backup metadata either as a formatted table
+// (to stdout) or as structured log records. When withNodes is true,
+// per-node details are included as well.
+func PrintMetadata(data []models.Metadata, toLog bool, logger *slog.Logger) error {
+	if toLog {
+		for i := range data {
+			printMetadataToLog(data[i], logger)
 		}
 
-		if node.Finished.After(maxFinished) {
-			maxFinished = node.Finished
-		}
-	}
-
-	if toLog {
-		logger.Info("backup entry",
-			slog.String("backup-id", data.BackupID),
-			slog.String("namespace", data.Namespace),
-			slog.Int64("total-records", totalRecords),
-			slog.Int64("total-bytes", totalBytes),
-			slog.Time("created", minCreated),
-			slog.Time("finished", maxFinished),
-		)
-
-		return
-	}
-
-	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
-		data.BackupID,
-		data.Namespace,
-		totalRecords,
-		totalBytes,
-		minCreated.Format("2006-01-02 15:04:05"),
-		maxFinished.Format("2006-01-02 15:04:05"),
-	)
-}
-
-// GetMetadataWriter returns a writer for the metadata table.
-func GetMetadataWriter(toLog bool) io.Writer {
-	if toLog {
 		return nil
 	}
 
-	// tabwriter (with the header) is only needed for the stdout table.
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tRECORDS\tBYTES\tCREATED\tFINISHED")
-
-	return w
+	return printMetadataToTable(os.Stdout, data)
 }
 
-// CloseMetadataWriter flushes the metadata table.
-func CloseMetadataWriter(w io.Writer) error {
-	if w != nil {
-		if err := w.(*tabwriter.Writer).Flush(); err != nil {
-			return fmt.Errorf("failed to flush output: %w", err)
-		}
+func printMetadataToLog(md models.Metadata, logger *slog.Logger) {
+	attrs := []any{
+		slog.String("backup-id", md.BackupID),
+		slog.String("namespace", md.Namespace),
+	}
+
+	logger.Info("backup entry", attrs...)
+}
+
+func printMetadataToTable(out io.Writer, data []models.Metadata) error {
+	return printMetadataSummary(out, data)
+}
+
+func printMetadataSummary(out io.Writer, data []models.Metadata) error {
+	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', tabwriter.Debug)
+
+	fmt.Fprintln(w, "BACKUP ID\tNAMESPACE\tSTATUS")
+
+	for i := range data {
+		md := data[i]
+
+		fmt.Fprintf(w, "%s\t%s\t%s\n",
+			md.BackupID,
+			md.Namespace,
+			md.Status,
+		)
+	}
+
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("failed to flush output: %w", err)
 	}
 
 	return nil

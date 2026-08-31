@@ -17,8 +17,24 @@ package flags
 // Text for usage pretty-print.
 
 const (
+	// SectionDocgenMarker splits generated markdown docs into a static header and dynamic content.
+	SectionDocgenMarker = "\n<!-- docgen -->\n"
+
 	SectionTextUsageBackup  = "\nUsage:\n  absctl backup [flags]"
 	SectionTextUsageRestore = "\nUsage:\n  absctl restore [flags]"
+
+	SectionTextUsageBackupServer  = "\nUsage:\n  absctl snapshot-backup <command> [flags]"
+	SectionTextUsageRestoreServer = "\nUsage:\n  absctl snapshot-restore <command> [flags]"
+
+	SectionTextUsageBackupStart     = "\nUsage:\n  absctl snapshot-backup start [flags]"
+	SectionTextUsageBackupList      = "\nUsage:\n  absctl snapshot-backup list [flags]"
+	SectionTextUsageValidate        = "\nUsage:\n  absctl snapshot-backup validate [flags]"
+	SectionTextUsageBackupProgress  = "\nUsage:\n  absctl snapshot-backup progress [flags]"
+	SectionTextUsageRestorePrepare  = "\nUsage:\n  absctl snapshot-restore prepare [flags]"
+	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl snapshot-restore progress [flags]"
+	SectionTextUsageRestoreStart    = "\nUsage:\n  absctl snapshot-restore start [flags]"
+
+	SectionAvailableCommands = "\nAvailable Commands:"
 
 	SectionTextSecretAgentBackup = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
@@ -35,8 +51,23 @@ const (
 		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
 		"Example: absctl restore --azure-account-name secret:resource1:azaccount"
 
+	SectionTextSecretAgentSnapshotBackup = "\nSecret Agent Flags:\n" +
+		"Options pertaining to the Aerospike Secret Agent.\n" +
+		"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
+		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
+		"from the Aerospike Secret Agent.\n" +
+		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
+		"Example: absctl snapshot-backup --azure-account-name secret:resource1:azaccount"
+	SectionTextSecretAgentSnapshotRestore = "\nSecret Agent Flags:\n" +
+		"Options pertaining to the Aerospike Secret Agent.\n" +
+		"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
+		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
+		"from the Aerospike Secret Agent.\n" +
+		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
+		"Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount"
+
 	SectionTextBackup  = "\nBackup Flags:"
-	SectionTextRestore = "\nBackup Flags:"
+	SectionTextRestore = "\nRestore Flags:"
 
 	SectionTextGeneral     = "\nGeneral Flags:"
 	SectionTextAerospike   = "\nAerospike Client Flags:"

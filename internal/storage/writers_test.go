@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2024-2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,14 +16,12 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,9 +103,7 @@ func TestNewLocalWriter(t *testing.T) {
 
 func TestNewS3Writer(t *testing.T) {
 	t.Parallel()
-
-	err := createAwsCredentials()
-	require.NoError(t, err)
+	testutil.RequireIntegration(t, testutil.ServiceS3)
 
 	params := &config.BackupServiceConfig{
 		Backup: &models.Backup{
@@ -160,39 +156,9 @@ func TestNewS3Writer(t *testing.T) {
 	assert.Equal(t, testS3Type, writer.GetType())
 }
 
-func createAwsCredentials() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("error getting home directory: %w", err)
-	}
-
-	awsDir := filepath.Join(home, ".aws")
-
-	err = os.MkdirAll(awsDir, 0o700)
-	if err != nil {
-		return fmt.Errorf("error creating .aws directory: %w", err)
-	}
-
-	filePath := filepath.Join(awsDir, "credentials")
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		credentialsFileBytes := []byte(`[minio]
-aws_access_key_id = minioadmin
-aws_secret_access_key = minioadminpassword`)
-
-		err = os.WriteFile(filePath, credentialsFileBytes, 0o600)
-		if err != nil {
-			return fmt.Errorf("error writing ~/.aws/credentials file: %w", err)
-		}
-
-		fmt.Println("Credentials file created successfully!")
-	}
-
-	return nil
-}
-
 func TestGcpWriter(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceGCP)
 
 	err := createGcpBucket()
 	require.NoError(t, err)
@@ -263,6 +229,7 @@ func createGcpBucket() error {
 
 func TestAzureWriter(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAzure)
 
 	err := createAzureContainer()
 	require.NoError(t, err)
@@ -425,31 +392,6 @@ func TestNewWriter_NilLogger(t *testing.T) {
 	assert.Contains(t, err.Error(), "logger cannot be nil")
 }
 
-// TestNewWriter_XDRLocal exercises the BackupXDR branch in newWriter,
-// getDirectoryOutputFile and getShouldCleanContinue, plus the isXDR branch in newWriterOpts.
-func TestNewWriter_XDRLocal(t *testing.T) {
-	t.Parallel()
-
-	params := &config.BackupServiceConfig{
-		BackupXDR: &models.BackupXDR{
-			Directory:   t.TempDir(),
-			Namespace:   "test",
-			RemoveFiles: true,
-		},
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			AwsS3:      &models.AwsS3{},
-			GcpStorage: &models.GcpStorage{},
-			AzureBlob:  &models.AzureBlob{},
-			Local:      &models.Local{},
-		},
-	}
-
-	writer, err := newWriter(t.Context(), params, slog.Default())
-	require.NoError(t, err)
-	require.NotNil(t, writer)
-	assert.Equal(t, testLocalType, writer.GetType())
-}
-
 // TestNewWriter_ContinueBackup hits the continueBackup branch in newWriterOpts.
 // When Continue is set, ShouldClearTarget must be false, so only the
 // continueBackup option (WithSkipDirCheck) is appended on top of the directory.
@@ -479,67 +421,6 @@ func TestNewWriter_ContinueBackup(t *testing.T) {
 	assert.Equal(t, testLocalType, writer.GetType())
 }
 
-func TestGetDirectoryOutputFile(t *testing.T) {
-	t.Parallel()
-
-	t.Run("backup populates directory and output file", func(t *testing.T) {
-		t.Parallel()
-		params := &config.BackupServiceConfig{
-			Backup: &models.Backup{
-				OutputFile: "out.bak",
-				Common:     models.Common{Directory: "/tmp/dir"},
-			},
-		}
-		dir, out := getDirectoryOutputFile(params)
-		assert.Equal(t, "/tmp/dir", dir)
-		assert.Equal(t, "out.bak", out)
-	})
-
-	t.Run("xdr falls back to xdr directory and empty output file", func(t *testing.T) {
-		t.Parallel()
-		params := &config.BackupServiceConfig{
-			BackupXDR: &models.BackupXDR{Directory: "/tmp/xdr"},
-		}
-		dir, out := getDirectoryOutputFile(params)
-		assert.Equal(t, "/tmp/xdr", dir)
-		assert.Empty(t, out)
-	})
-}
-
-func TestGetShouldCleanContinue(t *testing.T) {
-	t.Parallel()
-
-	t.Run("backup with remove-files and no continue", func(t *testing.T) {
-		t.Parallel()
-		params := &config.BackupServiceConfig{
-			Backup: &models.Backup{RemoveFiles: true},
-		}
-		clean, cont := getShouldCleanContinue(params)
-		assert.True(t, clean)
-		assert.False(t, cont)
-	})
-
-	t.Run("backup with continue suppresses clean", func(t *testing.T) {
-		t.Parallel()
-		params := &config.BackupServiceConfig{
-			Backup: &models.Backup{RemoveFiles: true, Continue: "abc"},
-		}
-		clean, cont := getShouldCleanContinue(params)
-		assert.False(t, clean, "ShouldClearTarget must be false when Continue is set")
-		assert.True(t, cont)
-	})
-
-	t.Run("xdr uses RemoveFiles directly and never continues", func(t *testing.T) {
-		t.Parallel()
-		params := &config.BackupServiceConfig{
-			BackupXDR: &models.BackupXDR{RemoveFiles: true},
-		}
-		clean, cont := getShouldCleanContinue(params)
-		assert.True(t, clean)
-		assert.False(t, cont)
-	})
-}
-
 func TestNewWriterOpts_OptionCount(t *testing.T) {
 	t.Parallel()
 
@@ -549,7 +430,6 @@ func TestNewWriterOpts_OptionCount(t *testing.T) {
 		outputFile        string
 		shouldClearTarget bool
 		continueBackup    bool
-		isXDR             bool
 		// Expected minimum options: validator + logger plus the dir/file/clear/continue flags.
 		minLen int
 	}{
@@ -564,12 +444,11 @@ func TestNewWriterOpts_OptionCount(t *testing.T) {
 			minLen:     3,
 		},
 		{
-			name:              "directory with clear and continue and xdr",
+			name:              "directory with clear and continue",
 			directory:         "/tmp/d",
 			shouldClearTarget: true,
 			continueBackup:    true,
-			isXDR:             true,
-			minLen:            5,
+			minLen:            4,
 		},
 		{
 			name:   "neither directory nor output file",
@@ -585,7 +464,6 @@ func TestNewWriterOpts_OptionCount(t *testing.T) {
 				tt.outputFile,
 				tt.shouldClearTarget,
 				tt.continueBackup,
-				tt.isXDR,
 				slog.Default(),
 			)
 			assert.GreaterOrEqual(t, len(opts), tt.minLen)

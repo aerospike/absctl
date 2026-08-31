@@ -19,89 +19,108 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
-	"github.com/aerospike/backup-go"
-	"github.com/aerospike/backup-go/models"
+	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
+	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
+	"github.com/aerospike/backup-go/pkg/server"
+	sModels "github.com/aerospike/backup-go/pkg/server/models"
+	commonClient "github.com/aerospike/tools-common-go/client"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-const messageNoRunningBackup = "No running backup found"
+// S3API is an interface for the S3 client.
+type S3API interface {
+	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
+	) (*s3.ListObjectsV2Output, error)
+	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options),
+	) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+}
 
 // Service represents a server integrated backup and restore service.
 type Service struct {
-	config *config.ServerBackupServiceConfig
-	reader backup.StreamingReader
-	client S3API
-
-	// reportToLog bool
-
-	logger *slog.Logger
+	backupCfg  *config.ServerBackupServiceConfig
+	restoreCfg *config.ServerRestoreServiceConfig
+	logger     *slog.Logger
 }
 
 // NewService initializes and returns a new Service instance.
 func NewService(
-	ctx context.Context,
-	cfg *config.ServerBackupServiceConfig,
+	backupCfg *config.ServerBackupServiceConfig,
+	restoreCfg *config.ServerRestoreServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	var (
-		client S3API
-		err    error
-	)
-
-	// If list path is set, init reader.
-	if cfg.ServerBackup.ListPath != "" {
-		client, err = storage.NewS3Client(ctx, cfg.AwsS3)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create s3 client: %w", err)
-		}
-	}
-
 	return &Service{
-		config: cfg,
-		client: client,
-		logger: logger,
+		backupCfg:  backupCfg,
+		restoreCfg: restoreCfg,
+		logger:     logger,
 	}, nil
 }
 
-func (s *Service) Run(ctx context.Context) error {
-	switch {
-	case s.config.ServerBackup.ListPath != "":
-		return s.ListBackups(ctx)
-	default:
-		return s.StartBackup(ctx)
+func (s *Service) clientConfig() *commonClient.AerospikeConfig {
+	if s.backupCfg != nil {
+		return s.backupCfg.ClientConfig
 	}
+
+	return s.restoreCfg.ClientConfig
 }
 
+func (s *Service) clientPolicy() *models.ClientPolicy {
+	if s.backupCfg != nil {
+		return s.backupCfg.ClientPolicy
+	}
+
+	return s.restoreCfg.ClientPolicy
+}
+
+// newInfoClient separate function for a lazy load.
+func (s *Service) newInfoClient() (*asinfo.Client, error) {
+	aerospikeClient, err := storage.NewAerospikeClient(
+		s.clientConfig(),
+		s.clientPolicy(),
+		nil,
+		0,
+		s.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
+	}
+
+	infoClient, err := asinfo.NewClient(
+		aerospikeClient.Cluster(),
+		aerospike.NewInfoPolicy(),
+		bModels.NewDefaultRetryPolicy(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create info client: %w", err)
+	}
+
+	return infoClient, nil
+}
+
+// ListBackups lists all backups from the configured storage.
 func (s *Service) ListBackups(ctx context.Context) error {
-	l := NewLister(s.reader, s.logger, s.config.App.LogJSON)
-
-	if s.config.ServerBackup.ListPath == "/" || s.config.ServerBackup.ListPath == "\\" {
-		s.config.ServerBackup.ListPath = ""
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	if err := l.listBackups(ctx, s.config.ServerBackup.ListPath); err != nil {
-		return fmt.Errorf("failed to list backups: %w", err)
-	}
+	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
 
-	return nil
-}
-
-func (s *Service) ListBackupsV2(ctx context.Context) error {
-	w := logging.GetMetadataWriter(s.config.App.LogJSON)
-
-	l := NewListerV2(s.client, s.config.AwsS3.BucketName, "", s.config.App.LogJSON, w, s.logger)
-
-	if err := l.FetchAllMetadata(ctx); err != nil {
+	mds, err := l.FetchAllMetadata(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
 	}
 
-	if err := logging.CloseMetadataWriter(l.writer); err != nil {
-		return fmt.Errorf("failed to close metadata writer: %w", err)
+	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
+		return err
 	}
 
 	return nil
@@ -115,22 +134,53 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	JobID, err := client.StartServerBackup(
-		ctx,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
-		"",
-	)
+	if err = s.checkServerStatus(ctx, client, s.backupCfg.Start.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
+	var mb, ma string
+
+	if s.backupCfg.Start.ModifiedBefore != "" {
+		mbt, err := s.backupCfg.Start.ModifiedBeforeTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified-before time: %w", err)
+		}
+		mb = strconv.FormatInt(mbt.Unix(), 10)
+	}
+
+	if s.backupCfg.Start.ModifiedAfter != "" {
+		mat, err := s.backupCfg.Start.ModifiedAfterTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified-after time: %w", err)
+		}
+		ma = strconv.FormatInt(mat.Unix(), 10)
+	}
+
+	bReq := &iModels.RequestBackup{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.backupCfg.Start.Namespace,
+			Storage:   s.backupCfg.Start.StorageType,
+			Bucket:    s.backupCfg.AwsS3.BucketName,
+			Region:    s.backupCfg.AwsS3.Region,
+			Profile:   s.backupCfg.AwsS3.Profile,
+			AccessKey: s.backupCfg.AwsS3.AccessKeyID,
+			SecretKey: s.backupCfg.AwsS3.SecretAccessKey,
+			Endpoint:  s.backupCfg.AwsS3.Endpoint,
+		},
+		ModifiedAfter:      ma,
+		ModifiedBefore:     mb,
+		SetList:            s.backupCfg.Start.SetList,
+		NoIndexes:          s.backupCfg.Start.NoIndexes,
+		NoUDFs:             s.backupCfg.Start.NoUDFs,
+		EnableChangeStream: s.backupCfg.Start.EnableChangeStream,
+	}
+
+	JobID, err := client.StartServerBackup(ctx, bReq)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
-	s.logger.Info("Server integrated backup started",
+	s.logger.Info("server integrated backup started",
 		slog.String("backup-id", JobID))
 
 	return nil
@@ -143,24 +193,39 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	err = client.StartServerRestore(
-		ctx,
-		s.config.ServerBackup.JobID,
-		s.config.ServerBackup.Namespace,
-		s.config.ServerBackup.StorageType,
-		s.config.AwsS3.BucketName,
-		s.config.AwsS3.Region,
-		s.config.AwsS3.Profile,
-		s.config.AwsS3.AccessKeyID,
-		s.config.AwsS3.SecretAccessKey,
-		"",
-	)
+	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
+	// Need clarification before uncomment
+	// if err = s.checkBackupExists(ctx,
+	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Start.JobID, s.restoreCfg.Start.Namespace); err != nil {
+	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
+	// }
+
+	rReq := &iModels.RequestRestore{
+		RequestCommon: iModels.RequestCommon{
+			Namespace: s.restoreCfg.Start.Namespace,
+			Storage:   s.restoreCfg.Start.StorageType,
+			Bucket:    s.restoreCfg.AwsS3.BucketName,
+			Region:    s.restoreCfg.AwsS3.Region,
+			Profile:   s.restoreCfg.AwsS3.Profile,
+			AccessKey: s.restoreCfg.AwsS3.AccessKeyID,
+			SecretKey: s.restoreCfg.AwsS3.SecretAccessKey,
+			Endpoint:  s.restoreCfg.AwsS3.Endpoint,
+		},
+		JobID:        s.restoreCfg.Start.JobID,
+		Path:         s.restoreCfg.Start.Path,
+		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
+	}
+
+	err = client.StartServerRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
 
-	s.logger.Info("Server integrated restore started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+	s.logger.Info("server integrated restore started",
+		slog.String("backup-id", s.restoreCfg.Start.JobID))
 
 	return nil
 }
@@ -172,70 +237,181 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return err
 	}
 
+	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
+		return fmt.Errorf("failed to check server status: %w", err)
+	}
+
+	// Need clarification before uncomment
+	// if err = s.checkBackupExists(ctx,
+	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Prepare.JobID, s.restoreCfg.Prepare.Namespace); err != nil {
+	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
+	// }
+
 	err = client.PrepareServerRestore(
 		ctx,
-		s.config.ServerBackup.JobID,
-		s.config.ServerBackup.Namespace,
+		s.restoreCfg.Prepare.JobID,
+		s.restoreCfg.Prepare.Namespace,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare restore: %w", err)
 	}
 
 	s.logger.Info("Restore preparation started",
-		slog.String("backup-id", s.config.ServerBackup.JobID))
+		slog.String("backup-id", s.restoreCfg.Prepare.JobID))
 
 	return nil
 }
 
-func (s *Service) GetStatus(ctx context.Context) error {
+// BackupProgress returns the progress of the currently running backup.
+func (s *Service) BackupProgress(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
 
-	result, err := client.GetBackupStatus(ctx)
-	if err != nil {
-		if errors.Is(err, asinfo.ErrNotFound) {
-			slog.Info(messageNoRunningBackup)
+	for {
+		result, err := client.GetBackupStatus(ctx, s.backupCfg.Progress.JobID)
+		if err != nil {
+			if errors.Is(err, asinfo.ErrNotFound) {
+				s.logger.Info("no running backup found")
+
+				if err := s.getBackupState(ctx); err != nil {
+					return fmt.Errorf("failed to get backup state: %w", err)
+				}
+
+				return nil
+			}
+
+			return fmt.Errorf("failed to get backup status: %w", err)
+		}
+
+		if result.State == iModels.BackupStateComplete {
+			s.logger.Info("backup complete")
+
+			if err := s.getBackupState(ctx); err != nil {
+				return fmt.Errorf("failed to get backup state: %w", err)
+			}
 
 			return nil
 		}
 
-		return fmt.Errorf("failed to get backup status: %w", err)
+		s.logger.Info("backup progress",
+			slog.String("backup-id", result.JobID),
+			slog.String("state", result.State.Describe()),
+			slog.String("pct", fmt.Sprintf("%.1f%%", result.ProgressPct)))
+
+		if !s.backupCfg.Progress.Watch {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(s.backupCfg.Progress.WatchPoll) * time.Millisecond):
+		}
+	}
+}
+
+func (s *Service) getBackupState(ctx context.Context) error {
+	// Set timeout for metadata fetch.
+	s.backupCfg.AwsS3.RequestTimeout = 10000
+
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	if result >= 1.0 {
-		slog.Info(messageNoRunningBackup)
+	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
 
-		return nil
+	md, err := l.GetMetadata(ctx, s.backupCfg.Progress.JobID)
+	if err != nil {
+		return fmt.Errorf("failed to get backup metadata: %w", err)
 	}
 
-	s.logger.Info("Backup progress",
-		slog.String("pct", fmt.Sprintf("%.1f%%", result*100)))
+	if err := logging.PrintMetadata([]sModels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger); err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// newInfoClient separate function for a lazy load.
-func (s *Service) newInfoClient() (*asinfo.Client, error) {
-	aerospikeClient, err := storage.NewAerospikeClient(
-		s.config.ClientConfig,
-		s.config.ClientPolicy,
-		nil,
-		0,
-		s.logger)
+// RestoreProgress returns the progress of the currently running restore.
+func (s *Service) RestoreProgress(ctx context.Context) error {
+	client, err := s.newInfoClient()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
+		return err
 	}
 
-	infoClient, err := asinfo.NewClient(
-		aerospikeClient.Cluster(),
-		aerospike.NewInfoPolicy(),
-		models.NewDefaultRetryPolicy(),
+	result, err := client.GetRestoreStatus(ctx, s.restoreCfg.Progress.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	s.logger.Info("restore progress",
+		slog.String("result", result))
+
+	return nil
+}
+
+// BackupValidate validates the backup identified by the configured job ID.
+func (s *Service) BackupValidate(ctx context.Context) error {
+	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	if err := s.checkBackupExists(ctx, client, s.backupCfg.AwsS3.BucketName, s.backupCfg.Validation.JobID); err != nil {
+		return err
+	}
+
+	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.logger)
+
+	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
+	if err != nil {
+		return fmt.Errorf("failed to validate: %w", err)
+	}
+
+	logging.PrintServerValidationReport(report, s.backupCfg.App.LogJSON, s.logger)
+
+	return nil
+}
+
+// checkServerStatus validates the server status.
+func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, namespace string) error {
+	lowestVersion, err := client.GetVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get server version: %w", err)
+	}
+
+	if !lowestVersion.IsGreaterOrEqual(iModels.AerospikeVersionSupportsIntegratedBackup) {
+		return fmt.Errorf("server version %s does not support integrated backup", lowestVersion)
+	}
+
+	isStable, err := client.GetClusterStable(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to check cluster stability: %w", err)
+	}
+
+	if !isStable {
+		return fmt.Errorf("cluster is not stable")
+	}
+
+	return nil
+}
+
+// checkBackupExists validates the backup exists for RESTORE only.
+func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
+	l := server.NewLister(client, bucket, "", server.WithLogger(s.logger))
+
+	md, err := l.GetMetadata(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to check if backup exists: %w", err)
+	}
+
+	s.logger.Info("Backup found",
+		slog.String("backup-id", md.BackupID),
+		slog.String("namespace", md.Namespace),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create info client: %w", err)
-	}
 
-	return infoClient, nil
+	return nil
 }

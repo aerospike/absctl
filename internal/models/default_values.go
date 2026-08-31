@@ -169,6 +169,10 @@ const (
 	DefaultBackupTotalTimeout        = int64(0)
 	DefaultBackupParallel            = 1
 	DefaultBackupMaxRetries          = 5
+
+	// Server-specific backup.
+
+	DefaultBackupEnableChangeStream = false
 )
 
 // Restore.
@@ -193,37 +197,4 @@ const (
 
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false
-)
-
-// Service connection.
-const (
-	DefaultServiceHost = "localhost"
-	DefaultServicePort = 8080
-)
-
-const (
-	DefaultBackupXDRDirectory             = ""
-	DefaultBackupXDRFileLimit             = 250
-	DefaultBackupXDRRemoveFiles           = false
-	DefaultBackupXDRParallelWrite         = 0
-	DefaultBackupXDRDC                    = "dc"
-	DefaultBackupXDRLocalAddress          = "127.0.0.1"
-	DefaultBackupXDRLocalPort             = 8080
-	DefaultBackupXDRNamespace             = ""
-	DefaultBackupXDRRewind                = "all"
-	DefaultBackupXDRMaxThroughput         = 0
-	DefaultBackupXDRReadTimeout           = 1000
-	DefaultBackupXDRWriteTimeout          = 1000
-	DefaultBackupXDRResultQueueSize       = 256
-	DefaultBackupXDRAckQueueSize          = 256
-	DefaultBackupXDRMaxConnections        = 4096
-	DefaultBackupXDRInfoPolingPeriod      = 1000
-	DefaultBackupXDRStartTimeout          = 30000
-	DefaultBackupXDRInfoTimeout           = 10000
-	DefaultBackupXDRStopXDR               = false
-	DefaultBackupXDRUnblockMRT            = false
-	DefaultBackupXDRInfoMaxRetries        = 3
-	DefaultBackupXDRInfoRetriesMultiplier = 1.0
-	DefaultBackupXDRInfoRetryInterval     = 1000
-	DefaultBackupXDRForward               = false
 )

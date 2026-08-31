@@ -19,9 +19,12 @@ import (
 	"github.com/aerospike/tools-common-go/client"
 )
 
-// ServerBackupServiceConfig holds the configuration for the server-integrated Backup service.
+// ServerBackupServiceConfig holds the configuration for the server-integrated Start service.
 type ServerBackupServiceConfig struct {
-	ServerBackup *models.ServerBackup
+	Start      *models.ServerBackup
+	List       *models.ServerBackupList
+	Validation *models.ServerBackupValidate
+	Progress   *models.ServerBackupProgress
 
 	ServiceConfigCommon
 }
@@ -29,7 +32,10 @@ type ServerBackupServiceConfig struct {
 // NewServerBackupServiceConfig initializes a new ServerBackupServiceConfig
 // using the provided parameters for backup service configuration.
 func NewServerBackupServiceConfig(
-	serverBackup *models.ServerBackup,
+	start *models.ServerBackup,
+	list *models.ServerBackupList,
+	validation *models.ServerBackupValidate,
+	progress *models.ServerBackupProgress,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -37,7 +43,10 @@ func NewServerBackupServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
-		ServerBackup: serverBackup,
+		Start:      start,
+		List:       list,
+		Validation: validation,
+		Progress:   progress,
 		ServiceConfigCommon: ServiceConfigCommon{
 			App:          app,
 			ClientConfig: clientConfig,
@@ -50,7 +59,23 @@ func NewServerBackupServiceConfig(
 
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
 func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
+	if err := s.Start.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.List.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.Validation.Validate(); err != nil {
+		return err
+	}
+
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
+		return err
+	}
+
+	if err := s.Progress.Validate(); err != nil {
 		return err
 	}
 

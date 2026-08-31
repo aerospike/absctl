@@ -65,13 +65,13 @@ func TestNewBackupCmd_Structure(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, shared := NewBackupCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, shared := NewExportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	require.NotNil(t, cmd)
 	require.NotNil(t, shared)
-	assert.Equal(t, "backup", cmd.Use)
-	assert.Equal(t, backupWelcomeMessageShort, cmd.Short)
-	assert.Equal(t, backupWelcomeMessage, cmd.Long)
+	assert.Equal(t, UseBackup, cmd.Use)
+	assert.Equal(t, ShortBackup, cmd.Short)
+	assert.Equal(t, LongBackup, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
 	assert.NotNil(t, cmd.RunE)
 }
@@ -80,7 +80,7 @@ func TestNewBackupCmd_HasExpectedFlags(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewBackupCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewExportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	expectedFlags := []string{
 		"namespace",
@@ -107,7 +107,7 @@ func TestNewBackupCmd_NiceFlagDeprecated(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewBackupCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewExportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	nice := cmd.Flag("nice")
 	require.NotNil(t, nice, "deprecated --nice flag must still be registered")
@@ -135,7 +135,7 @@ func TestNewBackupHelpFunction_Output(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	_, shared := NewBackupCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	_, shared := NewExportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	appFS := shared.App.NewFlagSet()
 
@@ -146,6 +146,6 @@ func TestNewBackupHelpFunction_Output(t *testing.T) {
 	)
 
 	out := captureStdout(t, helpFn)
-	assert.Contains(t, out, backupWelcomeMessage)
-	assert.Contains(t, out, strings.Repeat("-", len(backupWelcomeMessage)))
+	assert.Contains(t, out, textWelcomeMessageBackup)
+	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageBackup)))
 }
