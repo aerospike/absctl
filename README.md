@@ -124,7 +124,8 @@ GitHub Actions side is split into two workflows:
 [`pre-release.yml`](.github/workflows/pre-release.yml) (developer owned, builds and promotes up to `TEST`) and
 [`release.yml`](.github/workflows/release.yml) (run once the release is fully approved, publishes it).
 
-1. Create a release branch from `dev` (e.g. `release/v1.x.y`).
+### Regular release
+1. Create a release branch from `dev` (e.g. `release/1.1.0`).
 2. Prepare the release by updating the version files:
    ```bash
    NEXT_VERSION="<version>"  make release
@@ -138,7 +139,25 @@ GitHub Actions side is split into two workflows:
    git tag "$(cat VERSION)"
    git push origin main --tags
    ```
-5. Tagging the release commit on `main` triggers `pre-release.yml`, which:
+
+### Hotfix
+1. Create a hotfix branch from `main` (e.g. `hotfix/1.0.1`).
+2. Prepare the hotfix by updating the version files. Bump the **third digit** of the version (e.g. `1.0.0` -> `1.0.1`):
+   ```bash
+   NEXT_VERSION="<version>"  make release
+   git add --all
+   git commit -m "Release: "$(cat VERSION)""
+   ```
+3. **Do not merge** the hotfix branch into `main`. Tag and push the hotfix directly from the branch:
+   ```bash
+   git tag "$(cat VERSION)"
+   git push origin hotfix/1.0.1 --tags
+   ```
+
+### Promotion and publication
+The following steps apply to both regular releases and hotfixes:
+
+1. Tagging the release commit triggers `pre-release.yml`, which:
    1. Runs GoReleaser to build and publish the cross-platform binary archives directly to GitHub (unchanged by the
       flow below — GoReleaser's output bypasses JFrog entirely).
    2. Builds the DEB/RPM packages and Docker image.
