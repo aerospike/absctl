@@ -155,6 +155,32 @@ jobs:
             echo "| Packages build ID | \`${BUILD_ID_BASE}-packages\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Deleting and re-pushing a tag that already shipped sends this whole pipeline back over
+      # artifacts customers already have, since everything below is addressed by version rather
+      # than by build ID. A published GitHub Release is the marker that the version went GA, so
+      # refuse before anything is built. Draft and prerelease entries do not count: the
+      # go-releaser job in this same workflow publishes a prerelease on every tag push, and it
+      # races this job.
+      - name: Reject re-release of a published version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${PACKAGE_VERSION}" 2>/dev/null || true)"
+          if [ -z "$release_json" ]; then
+            echo "No GitHub Release for ${PACKAGE_VERSION}; safe to build."
+            exit 0
+          fi
+
+          is_draft="$(printf '%s' "$release_json" | jq -r '.draft // false')"
+          is_prerelease="$(printf '%s' "$release_json" | jq -r '.prerelease // false')"
+          if [ "$is_draft" = "false" ] && [ "$is_prerelease" = "false" ]; then
+            echo "::error::${PACKAGE_VERSION} already has a published GitHub Release, so it has shipped. Cut a new version instead of re-tagging; re-running this pipeline would overwrite the released artifacts."
+            exit 1
+          fi
+          echo "GitHub Release for ${PACKAGE_VERSION} exists but is draft=${is_draft} prerelease=${is_prerelease}; not yet GA, safe to build."
+
       # Left to its default, reusable_docker-build-deploy.yaml publishes `{version}`, `{major}`
       # and `latest` next to the immutable tag. Both of those are moving tags, and a hotfix off
       # an older line must not drag them backwards: shipping v1.0.3 after v2.0.0 is out would
@@ -205,6 +231,64 @@ jobs:
               echo "This is the newest release, so \`latest\` moves to it."
             else
               echo "Newer releases exist, so \`latest\` is withheld from this build."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Clear the DEV bundle so a re-run cannot quietly overwrite a released version
+  # ---------------------------------------------------------------------------
+  #
+  # Every artifact below is addressed by version, not by build ID, so re-running this workflow
+  # for a tag that already shipped redeploys over the previous bits. A promoted bundle also
+  # locks the dev-local artifacts it references, which turns that re-run into an opaque
+  # permission failure part-way through deploy.
+  #
+  # Deleting the DEV bundle first makes re-running an un-promoted release safe. The action's own
+  # guard refuses to delete a bundle already promoted to TEST, STAGE, PREVIEW, INTERNAL or PROD,
+  # so the job fails fast in exactly the case where a re-run must not replace what QE or
+  # customers already have.
+
+  delete-existing-bundle:
+    needs: [prepare]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Login to JFrog
+        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        env:
+          JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
+          JF_PROJECT: ${{ vars.JF_PROJECT }}
+        with:
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+          oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
+
+      - name: Delete existing DEV release bundle
+        id: delete-bundle
+        uses: aerospike/shared-workflows/.github/actions/delete-release-bundle@82b197fa01cafc1b1d5a82a77ad039e6e8e44545 # v4.0.0
+        with:
+          bundle-name: absctl
+          version: ${{ needs.prepare.outputs.package_version }}
+          jf-project: ${{ vars.JF_PROJECT }}
+
+      - name: Summarize
+        if: always()
+        env:
+          EXISTED: ${{ steps.delete-bundle.outputs.existed }}
+          BUNDLE_VERSION: ${{ needs.prepare.outputs.package_version }}
+        run: |
+          {
+            echo "### DEV release bundle pre-flight"
+            if [ "$EXISTED" = "true" ]; then
+              echo "Removed the existing DEV bundle for \`${BUNDLE_VERSION}\` so this run can redeploy it."
+            else
+              echo "No existing bundle for \`${BUNDLE_VERSION}\`; nothing to clear."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -300,7 +384,7 @@ jobs:
       gpg-key-pass: ${{ secrets.GPG_PASS }}
 
   deploy-packages:
-    needs: [prepare, sign-packages]
+    needs: [prepare, sign-packages, delete-existing-bundle]
     # reusable_deploy-artifacts.yaml's nested `deploy` job declares actions: write at job
     # scope (for the optional Maven bundle-metadata upload, unused here). GitHub's static
     # validation requires it to be granted by the caller even though it's never exercised.
@@ -322,7 +406,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   build-docker-image:
-    needs: [prepare]
+    needs: [prepare, delete-existing-bundle]
     # reusable_docker-build-deploy.yaml declares no top-level permissions, but its nested
     # `build` and `merge` jobs request packages: write (build+merge) and attestations: write
     # (merge, for SLSA provenance) at job scope. GitHub validates these nested requests too.
