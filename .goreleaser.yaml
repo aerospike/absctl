@@ -42,13 +42,7 @@ archives:
       - "absctl"
 
 release:
-  prerelease: true
-  make_latest: false
-  replace_existing_artifacts: true
-  mode: prepend
-  header: |
-    ## Release {{ .Version }} ({{ .Date }})
-    - absctl (CLI tool)
+  disable: true
 
 changelog:
   disable: true
