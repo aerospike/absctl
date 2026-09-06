@@ -23,7 +23,7 @@ permissions:
 jobs:
   go-releaser:
     permissions:
-      contents: write
+      contents: read
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -53,9 +53,10 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          # Build-only: .goreleaser.yaml sets release.disable, and release.yml owns the sole
+          # GitHub Release once JFrog PROD promotion is done.
+          args: build --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import-gpg.outputs.fingerprint }}
 
   # ---------------------------------------------------------------------------
@@ -158,9 +159,7 @@ jobs:
       # Deleting and re-pushing a tag that already shipped sends this whole pipeline back over
       # artifacts customers already have, since everything below is addressed by version rather
       # than by build ID. A published GitHub Release is the marker that the version went GA, so
-      # refuse before anything is built. Draft and prerelease entries do not count: the
-      # go-releaser job in this same workflow publishes a prerelease on every tag push, and it
-      # races this job.
+      # refuse before anything is built. Draft and prerelease entries do not count.
       - name: Reject re-release of a published version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

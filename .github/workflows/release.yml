@@ -20,9 +20,6 @@ permissions:
 # (https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799), triggered by JFrog's own
 # promotion webhook -- no job for it lives in this workflow.
 #
-# GoReleaser's binary archives (from pre-release.yml's go-releaser job) already publish directly
-# to GitHub Releases and bypass JFrog entirely, so they are untouched by this workflow.
-#
 # All `vars.JF_*` used below are dedicated to this pipeline (targets the "database" JFrog
 # project) and are independent of the unprefixed `vars.*` used by promote-image-legacy.yaml
 # (targets "ecosystem") — never share values between the two.
@@ -176,9 +173,7 @@ jobs:
       # GitHub's create-release API defaults make_latest to true for any non-prerelease, so
       # publishing a hotfix for an older line would repoint the repository's "Latest release"
       # backwards. Decide it the same way pre-release.yml decides the Docker `latest` tag, so
-      # the two pointers cannot disagree. GoReleaser created this same release earlier as a
-      # prerelease with make_latest disabled (.goreleaser.yaml); this step is what promotes it
-      # to a full release, so it owns the flag from here on.
+      # the two pointers cannot disagree.
       - name: Resolve GitHub "Latest release" flag
         id: release-latest
         run: |
