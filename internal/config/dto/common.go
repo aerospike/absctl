@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -422,27 +422,25 @@ func (a *AwsS3) ToModelAwsS3() *models.AwsS3 {
 	}
 
 	return &models.AwsS3{
-		BucketName:          derefString(a.BucketName),
-		Region:              derefString(a.Region),
-		Profile:             derefString(a.Profile),
-		Endpoint:            derefString(a.EndpointOverride),
-		AccessKeyID:         derefString(a.AccessKeyID),
-		SecretAccessKey:     derefString(a.SecretAccessKey),
-		StorageClass:        derefString(a.StorageClass),
-		AccessTier:          derefString(a.AccessTier),
-		RetryMaxAttempts:    derefInt(a.RetryMaxAttempts),
-		RetryMaxBackoff:     derefInt(a.RetryMaxBackoff),
-		ChunkSize:           derefInt(a.ChunkSize),
-		UploadConcurrency:   derefInt(a.UploadConcurrency),
-		RestorePollDuration: derefInt64(a.RestorePollDuration),
-		StorageCommon: models.StorageCommon{
-			CalculateChecksum:    derefBool(a.CalculateChecksum),
-			RetryReadBackoff:     derefInt(a.RetryReadBackoff),
-			RetryReadMultiplier:  derefFloat64(a.RetryReadMultiplier),
-			RetryReadMaxAttempts: derefUint(a.RetryReadMaxAttempts),
-			MaxConnsPerHost:      derefInt(a.MaxConnsPerHost),
-			RequestTimeout:       derefInt(a.RequestTimeout),
-		},
+		BucketName:           derefString(a.BucketName),
+		Region:               derefString(a.Region),
+		Profile:              derefString(a.Profile),
+		Endpoint:             derefString(a.EndpointOverride),
+		AccessKeyID:          derefString(a.AccessKeyID),
+		SecretAccessKey:      derefString(a.SecretAccessKey),
+		StorageClass:         derefString(a.StorageClass),
+		AccessTier:           derefString(a.AccessTier),
+		RetryMaxAttempts:     derefInt(a.RetryMaxAttempts),
+		RetryMaxBackoff:      derefInt(a.RetryMaxBackoff),
+		ChunkSize:            derefInt(a.ChunkSize),
+		UploadConcurrency:    derefInt(a.UploadConcurrency),
+		RestorePollDuration:  derefInt64(a.RestorePollDuration),
+		CalculateChecksum:    derefBool(a.CalculateChecksum),
+		RetryReadBackoff:     derefInt(a.RetryReadBackoff),
+		RetryReadMultiplier:  derefFloat64(a.RetryReadMultiplier),
+		RetryReadMaxAttempts: derefUint(a.RetryReadMaxAttempts),
+		MaxConnsPerHost:      derefInt(a.MaxConnsPerHost),
+		RequestTimeout:       derefInt(a.RequestTimeout),
 	}
 }
 
@@ -496,14 +494,12 @@ func (g *GcpStorage) ToModelGcpStorage() *models.GcpStorage {
 		RetryBackoffInit:       derefInt(g.RetryInitBackoff),
 		RetryBackoffMultiplier: derefFloat64(g.RetryBackoffMultiplier),
 		ChunkSize:              derefInt(g.ChunkSize),
-		StorageCommon: models.StorageCommon{
-			CalculateChecksum:    derefBool(g.CalculateChecksum),
-			RetryReadBackoff:     derefInt(g.RetryReadBackoff),
-			RetryReadMultiplier:  derefFloat64(g.RetryReadMultiplier),
-			RetryReadMaxAttempts: derefUint(g.RetryReadMaxAttempts),
-			MaxConnsPerHost:      derefInt(g.MaxConnsPerHost),
-			RequestTimeout:       derefInt(g.RequestTimeout),
-		},
+		CalculateChecksum:      derefBool(g.CalculateChecksum),
+		RetryReadBackoff:       derefInt(g.RetryReadBackoff),
+		RetryReadMultiplier:    derefFloat64(g.RetryReadMultiplier),
+		RetryReadMaxAttempts:   derefUint(g.RetryReadMaxAttempts),
+		MaxConnsPerHost:        derefInt(g.MaxConnsPerHost),
+		RequestTimeout:         derefInt(g.RequestTimeout),
 	}
 }
 
@@ -561,28 +557,26 @@ func (a *AzureBlob) ToModelAzureBlob() *models.AzureBlob {
 	}
 
 	return &models.AzureBlob{
-		AccountName:         derefString(a.AccountName),
-		AccountKey:          derefString(a.AccountKey),
-		TenantID:            derefString(a.TenantID),
-		ClientID:            derefString(a.ClientID),
-		ClientSecret:        derefString(a.ClientSecret),
-		Endpoint:            derefString(a.EndpointOverride),
-		ContainerName:       derefString(a.ContainerName),
-		AccessTier:          derefString(a.AccessTier),
-		RetryMaxAttempts:    derefInt(a.RetryMaxAttempts),
-		RetryDelay:          derefInt(a.RetryDelay),
-		RetryMaxDelay:       derefInt(a.RetryMaxDelay),
-		UploadConcurrency:   derefInt(a.UploadConcurrency),
-		RestorePollDuration: derefInt64(a.RestorePollDuration),
-		BlockSize:           derefInt(a.BlockSize),
-		StorageCommon: models.StorageCommon{
-			CalculateChecksum:    derefBool(a.CalculateChecksum),
-			RetryReadBackoff:     derefInt(a.RetryReadBackoff),
-			RetryReadMultiplier:  derefFloat64(a.RetryReadMultiplier),
-			RetryReadMaxAttempts: derefUint(a.RetryReadMaxAttempts),
-			MaxConnsPerHost:      derefInt(a.MaxConnsPerHost),
-			RequestTimeout:       derefInt(a.RequestTimeout),
-		},
+		AccountName:          derefString(a.AccountName),
+		AccountKey:           derefString(a.AccountKey),
+		TenantID:             derefString(a.TenantID),
+		ClientID:             derefString(a.ClientID),
+		ClientSecret:         derefString(a.ClientSecret),
+		Endpoint:             derefString(a.EndpointOverride),
+		ContainerName:        derefString(a.ContainerName),
+		AccessTier:           derefString(a.AccessTier),
+		RetryMaxAttempts:     derefInt(a.RetryMaxAttempts),
+		RetryDelay:           derefInt(a.RetryDelay),
+		RetryMaxDelay:        derefInt(a.RetryMaxDelay),
+		UploadConcurrency:    derefInt(a.UploadConcurrency),
+		RestorePollDuration:  derefInt64(a.RestorePollDuration),
+		BlockSize:            derefInt(a.BlockSize),
+		CalculateChecksum:    derefBool(a.CalculateChecksum),
+		RetryReadBackoff:     derefInt(a.RetryReadBackoff),
+		RetryReadMultiplier:  derefFloat64(a.RetryReadMultiplier),
+		RetryReadMaxAttempts: derefUint(a.RetryReadMaxAttempts),
+		MaxConnsPerHost:      derefInt(a.MaxConnsPerHost),
+		RequestTimeout:       derefInt(a.RequestTimeout),
 	}
 }
 

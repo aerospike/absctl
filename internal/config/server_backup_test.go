@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,10 +33,8 @@ const (
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
-			ServerCommon: models.ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testServerStorage,
-			},
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
 		},
 		List: &models.ServerBackupList{
 			ListPath: testServerListPath,
@@ -44,13 +42,11 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 		Validation: &models.ServerBackupValidate{
 			JobID: testServerJobID,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          &models.App{},
-			ClientConfig: &client.AerospikeConfig{},
-			ClientPolicy: &models.ClientPolicy{},
-			Encryption:   &models.Encryption{},
-			Compression:  &models.Compression{},
-		},
+		App:          &models.App{},
+		ClientConfig: &client.AerospikeConfig{},
+		ClientPolicy: &models.ClientPolicy{},
+		Encryption:   &models.Encryption{},
+		Compression:  &models.Compression{},
 	}
 }
 

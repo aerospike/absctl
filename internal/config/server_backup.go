@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,17 +43,15 @@ func NewServerBackupServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
-		Start:      start,
-		List:       list,
-		Validation: validation,
-		Progress:   progress,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-		},
+		Start:        start,
+		List:         list,
+		Validation:   validation,
+		Progress:     progress,
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
 	}
 }
 
