@@ -72,17 +72,13 @@ func (s *ServerBackup) ModifiedAfterTime() (time.Time, error) {
 }
 
 type ServerBackupList struct {
-	// ListPath is the path to list backups from.
-	ListPath string
+	// Path is the path to list backups from.
+	Path string
 }
 
 func (s *ServerBackupList) Validate() error {
 	if s == nil {
 		return nil
-	}
-
-	if s.ListPath == "" {
-		return fmt.Errorf("list-path is required")
 	}
 
 	return nil

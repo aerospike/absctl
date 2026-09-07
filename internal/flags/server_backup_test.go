@@ -94,7 +94,7 @@ func TestServerBackupList_NewFlagSet(t *testing.T) {
 
 	result := list.GetServerBackupList()
 
-	assert.Equal(t, "/backups", result.ListPath)
+	assert.Equal(t, "/backups", result.Path)
 }
 
 func TestServerBackupList_NewFlagSet_DefaultValues(t *testing.T) {
@@ -108,7 +108,7 @@ func TestServerBackupList_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := list.GetServerBackupList()
 
-	assert.Equal(t, "/", result.ListPath)
+	assert.Equal(t, "/", result.Path)
 }
 
 func TestServerBackupValidate_NewFlagSet(t *testing.T) {

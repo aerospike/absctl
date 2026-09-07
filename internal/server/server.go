@@ -113,11 +113,16 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.List.Path, lister.WithLogger(s.logger))
 
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list V2 backups: %w", err)
+	}
+
+	if len(mds) == 0 {
+		s.logger.Info("no backups found")
+		return nil
 	}
 
 	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
