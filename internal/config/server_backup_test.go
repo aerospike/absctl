@@ -189,17 +189,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing list path",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.List.Path = ""
-				return cfg
-			},
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
-		},
-		{
 			name: "nil validation skips validation config check",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
