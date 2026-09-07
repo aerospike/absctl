@@ -114,6 +114,7 @@ func (b *Backup) ToModelBackup() *models.Backup {
 		ScanPageSize:                  derefInt64(b.Backup.ScanPageSize),
 		OutputFilePrefix:              derefString(b.Backup.OutputFilePrefix),
 		RackList:                      strings.Join(b.Backup.RackList, ","),
+		UseScanCompression:            derefBool(b.Backup.UseScanCompression),
 	}
 }
 
@@ -174,6 +175,7 @@ type BackupConfig struct {
 	InfoRetriesMultiplier         *float64 `yaml:"info-retry-multiplier"`
 	InfoRetryIntervalMilliseconds *int64   `yaml:"info-retry-interval"`
 	StdBufferSize                 *int     `yaml:"std-buffer"`
+	UseScanCompression            *bool    `yaml:"use-scan-compression"`
 }
 
 func defaultBackupConfig() BackupConfig {
@@ -219,5 +221,6 @@ func defaultBackupConfig() BackupConfig {
 		RackList:                      []string{},
 		TotalTimeout:                  new(models.DefaultBackupTotalTimeout),
 		Parallel:                      new(models.DefaultBackupParallel),
+		UseScanCompression:            new(models.DefaultBackupUseScanCompression),
 	}
 }
