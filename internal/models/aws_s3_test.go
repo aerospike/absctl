@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,10 +51,8 @@ func TestAwsS3_Validate(t *testing.T) {
 				RetryMaxBackoff:     30,
 				ChunkSize:           1024,
 				RestorePollDuration: 10,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",
@@ -131,10 +129,8 @@ func TestAwsS3_Validate(t *testing.T) {
 				RetryMaxBackoff:     0,
 				ChunkSize:           5,
 				RestorePollDuration: 1,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",
@@ -147,10 +143,8 @@ func TestAwsS3_Validate(t *testing.T) {
 				RetryMaxBackoff:     0,
 				ChunkSize:           5,
 				RestorePollDuration: 1,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",
@@ -162,7 +156,7 @@ func TestAwsS3_Validate(t *testing.T) {
 				RetryMaxAttempts:  3,
 				RetryMaxBackoff:   30,
 				UploadConcurrency: 1,
-				StorageCommon:     StorageCommon{MaxConnsPerHost: -1},
+				MaxConnsPerHost:   -1,
 				ChunkSize:         5,
 			},
 			isBackup: true,
@@ -175,7 +169,7 @@ func TestAwsS3_Validate(t *testing.T) {
 				RetryMaxAttempts:  3,
 				RetryMaxBackoff:   30,
 				UploadConcurrency: 1,
-				StorageCommon:     StorageCommon{RequestTimeout: -1},
+				RequestTimeout:    -1,
 				ChunkSize:         5,
 			},
 			isBackup: true,

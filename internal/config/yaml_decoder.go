@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -55,19 +55,17 @@ func dtoToBackupServiceConfig(dtoBackup *dto.Backup) (*BackupServiceConfig, erro
 	}
 
 	return &BackupServiceConfig{
-		Backup: dtoBackup.ToModelBackup(),
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          dtoBackup.App.ToModelApp(),
-			ClientConfig: asConfig,
-			ClientPolicy: dtoBackup.Cluster.ToModelClientPolicy(),
-			Compression:  dtoBackup.Compression.ToModelCompression(),
-			Encryption:   dtoBackup.Encryption.ToModelEncryption(),
-			SecretAgent:  dtoBackup.SecretAgent.ToModelSecretAgent(),
-			AwsS3:        dtoBackup.Aws.S3.ToModelAwsS3(),
-			GcpStorage:   dtoBackup.Gcp.Storage.ToModelGcpStorage(),
-			AzureBlob:    dtoBackup.Azure.Blob.ToModelAzureBlob(),
-			Local:        dtoBackup.Local.Disk.ToModelLocal(),
-		},
+		Backup:       dtoBackup.ToModelBackup(),
+		App:          dtoBackup.App.ToModelApp(),
+		ClientConfig: asConfig,
+		ClientPolicy: dtoBackup.Cluster.ToModelClientPolicy(),
+		Compression:  dtoBackup.Compression.ToModelCompression(),
+		Encryption:   dtoBackup.Encryption.ToModelEncryption(),
+		SecretAgent:  dtoBackup.SecretAgent.ToModelSecretAgent(),
+		AwsS3:        dtoBackup.Aws.S3.ToModelAwsS3(),
+		GcpStorage:   dtoBackup.Gcp.Storage.ToModelGcpStorage(),
+		AzureBlob:    dtoBackup.Azure.Blob.ToModelAzureBlob(),
+		Local:        dtoBackup.Local.Disk.ToModelLocal(),
 	}, nil
 }
 
@@ -103,18 +101,16 @@ func dtoToRestoreServiceConfig(dtoRestore *dto.Restore) (*RestoreServiceConfig, 
 	}
 
 	return &RestoreServiceConfig{
-		Restore: dtoRestore.ToModelRestore(),
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          dtoRestore.App.ToModelApp(),
-			ClientConfig: asConfig,
-			ClientPolicy: dtoRestore.Cluster.ToModelClientPolicy(),
-			Compression:  dtoRestore.Compression.ToModelCompression(),
-			Encryption:   dtoRestore.Encryption.ToModelEncryption(),
-			SecretAgent:  dtoRestore.SecretAgent.ToModelSecretAgent(),
-			AwsS3:        dtoRestore.Aws.S3.ToModelAwsS3(),
-			GcpStorage:   dtoRestore.Gcp.Storage.ToModelGcpStorage(),
-			AzureBlob:    dtoRestore.Azure.Blob.ToModelAzureBlob(),
-		},
+		Restore:      dtoRestore.ToModelRestore(),
+		App:          dtoRestore.App.ToModelApp(),
+		ClientConfig: asConfig,
+		ClientPolicy: dtoRestore.Cluster.ToModelClientPolicy(),
+		Compression:  dtoRestore.Compression.ToModelCompression(),
+		Encryption:   dtoRestore.Encryption.ToModelEncryption(),
+		SecretAgent:  dtoRestore.SecretAgent.ToModelSecretAgent(),
+		AwsS3:        dtoRestore.Aws.S3.ToModelAwsS3(),
+		GcpStorage:   dtoRestore.Gcp.Storage.ToModelGcpStorage(),
+		AzureBlob:    dtoRestore.Azure.Blob.ToModelAzureBlob(),
 	}, nil
 }
 

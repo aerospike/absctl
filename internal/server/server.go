@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ import (
 	bModels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
-	"github.com/aerospike/backup-go/pkg/server"
-	sModels "github.com/aerospike/backup-go/pkg/server/models"
+	"github.com/aerospike/backup-go/pkg/server/lister"
+	sModels "github.com/aerospike/backup-go/pkg/server/lister/models"
 	commonClient "github.com/aerospike/tools-common-go/client"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -97,6 +97,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 		aerospikeClient.Cluster(),
 		aerospike.NewInfoPolicy(),
 		bModels.NewDefaultRetryPolicy(),
+		s.logger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create info client: %w", err)
@@ -112,7 +113,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
 
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
@@ -157,16 +158,14 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	}
 
 	bReq := &iModels.RequestBackup{
-		RequestCommon: iModels.RequestCommon{
-			Namespace: s.backupCfg.Start.Namespace,
-			Storage:   s.backupCfg.Start.StorageType,
-			Bucket:    s.backupCfg.AwsS3.BucketName,
-			Region:    s.backupCfg.AwsS3.Region,
-			Profile:   s.backupCfg.AwsS3.Profile,
-			AccessKey: s.backupCfg.AwsS3.AccessKeyID,
-			SecretKey: s.backupCfg.AwsS3.SecretAccessKey,
-			Endpoint:  s.backupCfg.AwsS3.Endpoint,
-		},
+		Namespace:          s.backupCfg.Start.Namespace,
+		Storage:            s.backupCfg.Start.StorageType,
+		Bucket:             s.backupCfg.AwsS3.BucketName,
+		Region:             s.backupCfg.AwsS3.Region,
+		Profile:            s.backupCfg.AwsS3.Profile,
+		AccessKey:          s.backupCfg.AwsS3.AccessKeyID,
+		SecretKey:          s.backupCfg.AwsS3.SecretAccessKey,
+		Endpoint:           s.backupCfg.AwsS3.Endpoint,
 		ModifiedAfter:      ma,
 		ModifiedBefore:     mb,
 		SetList:            s.backupCfg.Start.SetList,
@@ -204,16 +203,14 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	// }
 
 	rReq := &iModels.RequestRestore{
-		RequestCommon: iModels.RequestCommon{
-			Namespace: s.restoreCfg.Start.Namespace,
-			Storage:   s.restoreCfg.Start.StorageType,
-			Bucket:    s.restoreCfg.AwsS3.BucketName,
-			Region:    s.restoreCfg.AwsS3.Region,
-			Profile:   s.restoreCfg.AwsS3.Profile,
-			AccessKey: s.restoreCfg.AwsS3.AccessKeyID,
-			SecretKey: s.restoreCfg.AwsS3.SecretAccessKey,
-			Endpoint:  s.restoreCfg.AwsS3.Endpoint,
-		},
+		Namespace:    s.restoreCfg.Start.Namespace,
+		Storage:      s.restoreCfg.Start.StorageType,
+		Bucket:       s.restoreCfg.AwsS3.BucketName,
+		Region:       s.restoreCfg.AwsS3.Region,
+		Profile:      s.restoreCfg.AwsS3.Profile,
+		AccessKey:    s.restoreCfg.AwsS3.AccessKeyID,
+		SecretKey:    s.restoreCfg.AwsS3.SecretAccessKey,
+		Endpoint:     s.restoreCfg.AwsS3.Endpoint,
 		JobID:        s.restoreCfg.Start.JobID,
 		Path:         s.restoreCfg.Start.Path,
 		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
@@ -321,7 +318,7 @@ func (s *Service) getBackupState(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := server.NewLister(client, s.backupCfg.AwsS3.BucketName, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, s.backupCfg.Progress.JobID)
 	if err != nil {
@@ -401,7 +398,7 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 
 // checkBackupExists validates the backup exists for RESTORE only.
 func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
-	l := server.NewLister(client, bucket, "", server.WithLogger(s.logger))
+	l := lister.NewLister(client, bucket, "", lister.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, jobID)
 	if err != nil {

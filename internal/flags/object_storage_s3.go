@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -70,14 +70,12 @@ func (f *ObjectStorageS3) ToAwsS3() *models.AwsS3 {
 		AccessKeyID:     f.AccessKeyID,
 		SecretAccessKey: f.SecretAccessKey,
 		// Set default to pass validation.
-		RestorePollDuration: models.DefaultS3RestorePollDuration,
-		RetryMaxAttempts:    models.DefaultS3RetryMaxAttempts,
-		RetryMaxBackoff:     models.DefaultS3RetryMaxBackoff,
-		ChunkSize:           models.DefaultS3ChunkSize,
-		StorageCommon: models.StorageCommon{
-			RetryReadBackoff:     models.DefaultCloudRetryReadBackoff,
-			RetryReadMultiplier:  models.DefaultCloudRetryReadMultiplier,
-			RetryReadMaxAttempts: models.DefaultCloudRetryReadMaxAttempts,
-		},
+		RestorePollDuration:  models.DefaultS3RestorePollDuration,
+		RetryMaxAttempts:     models.DefaultS3RetryMaxAttempts,
+		RetryMaxBackoff:      models.DefaultS3RetryMaxBackoff,
+		ChunkSize:            models.DefaultS3ChunkSize,
+		RetryReadBackoff:     models.DefaultCloudRetryReadBackoff,
+		RetryReadMultiplier:  models.DefaultCloudRetryReadMultiplier,
+		RetryReadMaxAttempts: models.DefaultCloudRetryReadMaxAttempts,
 	}
 }
