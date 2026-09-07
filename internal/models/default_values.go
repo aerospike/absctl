@@ -169,6 +169,7 @@ const (
 	DefaultBackupTotalTimeout        = int64(0)
 	DefaultBackupParallel            = 1
 	DefaultBackupMaxRetries          = 5
+	DefaultBackupUseScanCompression  = false
 
 	// Server-specific backup.
 
