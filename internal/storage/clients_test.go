@@ -211,9 +211,9 @@ func TestNewGcpClient_KeyFileMissing(t *testing.T) {
 		KeyFile: filepath.Join(t.TempDir(), "missing-key.json"),
 	}
 
-	client, err := newGcpClient(t.Context(), cfg)
+	c, err := newGcpClient(t.Context(), cfg)
 	require.Error(t, err)
-	assert.Nil(t, client)
+	assert.Nil(t, c)
 	assert.Contains(t, err.Error(), "failed to get GCP transport")
 }
 

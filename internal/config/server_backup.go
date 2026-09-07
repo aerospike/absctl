@@ -43,17 +43,15 @@ func NewServerBackupServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
-		Start:      start,
-		List:       list,
-		Validation: validation,
-		Progress:   progress,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-		},
+		Start:        start,
+		List:         list,
+		Validation:   validation,
+		Progress:     progress,
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
 	}
 }
 

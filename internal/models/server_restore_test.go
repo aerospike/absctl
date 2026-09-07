@@ -23,11 +23,9 @@ import (
 
 func validServerRestore() *ServerRestore {
 	return &ServerRestore{
-		ServerCommon: ServerCommon{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
-		},
-		JobID: testServerJobID,
+		Namespace:   testServerNamespace,
+		StorageType: testServerStorage,
+		JobID:       testServerJobID,
 	}
 }
 

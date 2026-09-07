@@ -33,10 +33,8 @@ const (
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
-			ServerCommon: models.ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testServerStorage,
-			},
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
 		},
 		List: &models.ServerBackupList{
 			ListPath: testServerListPath,
@@ -44,13 +42,11 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 		Validation: &models.ServerBackupValidate{
 			JobID: testServerJobID,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          &models.App{},
-			ClientConfig: &client.AerospikeConfig{},
-			ClientPolicy: &models.ClientPolicy{},
-			Encryption:   &models.Encryption{},
-			Compression:  &models.Compression{},
-		},
+		App:          &models.App{},
+		ClientConfig: &client.AerospikeConfig{},
+		ClientPolicy: &models.ClientPolicy{},
+		Encryption:   &models.Encryption{},
+		Compression:  &models.Compression{},
 	}
 }
 

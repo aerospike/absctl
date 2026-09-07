@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/gitleaks/gitleaks
-  rev: v8.16.3
+  rev: v8.30.1
   hooks:
   - id: gitleaks
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
@@ -8,11 +8,16 @@ repos:
   hooks:
   - id: shellcheck
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v6.0.0
   hooks:
   - id: end-of-file-fixer
   - id: trailing-whitespace
-- repo: https://github.com/golangci/golangci-lint
-  rev: v2.12.2
+- repo: local
   hooks:
     - id: golangci-lint
+      name: golangci-lint
+      entry: golangci-lint run --new-from-rev HEAD
+      language: system
+      types: [go]
+      pass_filenames: false
+      require_serial: true

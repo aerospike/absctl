@@ -102,8 +102,6 @@ func (r *Service) Run(ctx context.Context) error {
 
 	r.logger.Info("starting " + logMessage)
 
-	r.config.EncoderType = backup.EncoderTypeASB
-
 	h, err := r.backupClient.Restore(ctx, r.config, r.reader)
 	if err != nil {
 		return fmt.Errorf("failed to start %s: %w", logMessage, err)

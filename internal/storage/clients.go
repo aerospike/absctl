@@ -24,7 +24,6 @@ import (
 	"time"
 
 	gcpStorage "cloud.google.com/go/storage"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -229,20 +228,18 @@ func newAzureClient(a *models.AzureBlob) (*azblob.Client, error) {
 	)
 
 	azOpts := &azblob.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			Transport: newHTTPClient(newTransport(a.MaxConnsPerHost), a.RequestTimeout),
-			Retry: policy.RetryOptions{
-				MaxRetries:    int32(a.RetryMaxAttempts),
-				RetryDelay:    time.Duration(a.RetryDelay) * time.Millisecond,
-				MaxRetryDelay: time.Duration(a.RetryMaxDelay) * time.Millisecond,
-				StatusCodes: []int{
-					http.StatusRequestTimeout,
-					http.StatusTooManyRequests,
-					http.StatusInternalServerError,
-					http.StatusBadGateway,
-					http.StatusServiceUnavailable,
-					http.StatusGatewayTimeout,
-				},
+		Transport: newHTTPClient(newTransport(a.MaxConnsPerHost), a.RequestTimeout),
+		Retry: policy.RetryOptions{
+			MaxRetries:    int32(a.RetryMaxAttempts),
+			RetryDelay:    time.Duration(a.RetryDelay) * time.Millisecond,
+			MaxRetryDelay: time.Duration(a.RetryMaxDelay) * time.Millisecond,
+			StatusCodes: []int{
+				http.StatusRequestTimeout,
+				http.StatusTooManyRequests,
+				http.StatusInternalServerError,
+				http.StatusBadGateway,
+				http.StatusServiceUnavailable,
+				http.StatusGatewayTimeout,
 			},
 		},
 	}

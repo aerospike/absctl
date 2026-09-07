@@ -40,16 +40,14 @@ func NewServerRestoreServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
-		Start:    start,
-		Prepare:  prepare,
-		Progress: progress,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-		},
+		Start:        start,
+		Prepare:      prepare,
+		Progress:     progress,
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
 	}
 }
 

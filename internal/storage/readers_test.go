@@ -431,12 +431,10 @@ func writeFile(t *testing.T, dir, name string) {
 
 func newLocalRestoreCfg(restore *models.Restore) *config.RestoreServiceConfig {
 	return &config.RestoreServiceConfig{
-		Restore: restore,
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			AwsS3:      &models.AwsS3{},
-			GcpStorage: &models.GcpStorage{},
-			AzureBlob:  &models.AzureBlob{},
-		},
+		Restore:    restore,
+		AwsS3:      &models.AwsS3{},
+		GcpStorage: &models.GcpStorage{},
+		AzureBlob:  &models.AzureBlob{},
 	}
 }
 
@@ -447,10 +445,8 @@ func TestNewRestoreReader_Directory(t *testing.T) {
 	writeFile(t, dir, testFileNameASB)
 
 	cfg := newLocalRestoreCfg(&models.Restore{
-		Common: models.Common{
-			Directory: dir,
-			Namespace: "test",
-		},
+		Directory: dir,
+		Namespace: "test",
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -464,10 +460,8 @@ func TestNewRestoreReader_EmptyDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := newLocalRestoreCfg(&models.Restore{
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: "test",
-		},
+		Directory: t.TempDir(),
+		Namespace: "test",
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -478,12 +472,10 @@ func TestNewRestoreReader_EmptyDir(t *testing.T) {
 
 func newStateBackupCfg(b *models.Backup) *config.BackupServiceConfig {
 	return &config.BackupServiceConfig{
-		Backup: b,
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			AwsS3:      &models.AwsS3{},
-			GcpStorage: &models.GcpStorage{},
-			AzureBlob:  &models.AzureBlob{},
-		},
+		Backup:     b,
+		AwsS3:      &models.AwsS3{},
+		GcpStorage: &models.GcpStorage{},
+		AzureBlob:  &models.AzureBlob{},
 	}
 }
 
@@ -502,7 +494,7 @@ func TestNewStateReader_NoStateAndNoContinue(t *testing.T) {
 	t.Parallel()
 
 	cfg := newStateBackupCfg(&models.Backup{
-		Common: models.Common{Directory: t.TempDir()},
+		Directory: t.TempDir(),
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -518,7 +510,7 @@ func TestNewStateReader_StateFileDstSetReturnsNil(t *testing.T) {
 	// because the state is being written, not read.
 	cfg := newStateBackupCfg(&models.Backup{
 		StateFileDst: "state",
-		Common:       models.Common{Directory: t.TempDir()},
+		Directory:    t.TempDir(),
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -534,8 +526,8 @@ func TestNewStateReader_ContinueValidDir(t *testing.T) {
 	writeFile(t, dir, "0_test_1.asb")
 
 	cfg := newStateBackupCfg(&models.Backup{
-		Continue: "state.asb",
-		Common:   models.Common{Directory: dir},
+		Continue:  "state.asb",
+		Directory: dir,
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -549,8 +541,8 @@ func TestNewStateReader_ContinueEmptyDir(t *testing.T) {
 	t.Parallel()
 
 	cfg := newStateBackupCfg(&models.Backup{
-		Continue: "state.asb",
-		Common:   models.Common{Directory: t.TempDir()},
+		Continue:  "state.asb",
+		Directory: t.TempDir(),
 	})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
