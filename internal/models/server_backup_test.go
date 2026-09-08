@@ -149,7 +149,7 @@ func TestServerBackupList_Validate(t *testing.T) {
 		{
 			name: "valid list path",
 			list: &ServerBackupList{
-				ListPath: testServerListPath,
+				Path: testServerListPath,
 			},
 			wantErr: false,
 		},
@@ -157,12 +157,6 @@ func TestServerBackupList_Validate(t *testing.T) {
 			name:    "nil list",
 			list:    nil,
 			wantErr: false,
-		},
-		{
-			name:       "missing list path",
-			list:       &ServerBackupList{},
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
 		},
 	}
 

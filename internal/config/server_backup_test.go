@@ -37,7 +37,7 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 			StorageType: testServerStorage,
 		},
 		List: &models.ServerBackupList{
-			ListPath: testServerListPath,
+			Path: testServerListPath,
 		},
 		Validation: &models.ServerBackupValidate{
 			JobID: testServerJobID,
@@ -187,17 +187,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup: true,
 			wantErr:  false,
-		},
-		{
-			name: "missing list path",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.List.ListPath = ""
-				return cfg
-			},
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
 		},
 		{
 			name: "nil validation skips validation config check",

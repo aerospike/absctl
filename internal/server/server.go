@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -27,12 +28,13 @@ import (
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
-	bModels "github.com/aerospike/backup-go/models"
+	"github.com/aerospike/backup-go"
+	backupmodels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
-	iModels "github.com/aerospike/backup-go/pkg/asinfo/models"
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/aerospike/backup-go/pkg/server/lister"
-	sModels "github.com/aerospike/backup-go/pkg/server/lister/models"
-	commonClient "github.com/aerospike/tools-common-go/client"
+	servermodels "github.com/aerospike/backup-go/pkg/server/lister/models"
+	commonclient "github.com/aerospike/tools-common-go/client"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -65,7 +67,7 @@ func NewService(
 	}, nil
 }
 
-func (s *Service) clientConfig() *commonClient.AerospikeConfig {
+func (s *Service) clientConfig() *commonclient.AerospikeConfig {
 	if s.backupCfg != nil {
 		return s.backupCfg.ClientConfig
 	}
@@ -96,7 +98,7 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 	infoClient, err := asinfo.NewClient(
 		aerospikeClient.Cluster(),
 		aerospike.NewInfoPolicy(),
-		bModels.NewDefaultRetryPolicy(),
+		backupmodels.NewDefaultRetryPolicy(),
 		s.logger,
 	)
 	if err != nil {
@@ -113,11 +115,24 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.List.Path, lister.WithLogger(s.logger))
 
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to list V2 backups: %w", err)
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	if len(mds) == 0 {
+		// try to find metadata for a specific path.
+		mds, err = findBackupByPath(ctx, l, s.backupCfg.List.Path)
+		if err != nil {
+			if errors.Is(err, backup.ErrNotFound) {
+				s.logger.Info("backups not found")
+				return nil
+			}
+
+			return fmt.Errorf("failed to list backups: %w", err)
+		}
 	}
 
 	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
@@ -125,6 +140,17 @@ func (s *Service) ListBackups(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func findBackupByPath(ctx context.Context, l *lister.Lister, path string) ([]servermodels.Metadata, error) {
+	backupID := filepath.Base(path)
+
+	md, err := l.GetMetadata(ctx, backupID)
+	if err != nil {
+		return nil, err
+	}
+
+	return []servermodels.Metadata{md}, nil
 }
 
 // StartBackup initiates a backup process using the service's configured backup settings
@@ -157,7 +183,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		ma = strconv.FormatInt(mat.Unix(), 10)
 	}
 
-	bReq := &iModels.RequestBackup{
+	bReq := &infomodels.RequestBackup{
 		Namespace:          s.backupCfg.Start.Namespace,
 		Storage:            s.backupCfg.Start.StorageType,
 		Bucket:             s.backupCfg.AwsS3.BucketName,
@@ -202,7 +228,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
 	// }
 
-	rReq := &iModels.RequestRestore{
+	rReq := &infomodels.RequestRestore{
 		Namespace:    s.restoreCfg.Start.Namespace,
 		Storage:      s.restoreCfg.Start.StorageType,
 		Bucket:       s.restoreCfg.AwsS3.BucketName,
@@ -282,7 +308,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 			return fmt.Errorf("failed to get backup status: %w", err)
 		}
 
-		if result.State == iModels.BackupStateComplete {
+		if result.State == infomodels.BackupStateComplete {
 			s.logger.Info("backup complete")
 
 			if err := s.getBackupState(ctx); err != nil {
@@ -325,7 +351,7 @@ func (s *Service) getBackupState(ctx context.Context) error {
 		return fmt.Errorf("failed to get backup metadata: %w", err)
 	}
 
-	if err := logging.PrintMetadata([]sModels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger); err != nil {
+	if err := logging.PrintMetadata([]servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger); err != nil {
 		return err
 	}
 
@@ -380,7 +406,7 @@ func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, 
 		return fmt.Errorf("failed to get server version: %w", err)
 	}
 
-	if !lowestVersion.IsGreaterOrEqual(iModels.AerospikeVersionSupportsIntegratedBackup) {
+	if !lowestVersion.IsGreaterOrEqual(infomodels.AerospikeVersionSupportsIntegratedBackup) {
 		return fmt.Errorf("server version %s does not support integrated backup", lowestVersion)
 	}
 
