@@ -80,7 +80,7 @@ func NewServerBackupList() *ServerBackupList {
 func (f *ServerBackupList) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.ListPath, "path", "/", "Path to list backups from.")
+	flagSet.StringVar(&f.Path, "path", "", "Path to list backups from.")
 
 	return flagSet
 }
