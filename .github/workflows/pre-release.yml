@@ -53,8 +53,8 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          # Build-only: .goreleaser.yaml sets release.disable, and release.yml owns the sole
-          # GitHub Release once JFrog PROD promotion is done.
+          # Build-only: .goreleaser.yaml sets release.disable, and release.yml owns the GitHub
+          # pre-release (and eventual GA promotion) once JFrog PROD promotion is done.
           args: build --clean
         env:
           GPG_FINGERPRINT: ${{ steps.import-gpg.outputs.fingerprint }}

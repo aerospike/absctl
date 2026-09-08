@@ -306,7 +306,8 @@ Run `absctl <command> --help` for the complete flag list.
 Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PREVIEW -> PROD`) before anything is made public. The
 GitHub Actions side is split into two workflows:
 [`pre-release.yml`](.github/workflows/pre-release.yml) (developer owned, builds and promotes up to `TEST`) and
-[`release.yml`](.github/workflows/release.yml) (run once the release is fully approved, publishes it).
+[`release.yml`](.github/workflows/release.yml) (run once the release is fully approved; publishes a GitHub pre-release
+for final validation, then a PM/EM promotes it to GA manually).
 
 ### Regular release
 1. Create a release branch from `dev` (e.g. `release/1.1.0`).
@@ -364,9 +365,14 @@ The following steps apply to both regular releases and hotfixes:
    - A dev or PM/EM manually runs [`release.yml`](https://github.com/aerospike/absctl/actions/workflows/release.yml)
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
      `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
-     publishes them as a new, immutable GitHub Release — nothing is rebuilt, re-signed, or re-checksummed at this
+     publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or re-checksummed at this
      point.
-10. Post-release actions:
+10. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release**.
+    Follow the workflow summary's **Latest release** guidance (it uses the same rule as the Docker
+    `latest` tag in `pre-release.yml`): set **Set as the latest release** only when this version is
+    the highest final release overall (hotfixes on older lines must leave it unchecked). Until then
+    the packages are available for validation but the release does not appear as GA on GitHub.
+11. Post-release actions (after step 10):
    1. **Snyk**:
       - Add the new version to the `aerospike-applications` Snyk org.
       - Remove the oldest maintenance version from the same org if no longer supported.
@@ -375,7 +381,7 @@ The following steps apply to both regular releases and hotfixes:
       - Use the link to the GitHub Release.
       - **Important**: Remove link previews before sending to keep the channel clean (hover over the preview and click the **'x'** in the top-right corner). See [this guide](https://aerospike.atlassian.net/wiki/spaces/RE/pages/2540339350/Message+Slack+releases+Internal+Channel) for more info.
    3. **Email**: Send the release announcement email. See [this guide](https://aerospike.atlassian.net/wiki/spaces/RE/pages/2543124552/Send+email+of+the+Release+Notes+to+the+releases+aerospike.com+distribution+list) for more info.
-11. If the release added commits that exist only on `main` (for example a hotfix), back-merge `main` into `dev`.
+12. If the release added commits that exist only on `main` (for example a hotfix), back-merge `main` into `dev`.
 
 ## License
 

@@ -15,7 +15,8 @@ permissions:
 # JFrog PROD via the JFrog UI by a PM/EM (see the "Cutting a release" section in README.md -- gates past
 # TEST are product-owned and intentionally not automated in CI). It never promotes anything itself;
 # it only verifies the PROD promotion happened, then republishes the already-signed artifacts as an
-# immutable GitHub Release. Nothing is rebuilt, re-signed, or re-checksummed here -- JFrog is the
+# immutable GitHub pre-release. A PM/EM promotes it to a full (non-prerelease) GitHub Release manually
+# when ready to announce GA. Nothing is rebuilt, re-signed, or re-checksummed here -- JFrog is the
 # source of truth. Docker Hub mirroring is handled entirely externally by artifact-publisher
 # (https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799), triggered by JFrog's own
 # promotion webhook -- no job for it lives in this workflow.
@@ -170,10 +171,8 @@ jobs:
           echo "Final release-assets tree:"
           find release-assets -type f | sort
 
-      # GitHub's create-release API defaults make_latest to true for any non-prerelease, so
-      # publishing a hotfix for an older line would repoint the repository's "Latest release"
-      # backwards. Decide it the same way pre-release.yml decides the Docker `latest` tag, so
-      # the two pointers cannot disagree.
+      # Decide make_latest the same way pre-release.yml decides the Docker `latest` tag, so the
+      # two pointers cannot disagree once a PM/EM clears the pre-release flag in the GitHub UI.
       - name: Resolve GitHub "Latest release" flag
         id: release-latest
         run: |
@@ -204,15 +203,21 @@ jobs:
             echo "| Publishing | \`$current\` |"
             echo "| Highest release overall | \`$highest_overall\` |"
             echo "| \`make_latest\` | \`$make_latest\` |"
+            echo ""
+            if [ "$make_latest" = "true" ]; then
+              echo "Matches Docker \`latest\`: when promoting this pre-release to GA, also set **Set as the latest release**."
+            else
+              echo "Matches Docker \`latest\` withholding: when promoting to GA, leave **Set as the latest release** unchecked."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub pre-release
         uses: step-security/action-gh-release@d2093dbdaf0c6507874908247e14bbc4dee6a72d # v3.0.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.BUNDLE_VERSION }}
           draft: false
-          prerelease: false
+          prerelease: true
           make_latest: ${{ steps.release-latest.outputs.MAKE_LATEST }}
           files: |
             release-assets/**/*.rpm
@@ -225,8 +230,10 @@ jobs:
         if: always()
         run: |
           {
-            echo "### Published GitHub Release"
+            echo "### Published GitHub pre-release"
             echo "Tag: \`${BUNDLE_VERSION}\`"
+            echo ""
+            echo "Clear **Set as a pre-release** in the GitHub Release UI when ready to announce GA."
             echo ""
             echo '```'
             find release-assets -type f | sort
