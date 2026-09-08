@@ -119,5 +119,9 @@ func (s *ServerBackupProgress) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
+	if s.WatchPoll < 1000 {
+		return fmt.Errorf("watch-poll must be greater than 1000 (1 second)")
+	}
+
 	return nil
 }
