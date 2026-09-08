@@ -145,3 +145,41 @@ func TestServerBackupValidate_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, 10000, result.SampleSize)
 	assert.Empty(t, result.JobID)
 }
+
+func TestServerBackupProgress_NewFlagSet(t *testing.T) {
+	t.Parallel()
+
+	progress := NewServerBackupProgress()
+	flagSet := progress.NewFlagSet()
+
+	args := []string{
+		"--backup-id", "backup-job-1",
+		"--watch",
+		"--watch-poll", "2000",
+	}
+
+	err := flagSet.Parse(args)
+	require.NoError(t, err)
+
+	result := progress.GetServerBackupProgress()
+
+	assert.Equal(t, "backup-job-1", result.JobID)
+	assert.True(t, result.Watch)
+	assert.Equal(t, int64(2000), result.WatchPoll)
+}
+
+func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
+	t.Parallel()
+
+	progress := NewServerBackupProgress()
+	flagSet := progress.NewFlagSet()
+
+	err := flagSet.Parse([]string{})
+	require.NoError(t, err)
+
+	result := progress.GetServerBackupProgress()
+
+	assert.Empty(t, result.JobID)
+	assert.False(t, result.Watch)
+	assert.Equal(t, int64(5000), result.WatchPoll)
+}

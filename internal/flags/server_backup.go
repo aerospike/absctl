@@ -125,7 +125,8 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
 	flagSet.BoolVar(&f.Watch, "watch", false, "Watch the progress of the backup.")
-	flagSet.Int64Var(&f.WatchPoll, "watch-poll", 1000, "Polling interval in milliseconds for watch.")
+	flagSet.Int64Var(&f.WatchPoll, "watch-poll", 5000, "Polling interval in milliseconds for watch.\n"+
+		"Minimum value is 1000 (1 second).")
 
 	return flagSet
 }

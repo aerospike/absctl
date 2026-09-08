@@ -178,6 +178,73 @@ func TestServerBackupList_Validate(t *testing.T) {
 	}
 }
 
+func TestServerBackupProgress_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		progress   *ServerBackupProgress
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name: "valid progress",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 5000,
+			},
+			wantErr: false,
+		},
+		{
+			name:     "nil progress",
+			progress: nil,
+			wantErr:  false,
+		},
+		{
+			name: "missing backup id",
+			progress: &ServerBackupProgress{
+				WatchPoll: 5000,
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "watch poll below minimum",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 999,
+			},
+			wantErr:    true,
+			wantErrMsg: "watch-poll must be greater than 1000 (1 second)",
+		},
+		{
+			name: "watch poll at minimum",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 1000,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.progress.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestServerBackupValidate_Validate(t *testing.T) {
 	t.Parallel()
 
