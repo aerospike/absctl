@@ -21,6 +21,10 @@ import (
 	"strings"
 )
 
+const (
+	metricIndent = 30
+)
+
 // outWriter is a package-level reference to stderr that tests may override
 // when capturing pretty-printed output is impractical via os.Pipe.
 var outWriter io.Writer = os.Stderr
@@ -45,5 +49,5 @@ func printMetric(key string, value any) {
 }
 
 func indent(key string) string {
-	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", 21-len(key)))
+	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", metricIndent-len(key)))
 }

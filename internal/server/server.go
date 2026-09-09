@@ -34,6 +34,8 @@ import (
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/aerospike/backup-go/pkg/server/lister"
 	servermodels "github.com/aerospike/backup-go/pkg/server/lister/models"
+	"github.com/aerospike/backup-go/pkg/server/segvalidator"
+	"github.com/aerospike/backup-go/pkg/server/segvalidator/streamers"
 	commonclient "github.com/aerospike/tools-common-go/client"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -385,9 +387,22 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return err
 	}
 
-	v := NewValidator(client, s.backupCfg.AwsS3.BucketName, s.logger)
+	streamer, err := streamers.NewS3(
+		client,
+		s.backupCfg.AwsS3.BucketName,
+		s.backupCfg.Validation.JobID,
+		streamers.WithLogger(s.logger),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 streamer: %w", err)
+	}
 
-	report, err := v.Validate(ctx, s.backupCfg.Validation.JobID, s.backupCfg.Validation.SampleSize)
+	v, err := segvalidator.NewSegValidator(streamer, segvalidator.WithLogger(s.logger))
+	if err != nil {
+		return fmt.Errorf("failed to create seg validator: %w", err)
+	}
+
+	report, err := v.Validate(ctx, s.backupCfg.Validation.SampleSize)
 	if err != nil {
 		return fmt.Errorf("failed to validate: %w", err)
 	}

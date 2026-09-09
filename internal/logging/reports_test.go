@@ -34,22 +34,22 @@ func TestIndent(t *testing.T) {
 		{
 			name:     "Empty key",
 			key:      "",
-			expected: ":" + strings.Repeat(" ", 21),
+			expected: ":" + strings.Repeat(" ", metricIndent),
 		},
 		{
 			name:     "Short key",
 			key:      "Key",
-			expected: "Key:" + strings.Repeat(" ", 18),
+			expected: "Key:" + strings.Repeat(" ", metricIndent-len("Key")),
 		},
 		{
 			name:     "Long key",
 			key:      "ThisIsAVeryLongKey",
-			expected: "ThisIsAVeryLongKey:" + strings.Repeat(" ", 3),
+			expected: "ThisIsAVeryLongKey:" + strings.Repeat(" ", metricIndent-len("ThisIsAVeryLongKey")),
 		},
 		{
 			name:     "Exact 20 character key",
 			key:      "12345678901234567890",
-			expected: "12345678901234567890:" + strings.Repeat(" ", 1),
+			expected: "12345678901234567890:" + strings.Repeat(" ", metricIndent-len("12345678901234567890")),
 		},
 	}
 
@@ -68,9 +68,9 @@ func TestPrintMetric(t *testing.T) {
 		printMetric("FloatKey", 123.456)
 	})
 
-	assert.Contains(t, output, "TestKey:"+strings.Repeat(" ", 21-len("TestKey"))+"TestValue")
-	assert.Contains(t, output, "IntKey:"+strings.Repeat(" ", 21-len("IntKey"))+"123")
-	assert.Contains(t, output, "FloatKey:"+strings.Repeat(" ", 21-len("FloatKey"))+"123.456")
+	assert.Contains(t, output, "TestKey:"+strings.Repeat(" ", metricIndent-len("TestKey"))+"TestValue")
+	assert.Contains(t, output, "IntKey:"+strings.Repeat(" ", metricIndent-len("IntKey"))+"123")
+	assert.Contains(t, output, "FloatKey:"+strings.Repeat(" ", metricIndent-len("FloatKey"))+"123.456")
 }
 
 // newSampleBackupStats returns BackupStats populated with the same numbers
