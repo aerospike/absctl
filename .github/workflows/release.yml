@@ -11,15 +11,19 @@ on:
 permissions:
   contents: read
 
+env:
+  DOCKERHUB_IMAGE: aerospike/absctl
+
 # This workflow is run manually, once the release bundle has already been promoted all the way to
 # JFrog PROD via the JFrog UI by a PM/EM (see the "Cutting a release" section in README.md -- gates past
 # TEST are product-owned and intentionally not automated in CI). It never promotes anything itself;
 # it only verifies the PROD promotion happened, then republishes the already-signed artifacts as an
 # immutable GitHub pre-release. A PM/EM promotes it to a full (non-prerelease) GitHub Release manually
 # when ready to announce GA. Nothing is rebuilt, re-signed, or re-checksummed here -- JFrog is the
-# source of truth. Docker Hub mirroring is handled entirely externally by artifact-publisher
-# (https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799), triggered by JFrog's own
-# promotion webhook -- no job for it lives in this workflow.
+# source of truth. The immutable version tag on Docker Hub is mirrored externally by artifact-publisher
+# (https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799), triggered by JFrog's promotion
+# webhook; this workflow alone updates the Docker Hub `latest` tag when this version is the highest
+# final release overall.
 #
 # All `vars.JF_*` used below are dedicated to this pipeline (targets the "database" JFrog
 # project) and are independent of the unprefixed `vars.*` used by promote-image-legacy.yaml
@@ -98,14 +102,60 @@ jobs:
         with:
           egress-policy: audit
 
-      # Nothing here builds from source; the checkout exists only so the "Latest release"
-      # decision below can compare this tag against every other release tag.
+      # Nothing here builds from source; the checkout exists only so the Docker `latest` decision
+      # below can compare this tag against every other release tag.
       - name: Checkout Code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
           fetch-tags: true
           ref: ${{ env.BUNDLE_VERSION }}
+
+      - name: Resolve Docker latest tag
+        id: docker-latest
+        run: |
+          set -euo pipefail
+          current="${BUNDLE_VERSION#v}"
+
+          if ! echo "$current" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "APPLY_DOCKER_LATEST=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Docker \`latest\` tag"
+              echo "Pre-release/test tag; Docker \`latest\` is not updated."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          versions="$(
+            { git tag --list 'v*'; echo "v${current}"; } \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sed 's/^v//' \
+              | sort -uV
+          )"
+          highest_overall="$(echo "$versions" | tail -n1)"
+
+          if [ "$current" = "$highest_overall" ]; then
+            apply_latest=true
+          else
+            apply_latest=false
+          fi
+          echo "APPLY_DOCKER_LATEST=$apply_latest" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_TAG=$current" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Docker \`latest\` tag"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Publishing | \`$current\` |"
+            echo "| Highest release overall | \`$highest_overall\` |"
+            echo "| Update Docker Hub \`latest\` | \`$apply_latest\` |"
+            echo ""
+            if [ "$apply_latest" = "true" ]; then
+              echo "This is the highest final release, so Docker Hub \`latest\` will point at \`${current}\`."
+            else
+              echo "Newer final releases exist, so Docker Hub \`latest\` is left unchanged."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Login to JFrog
         uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
@@ -171,46 +221,6 @@ jobs:
           echo "Final release-assets tree:"
           find release-assets -type f | sort
 
-      # Decide make_latest the same way pre-release.yml decides the Docker `latest` tag, so the
-      # two pointers cannot disagree once a PM/EM clears the pre-release flag in the GitHub UI.
-      - name: Resolve GitHub "Latest release" flag
-        id: release-latest
-        run: |
-          set -euo pipefail
-          current="${BUNDLE_VERSION#v}"
-
-          # Final releases only: pre-release tags (v1.2.0-rc1) and one-off test tags must not
-          # get a say in which release is newest.
-          versions="$(
-            { git tag --list 'v*'; echo "v${current}"; } \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-              | sed 's/^v//' \
-              | sort -uV
-          )"
-          highest_overall="$(echo "$versions" | tail -n1)"
-
-          if [ "$current" = "$highest_overall" ]; then
-            make_latest=true
-          else
-            make_latest=false
-          fi
-          echo "MAKE_LATEST=$make_latest" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### GitHub \"Latest release\" flag"
-            echo "| Field | Value |"
-            echo "| --- | --- |"
-            echo "| Publishing | \`$current\` |"
-            echo "| Highest release overall | \`$highest_overall\` |"
-            echo "| \`make_latest\` | \`$make_latest\` |"
-            echo ""
-            if [ "$make_latest" = "true" ]; then
-              echo "Matches Docker \`latest\`: when promoting this pre-release to GA, also set **Set as the latest release**."
-            else
-              echo "Matches Docker \`latest\` withholding: when promoting to GA, leave **Set as the latest release** unchecked."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Publish GitHub pre-release
         uses: step-security/action-gh-release@d2093dbdaf0c6507874908247e14bbc4dee6a72d # v3.0.1
         with:
@@ -218,13 +228,40 @@ jobs:
           tag_name: ${{ env.BUNDLE_VERSION }}
           draft: false
           prerelease: true
-          make_latest: ${{ steps.release-latest.outputs.MAKE_LATEST }}
+          make_latest: false
           files: |
             release-assets/**/*.rpm
             release-assets/**/*.deb
             release-assets/**/*.deb.asc
             release-assets/**/*.rpm.asc
             release-assets/**/*.sha256
+
+      - name: Set up Docker Buildx
+        if: steps.docker-latest.outputs.APPLY_DOCKER_LATEST == 'true'
+        uses: step-security/setup-buildx-action@a4709e2865773e1792246433e8eb922f9743a875 # v4.2.0
+
+      - name: Login to DockerHub
+        if: steps.docker-latest.outputs.APPLY_DOCKER_LATEST == 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Wait for DockerHub version tag
+        if: steps.docker-latest.outputs.APPLY_DOCKER_LATEST == 'true'
+        id: dockerhub-version
+        uses: ./.github/actions/wait-for-dockerhub-tag
+        with:
+          image: ${{ env.DOCKERHUB_IMAGE }}
+          tag: ${{ steps.docker-latest.outputs.IMAGE_TAG }}
+
+      - name: Point DockerHub latest at this release
+        if: steps.docker-latest.outputs.APPLY_DOCKER_LATEST == 'true' && steps.dockerhub-version.outputs.found == 'true'
+        run: |
+          set -euxo pipefail
+          docker buildx imagetools create \
+            "docker.io/${DOCKERHUB_IMAGE}:${{ steps.docker-latest.outputs.IMAGE_TAG }}" \
+            --tag "docker.io/${DOCKERHUB_IMAGE}:latest"
 
       - name: Summarize published release
         if: always()
@@ -234,6 +271,15 @@ jobs:
             echo "Tag: \`${BUNDLE_VERSION}\`"
             echo ""
             echo "Clear **Set as a pre-release** in the GitHub Release UI when ready to announce GA."
+            if [ "${{ steps.docker-latest.outputs.APPLY_DOCKER_LATEST }}" = "true" ]; then
+              if [ "${{ steps.dockerhub-version.outputs.found }}" = "true" ]; then
+                echo ""
+                echo "Docker Hub \`latest\` now points at \`${{ steps.docker-latest.outputs.IMAGE_TAG }}\`."
+              else
+                echo ""
+                echo "::warning::Docker Hub \`latest\` was not updated — version tag \`${{ steps.docker-latest.outputs.IMAGE_TAG }}\` is not on Docker Hub yet (artifact-publisher mirroring may still be in progress). Re-run this workflow to retry."
+              fi
+            fi
             echo ""
             echo '```'
             find release-assets -type f | sort

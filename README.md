@@ -365,13 +365,13 @@ The following steps apply to both regular releases and hotfixes:
    - A dev or PM/EM manually runs [`release.yml`](https://github.com/aerospike/absctl/actions/workflows/release.yml)
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
      `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
-     publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or re-checksummed at this
-     point.
-10. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release**.
-    Follow the workflow summary's **Latest release** guidance (it uses the same rule as the Docker
-    `latest` tag in `pre-release.yml`): set **Set as the latest release** only when this version is
-    the highest final release overall (hotfixes on older lines must leave it unchecked). Until then
-    the packages are available for validation but the release does not appear as GA on GitHub.
+     publishes them as a new, immutable GitHub **pre-release**. If this version is the highest final release
+     overall, the workflow also points Docker Hub `latest` at it (hotfixes on older lines leave `latest`
+     unchanged) — nothing is rebuilt, re-signed, or re-checksummed at this point.
+10. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release** only.
+    Docker `latest` is already managed by `release.yml`; the GitHub **Set as the latest release** checkbox is
+    unrelated and can be left unchecked. Until the pre-release flag is cleared, the release does not appear as
+    GA on GitHub.
 11. Post-release actions (after step 10):
    1. **Snyk**:
       - Add the new version to the `aerospike-applications` Snyk org.
