@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -101,8 +101,6 @@ func (r *Service) Run(ctx context.Context) error {
 	}
 
 	r.logger.Info("starting " + logMessage)
-
-	r.config.EncoderType = backup.EncoderTypeASB
 
 	h, err := r.backupClient.Restore(ctx, r.config, r.reader)
 	if err != nil {

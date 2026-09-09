@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -91,6 +91,19 @@ func applyRootPersistent(cmd *cobra.Command, rc *runCtx) {
 		}
 
 		app := rc.app.GetApp()
+
+		// A config file supersedes the flags entirely, logging settings
+		// included. Only the app section is needed here: the subcommand
+		// decodes the full schema once it knows which one applies.
+		if app.ConfigFilePath != "" {
+			fileApp, err := config.DecodeAppConfig(app.ConfigFilePath)
+			if err != nil {
+				return fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
+			}
+
+			app = fileApp
+		}
+
 		cfg := logging.NewConfig(app.Verbose, app.LogJSON, app.LogLevel, app.LogFile)
 
 		logger, closeFn, err := logging.NewLogger(cfg)

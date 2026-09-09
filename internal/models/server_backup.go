@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -72,17 +72,13 @@ func (s *ServerBackup) ModifiedAfterTime() (time.Time, error) {
 }
 
 type ServerBackupList struct {
-	// ListPath is the path to list backups from.
-	ListPath string
+	// Path is the path to list backups from.
+	Path string
 }
 
 func (s *ServerBackupList) Validate() error {
 	if s == nil {
 		return nil
-	}
-
-	if s.ListPath == "" {
-		return fmt.Errorf("list-path is required")
 	}
 
 	return nil
@@ -121,6 +117,10 @@ func (s *ServerBackupProgress) Validate() error {
 
 	if s.JobID == "" {
 		return fmt.Errorf("backup-id is required")
+	}
+
+	if s.WatchPoll < 1000 {
+		return fmt.Errorf("watch-poll must be greater than 1000 (1 second)")
 	}
 
 	return nil

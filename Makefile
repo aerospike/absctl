@@ -10,6 +10,7 @@ LICENSE = "Apache License 2.0"
 
 GO ?= $(shell which go || echo "/usr/local/go/bin/go")
 NFPM ?= $(shell which nfpm)
+COMPOSE ?= docker compose -f docker-compose.test.yaml
 OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 REGISTRY ?= "docker.io"
@@ -49,9 +50,31 @@ BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 
 
+# Runs the unit tests. Tests that need a live Aerospike cluster, MinIO, Azurite
+# or fake-gcs-server skip themselves; use test-integration to include them.
 .PHONY: test
 test:
 	$(GOTEST) -parallel $(NPROC) -timeout=5m -count=1 -v ./...
+
+# Runs the full suite, including the tests that need external services.
+# Start them first with test-env-up.
+.PHONY: test-integration
+test-integration:
+	ABSCTL_INTEGRATION=1 $(GOTEST) -parallel $(NPROC) -timeout=5m -count=1 -v ./...
+
+# Starts the services the integration tests need and waits until they are ready.
+# minio-init is run separately because `up --wait` treats a container that exits,
+# even successfully, as a failure.
+.PHONY: test-env-up
+test-env-up:
+	$(COMPOSE) up -d --wait
+	$(COMPOSE) run --rm minio-init
+
+# --profile init is needed for down to also clean up the minio-init container,
+# since compose ignores services whose profile is not active.
+.PHONY: test-env-down
+test-env-down:
+	$(COMPOSE) --profile init down -v
 
 .PHONY: coverage
 coverage:

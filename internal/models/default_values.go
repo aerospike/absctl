@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -169,10 +169,21 @@ const (
 	DefaultBackupTotalTimeout        = int64(0)
 	DefaultBackupParallel            = 1
 	DefaultBackupMaxRetries          = 5
+	DefaultBackupUseScanCompression  = false
 
 	// Server-specific backup.
 
-	DefaultBackupEnableChangeStream = false
+	DefaultBackupEnableChangeStream       = false
+	DefaultServerBackupValidateSampleSize = 10000
+	DefaultServerBackupProgressWatch      = false
+	DefaultServerBackupProgressWatchPoll  = int64(5000)
+)
+
+// Server-backup common.
+const (
+	DefaultServerBackupObjectStorageType = ""
+	DefaultServerBackupJobID             = ""
+	DefaultServerBackupPath              = ""
 )
 
 // Restore.
@@ -197,4 +208,8 @@ const (
 
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false
+
+	// Server-specific restore.
+
+	DefaultServerRestoreFuzzyRestore = false
 )

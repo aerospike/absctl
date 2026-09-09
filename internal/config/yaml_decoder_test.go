@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/aerospike/absctl/internal/config/dto"
+	"github.com/aerospike/absctl/internal/models"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,6 +64,62 @@ encryption:
 invalid: yaml: content:
   - this is not valid
     - yaml format
+`
+
+	// validServerBackupYAML describes the whole snapshot-backup command tree:
+	// each subcommand reads only its own section.
+	validServerBackupYAML = `
+app:
+  log-level: info
+cluster:
+  seeds:
+    - host: 127.0.0.1
+      port: 3000
+backup:
+  namespace: test
+  object-storage-type: aws-s3
+  set-list:
+    - set1
+    - set2
+  no-indexes: true
+list:
+  path: some/prefix
+validate:
+  backup-id: bkp-1
+  sample-size: 500
+progress:
+  backup-id: bkp-1
+  watch: true
+  watch-poll: 2000
+aws:
+  s3:
+    bucket-name: my-bucket
+    region: eu-central-1
+`
+
+	// validServerRestoreYAML describes the whole snapshot-restore command tree.
+	validServerRestoreYAML = `
+app:
+  log-level: info
+cluster:
+  seeds:
+    - host: 127.0.0.1
+      port: 3000
+restore:
+  namespace: test
+  object-storage-type: aws-s3
+  backup-id: bkp-1
+  path: some/prefix
+  fuzzy-restore: true
+prepare:
+  namespace: test
+  backup-id: bkp-1
+progress:
+  namespace: test
+aws:
+  s3:
+    bucket-name: my-bucket
+    region: eu-central-1
 `
 )
 
@@ -372,4 +430,261 @@ func createTempFile(t *testing.T, name, content string) string {
 	require.NoError(t, err)
 
 	return tempFile
+}
+
+func TestDecodeServerBackupServiceConfig(t *testing.T) {
+	t.Parallel()
+
+	filename := createTempFile(t, "valid_server_backup.yaml", validServerBackupYAML)
+
+	tests := []struct {
+		name    string
+		command ServerBackupCommand
+		// assert checks that only the section belonging to the subcommand is
+		// populated. The others must stay nil so their validation is skipped.
+		assert func(t *testing.T, cfg *ServerBackupServiceConfig)
+	}{
+		{
+			name:    "start reads the backup section",
+			command: ServerBackupCommandStart,
+			assert: func(t *testing.T, cfg *ServerBackupServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Start)
+				assert.Nil(t, cfg.List)
+				assert.Nil(t, cfg.Validation)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "test", cfg.Start.Namespace)
+				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
+				assert.Equal(t, "set1,set2", cfg.Start.SetList)
+				assert.True(t, cfg.Start.NoIndexes)
+			},
+		},
+		{
+			name:    "list reads the list section",
+			command: ServerBackupCommandList,
+			assert: func(t *testing.T, cfg *ServerBackupServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.List)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Validation)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "some/prefix", cfg.List.Path)
+			},
+		},
+		{
+			name:    "validate reads the validate section",
+			command: ServerBackupCommandValidate,
+			assert: func(t *testing.T, cfg *ServerBackupServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Validation)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.List)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "bkp-1", cfg.Validation.JobID)
+				assert.Equal(t, 500, cfg.Validation.SampleSize)
+			},
+		},
+		{
+			name:    "progress reads the progress section",
+			command: ServerBackupCommandProgress,
+			assert: func(t *testing.T, cfg *ServerBackupServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Progress)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.List)
+				assert.Nil(t, cfg.Validation)
+
+				assert.Equal(t, "bkp-1", cfg.Progress.JobID)
+				assert.True(t, cfg.Progress.Watch)
+				assert.Equal(t, int64(2000), cfg.Progress.WatchPoll)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := DecodeServerBackupServiceConfig(t.Context(), filename, tt.command)
+			require.NoError(t, err)
+			require.NotNil(t, cfg)
+
+			// The shared sections are always present.
+			require.NotNil(t, cfg.App)
+			require.NotNil(t, cfg.ClientConfig)
+			require.NotNil(t, cfg.AwsS3)
+			assert.Equal(t, "my-bucket", cfg.AwsS3.BucketName)
+			assert.Equal(t, "eu-central-1", cfg.AwsS3.Region)
+
+			tt.assert(t, cfg)
+
+			// Only the populated section is validated, so a config carrying a
+			// single subcommand's settings passes for that subcommand.
+			require.NoError(t, cfg.Validate(false))
+		})
+	}
+}
+
+func TestDecodeServerRestoreServiceConfig(t *testing.T) {
+	t.Parallel()
+
+	filename := createTempFile(t, "valid_server_restore.yaml", validServerRestoreYAML)
+
+	tests := []struct {
+		name    string
+		command ServerRestoreCommand
+		assert  func(t *testing.T, cfg *ServerRestoreServiceConfig)
+	}{
+		{
+			name:    "start reads the restore section",
+			command: ServerRestoreCommandStart,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Start)
+				assert.Nil(t, cfg.Prepare)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "test", cfg.Start.Namespace)
+				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
+				assert.Equal(t, "bkp-1", cfg.Start.JobID)
+				assert.Equal(t, "some/prefix", cfg.Start.Path)
+				assert.True(t, cfg.Start.FuzzyRestore)
+			},
+		},
+		{
+			name:    "prepare reads the prepare section",
+			command: ServerRestoreCommandPrepare,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Prepare)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "test", cfg.Prepare.Namespace)
+				assert.Equal(t, "bkp-1", cfg.Prepare.JobID)
+			},
+		},
+		{
+			name:    "progress reads the progress section",
+			command: ServerRestoreCommandProgress,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Progress)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Prepare)
+
+				assert.Equal(t, "test", cfg.Progress.Namespace)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := DecodeServerRestoreServiceConfig(t.Context(), filename, tt.command)
+			require.NoError(t, err)
+			require.NotNil(t, cfg)
+
+			require.NotNil(t, cfg.App)
+			require.NotNil(t, cfg.ClientConfig)
+			require.NotNil(t, cfg.AwsS3)
+			assert.Equal(t, "my-bucket", cfg.AwsS3.BucketName)
+
+			tt.assert(t, cfg)
+
+			require.NoError(t, cfg.Validate(false))
+		})
+	}
+}
+
+func TestDecodeServerServiceConfigErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown field is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		filename := createTempFile(t, "unknown_field.yaml", "backup:\n  namespace: ns1\n  bogus: 1\n")
+
+		cfg, err := DecodeServerBackupServiceConfig(t.Context(), filename, ServerBackupCommandStart)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "field bogus not found")
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := DecodeServerBackupServiceConfig(t.Context(), "non_existent.yaml", ServerBackupCommandStart)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "failed to open config file non_existent.yaml:")
+	})
+
+	t.Run("empty path", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := DecodeServerRestoreServiceConfig(t.Context(), "", ServerRestoreCommandStart)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "config path is empty")
+	})
+
+	t.Run("unknown subcommand", func(t *testing.T) {
+		t.Parallel()
+
+		filename := createTempFile(t, "unknown_command.yaml", validServerBackupYAML)
+
+		cfg, err := DecodeServerBackupServiceConfig(t.Context(), filename, ServerBackupCommand(99))
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "unknown snapshot-backup command")
+	})
+}
+
+func TestDecodeAppConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reads the app section and ignores the rest", func(t *testing.T) {
+		t.Parallel()
+
+		// The full schema is decoded later by the subcommand, so the sections
+		// this call does not care about must not make it fail.
+		filename := createTempFile(t, "app.yaml", validServerBackupYAML)
+
+		app, err := DecodeAppConfig(filename)
+		require.NoError(t, err)
+		require.NotNil(t, app)
+		assert.Equal(t, "info", app.LogLevel)
+	})
+
+	t.Run("falls back to defaults when the section is absent", func(t *testing.T) {
+		t.Parallel()
+
+		filename := createTempFile(t, "no_app.yaml", "backup:\n  namespace: ns1\n")
+
+		app, err := DecodeAppConfig(filename)
+		require.NoError(t, err)
+		require.NotNil(t, app)
+		assert.Equal(t, models.DefaultAppLogLevel, app.LogLevel)
+	})
+
+	t.Run("empty path", func(t *testing.T) {
+		t.Parallel()
+
+		app, err := DecodeAppConfig("")
+		require.Error(t, err)
+		require.Nil(t, app)
+		assert.Contains(t, err.Error(), "config path is empty")
+	})
 }

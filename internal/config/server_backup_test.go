@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,24 +33,20 @@ const (
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
-			ServerCommon: models.ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testServerStorage,
-			},
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
 		},
 		List: &models.ServerBackupList{
-			ListPath: testServerListPath,
+			Path: testServerListPath,
 		},
 		Validation: &models.ServerBackupValidate{
 			JobID: testServerJobID,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          &models.App{},
-			ClientConfig: &client.AerospikeConfig{},
-			ClientPolicy: &models.ClientPolicy{},
-			Encryption:   &models.Encryption{},
-			Compression:  &models.Compression{},
-		},
+		App:          &models.App{},
+		ClientConfig: &client.AerospikeConfig{},
+		ClientPolicy: &models.ClientPolicy{},
+		Encryption:   &models.Encryption{},
+		Compression:  &models.Compression{},
 	}
 }
 
@@ -191,17 +187,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup: true,
 			wantErr:  false,
-		},
-		{
-			name: "missing list path",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.List.ListPath = ""
-				return cfg
-			},
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
 		},
 		{
 			name: "nil validation skips validation config check",

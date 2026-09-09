@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,10 +77,14 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := backup.GetServerBackup()
 
-	assert.Empty(t, result.Namespace)
-	assert.Empty(t, result.StorageType)
+	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
+	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
 	assert.Equal(t, models.DefaultBackupModifiedAfter, result.ModifiedAfter)
 	assert.Equal(t, models.DefaultBackupModifiedBefore, result.ModifiedBefore)
+	assert.Equal(t, models.DefaultCommonSetList, result.SetList)
+	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
+	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
+	assert.Equal(t, models.DefaultBackupEnableChangeStream, result.EnableChangeStream)
 }
 
 func TestServerBackupList_NewFlagSet(t *testing.T) {
@@ -94,7 +98,7 @@ func TestServerBackupList_NewFlagSet(t *testing.T) {
 
 	result := list.GetServerBackupList()
 
-	assert.Equal(t, "/backups", result.ListPath)
+	assert.Equal(t, "/backups", result.Path)
 }
 
 func TestServerBackupList_NewFlagSet_DefaultValues(t *testing.T) {
@@ -108,7 +112,7 @@ func TestServerBackupList_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := list.GetServerBackupList()
 
-	assert.Equal(t, "/", result.ListPath)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 }
 
 func TestServerBackupValidate_NewFlagSet(t *testing.T) {
@@ -142,6 +146,44 @@ func TestServerBackupValidate_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := validate.GetServerBackupValidate()
 
-	assert.Equal(t, 10000, result.SampleSize)
-	assert.Empty(t, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupValidateSampleSize, result.SampleSize)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+}
+
+func TestServerBackupProgress_NewFlagSet(t *testing.T) {
+	t.Parallel()
+
+	progress := NewServerBackupProgress()
+	flagSet := progress.NewFlagSet()
+
+	args := []string{
+		"--backup-id", "backup-job-1",
+		"--watch",
+		"--watch-poll", "2000",
+	}
+
+	err := flagSet.Parse(args)
+	require.NoError(t, err)
+
+	result := progress.GetServerBackupProgress()
+
+	assert.Equal(t, "backup-job-1", result.JobID)
+	assert.True(t, result.Watch)
+	assert.Equal(t, int64(2000), result.WatchPoll)
+}
+
+func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
+	t.Parallel()
+
+	progress := NewServerBackupProgress()
+	flagSet := progress.NewFlagSet()
+
+	err := flagSet.Parse([]string{})
+	require.NoError(t, err)
+
+	result := progress.GetServerBackupProgress()
+
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupProgressWatch, result.Watch)
+	assert.Equal(t, models.DefaultServerBackupProgressWatchPoll, result.WatchPoll)
 }

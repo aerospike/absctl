@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,10 +30,8 @@ const (
 
 func validServerBackup() *ServerBackup {
 	return &ServerBackup{
-		ServerCommon: ServerCommon{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
-		},
+		Namespace:   testServerNamespace,
+		StorageType: testServerStorage,
 	}
 }
 
@@ -151,7 +149,7 @@ func TestServerBackupList_Validate(t *testing.T) {
 		{
 			name: "valid list path",
 			list: &ServerBackupList{
-				ListPath: testServerListPath,
+				Path: testServerListPath,
 			},
 			wantErr: false,
 		},
@@ -160,12 +158,6 @@ func TestServerBackupList_Validate(t *testing.T) {
 			list:    nil,
 			wantErr: false,
 		},
-		{
-			name:       "missing list path",
-			list:       &ServerBackupList{},
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
-		},
 	}
 
 	for _, tt := range tests {
@@ -173,6 +165,73 @@ func TestServerBackupList_Validate(t *testing.T) {
 			t.Parallel()
 
 			err := tt.list.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerBackupProgress_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		progress   *ServerBackupProgress
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name: "valid progress",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 5000,
+			},
+			wantErr: false,
+		},
+		{
+			name:     "nil progress",
+			progress: nil,
+			wantErr:  false,
+		},
+		{
+			name: "missing backup id",
+			progress: &ServerBackupProgress{
+				WatchPoll: 5000,
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "watch poll below minimum",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 999,
+			},
+			wantErr:    true,
+			wantErrMsg: "watch-poll must be greater than 1000 (1 second)",
+		},
+		{
+			name: "watch poll at minimum",
+			progress: &ServerBackupProgress{
+				JobID:     testServerJobID,
+				WatchPoll: 1000,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.progress.Validate()
 
 			if tt.wantErr {
 				require.Error(t, err)

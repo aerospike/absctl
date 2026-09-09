@@ -265,6 +265,33 @@ make packages
 
 The generated packages and their `sha256` checksum files are written to the `target/` directory.
 
+### Running Tests
+
+```bash
+# Unit tests. No external services required.
+make test
+```
+
+Some tests exercise a live Aerospike cluster and the S3, GCS and Azure Blob
+backends. They skip unless `ABSCTL_INTEGRATION` is set, so `make test` passes on
+a fresh checkout. Each skip message names the service it needs.
+
+[docker-compose.test.yaml](docker-compose.test.yaml) provides those services —
+Aerospike, MinIO, Azurite and fake-gcs-server — using the same images as CI:
+
+```bash
+# Start the services and wait until they are ready
+make test-env-up
+
+# Run everything, including the integration tests
+make test-integration
+
+# Stop the services and delete their data
+make test-env-down
+```
+
+Coverage reported locally will be lower than the CI badge when these tests skip.
+
 ## Configuration
 
 Configuration can be supplied via command-line flags or a YAML file using `--config`.

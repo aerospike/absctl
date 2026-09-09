@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,9 +45,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				AfterDigest:   "some-digest",
 				PartitionList: "some-partition",
-				Common: Common{
-					Directory: testDir,
-				},
+				Directory:     testDir,
 			},
 			wantErr:     true,
 			expectedErr: "only one of after-digest or partition-list can be configured",
@@ -58,9 +56,7 @@ func TestValidateBackup(t *testing.T) {
 				AfterDigest:   "some-digest",
 				PartitionList: "",
 				OutputFile:    testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:     testNamespace,
 			},
 			wantErr:     false,
 			expectedErr: "",
@@ -71,9 +67,7 @@ func TestValidateBackup(t *testing.T) {
 				AfterDigest:   "",
 				PartitionList: "some-partition",
 				OutputFile:    testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:     testNamespace,
 			},
 
 			wantErr:     false,
@@ -85,9 +79,7 @@ func TestValidateBackup(t *testing.T) {
 				AfterDigest:   "",
 				PartitionList: "",
 				OutputFile:    testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:     testNamespace,
 			},
 
 			wantErr:     false,
@@ -118,9 +110,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Estimate:        true,
 				EstimateSamples: 100,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:       testNamespace,
 			},
 
 			wantErr:     false,
@@ -141,7 +131,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Estimate:   false,
 				OutputFile: "",
-				Common:     Common{Directory: ""},
+				Directory:  "",
 			},
 			wantErr:     true,
 			expectedErr: "must specify either estimate, output-file or directory",
@@ -151,10 +141,8 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Estimate:   false,
 				OutputFile: testFile,
-				Common: Common{
-					Directory: "",
-					Namespace: testNamespace,
-				},
+				Directory:  "",
+				Namespace:  testNamespace,
 			},
 			wantErr:     false,
 			expectedErr: "",
@@ -164,10 +152,8 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Estimate:   false,
 				OutputFile: "",
-				Common: Common{
-					Directory: testDir,
-					Namespace: testNamespace,
-				},
+				Directory:  testDir,
+				Namespace:  testNamespace,
 			},
 			wantErr:     false,
 			expectedErr: "",
@@ -177,9 +163,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Continue:   "state.json",
 				OutputFile: testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:  testNamespace,
 			},
 
 			wantErr: false,
@@ -189,9 +173,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				NodeList:   "node1,node2",
 				OutputFile: testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:  testNamespace,
 			},
 
 			wantErr: false,
@@ -201,9 +183,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				FilterExpression: "age > 25",
 				OutputFile:       testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:        testNamespace,
 			},
 
 			wantErr: false,
@@ -214,9 +194,7 @@ func TestValidateBackup(t *testing.T) {
 				ModifiedAfter:  "2024-01-01",
 				ModifiedBefore: "2024-12-31",
 				OutputFile:     testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:      testNamespace,
 			},
 
 			wantErr: false,
@@ -226,9 +204,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				NoTTLOnly:  true,
 				OutputFile: testFile,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace:  testNamespace,
 			},
 
 			wantErr: false,
@@ -257,7 +233,7 @@ func TestValidateBackup(t *testing.T) {
 			name: "Both directory and output file configured",
 			backup: &Backup{
 				OutputFile: testFile,
-				Common:     Common{Directory: testDir},
+				Directory:  testDir,
 			},
 			wantErr:     true,
 			expectedErr: "only one of output-file and directory may be configured at the same time",
@@ -265,9 +241,9 @@ func TestValidateBackup(t *testing.T) {
 		{
 			name: "Both node-list and rack-list configured",
 			backup: &Backup{
-				NodeList: "1,2",
-				RackList: "3,4",
-				Common:   Common{Directory: testDir},
+				NodeList:  "1,2",
+				RackList:  "3,4",
+				Directory: testDir,
 			},
 			wantErr:     true,
 			expectedErr: "only one of node-list or rack-list can be configured",
@@ -277,7 +253,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				Continue:     "state",
 				StateFileDst: "state",
-				Common:       Common{Directory: testDir},
+				Directory:    testDir,
 			},
 			wantErr:     true,
 			expectedErr: "continue and state-file-dst are mutually exclusive",
@@ -306,7 +282,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				OutputFile: testFile,
 				MaxRecords: 10,
-				Common:     Common{Parallel: 10},
+				Parallel:   10,
 			},
 			wantErr:     true,
 			expectedErr: "max-records must be used with parallel = 1",
@@ -316,7 +292,7 @@ func TestValidateBackup(t *testing.T) {
 			backup: &Backup{
 				OutputFile: testFile,
 				MaxRecords: 10,
-				Common:     Common{Namespace: testNamespace, Parallel: 1},
+				Namespace:  testNamespace, Parallel: 1,
 			},
 		},
 	}
@@ -594,9 +570,7 @@ func TestMapPartitionFilter_AfterDigest(t *testing.T) {
 
 	backupModel := &Backup{
 		AfterDigest: "AvDsV2KuSZHZugDBftnLxGpR+88=",
-		Common: Common{
-			Namespace: "test-namespace",
-		},
+		Namespace:   "test-namespace",
 	}
 
 	filters, err := backupModel.PartitionFilters()
@@ -611,9 +585,7 @@ func TestMapPartitionFilter_PartitionList(t *testing.T) {
 
 	backupModel := &Backup{
 		PartitionList: "0-1024",
-		Common: Common{
-			Namespace: "test-namespace",
-		},
+		Namespace:     "test-namespace",
 	}
 
 	filters, err := backupModel.PartitionFilters()
@@ -627,9 +599,7 @@ func TestMapPartitionFilter_NoFilters(t *testing.T) {
 	t.Parallel()
 
 	backupModel := &Backup{
-		Common: Common{
-			Namespace: "test-namespace",
-		},
+		Namespace: "test-namespace",
 	}
 
 	filters, err := backupModel.PartitionFilters()
@@ -649,10 +619,8 @@ func TestMapScanPolicy_Success(t *testing.T) {
 		PreferRacks:         "rack1",
 		NoBins:              true,
 		MaxRetries:          3,
-		Common: Common{
-			TotalTimeout:  10000,
-			SocketTimeout: 3000,
-		},
+		TotalTimeout:        10000,
+		SocketTimeout:       3000,
 	}
 	scanPolicy, err := backupModel.ScanPolicy()
 	require.NoError(t, err)
@@ -929,11 +897,11 @@ func TestParseRacks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			backup := &Backup{
+			b := &Backup{
 				RackList: tt.racks,
 			}
 
-			result, err := backup.Racks()
+			result, err := b.Racks()
 
 			if tt.expectError {
 				require.Error(t, err)

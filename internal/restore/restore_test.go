@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
@@ -49,39 +50,36 @@ func testHostPort() *client.HostTLSPort {
 // Test_BackupRestore one test for both so we can restore from just backed-up files.
 func Test_BackupRestore(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	dir := t.TempDir()
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
+		},
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
 		},
 		Backup: &models.Backup{
-			Common: models.Common{
-				Directory:                     dir,
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
+			Directory:                     dir,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
+			InfoMaxRetries:                3,
+			InfoRetriesMultiplier:         1,
+			InfoRetryIntervalMilliseconds: 1000,
 		},
 	}
 
@@ -97,41 +95,37 @@ func Test_BackupRestore(t *testing.T) {
 	require.NoError(t, err)
 
 	asrParams := &config.RestoreServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
-			AwsS3: &models.AwsS3{
-				RestorePollDuration: 1000,
-			},
-			AzureBlob: &models.AzureBlob{
-				RestorePollDuration: 1000,
-			},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
+		},
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
+		},
+		AwsS3: &models.AwsS3{
+			RestorePollDuration: 1000,
+		},
+		AzureBlob: &models.AzureBlob{
+			RestorePollDuration: 1000,
 		},
 		Restore: &models.Restore{
-			BatchSize:       1,
-			MaxAsyncBatches: 1,
-			Common: models.Common{
-				Directory:                     dir,
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
+			BatchSize:                     1,
+			MaxAsyncBatches:               1,
+			Directory:                     dir,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
+			InfoMaxRetries:                3,
+			InfoRetriesMultiplier:         1,
+			InfoRetryIntervalMilliseconds: 1000,
 		},
 	}
 
@@ -174,21 +168,19 @@ func quietLogger() *slog.Logger {
 
 func newRestoreCfg(r *models.Restore) *config.RestoreServiceConfig {
 	return &config.RestoreServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds:    client.HostTLSPortSlice{testHostPort()},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
-			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{Mode: backup.CompressNone},
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds:    client.HostTLSPortSlice{testHostPort()},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
 		},
-		Restore: r,
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{Mode: backup.CompressNone},
+		Restore:     r,
 	}
 }
 
@@ -197,11 +189,9 @@ func Test_NewService_ValidateOnly_EmptyDir(t *testing.T) {
 
 	cfg := newRestoreCfg(&models.Restore{
 		ValidateOnly: true,
-		Common: models.Common{
-			Directory: t.TempDir(),
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Directory:    t.TempDir(),
+		Namespace:    testNamespace,
+		Parallel:     1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())

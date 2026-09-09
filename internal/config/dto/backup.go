@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,50 +73,48 @@ func (b *Backup) ToModelBackup() *models.Backup {
 	}
 
 	return &models.Backup{
-		//nolint:dupl // Mappings looks the same for common values.
-		Common: models.Common{
-			Directory:                     derefString(b.Backup.Directory),
-			Namespace:                     derefString(b.Backup.Namespace),
-			SetList:                       strings.Join(b.Backup.SetList, ","),
-			BinList:                       strings.Join(b.Backup.BinList, ","),
-			Parallel:                      derefInt(b.Backup.Parallel),
-			NoRecords:                     derefBool(b.Backup.NoRecords),
-			NoIndexes:                     derefBool(b.Backup.NoIndexes),
-			NoUDFs:                        derefBool(b.Backup.NoUDFs),
-			RecordsPerSecond:              derefInt(b.Backup.RecordsPerSecond),
-			TotalTimeout:                  derefInt64(b.Backup.TotalTimeout),
-			SocketTimeout:                 derefInt64(b.Backup.SocketTimeout),
-			Bandwidth:                     derefInt64(b.Backup.Bandwidth),
-			InfoTimeout:                   derefInt64(b.Backup.InfoTimeout),
-			InfoMaxRetries:                derefUint(b.Backup.InfoMaxRetries),
-			InfoRetriesMultiplier:         derefFloat64(b.Backup.InfoRetriesMultiplier),
-			InfoRetryIntervalMilliseconds: derefInt64(b.Backup.InfoRetryIntervalMilliseconds),
-			StdBufferSize:                 derefInt(b.Backup.StdBufferSize),
-		},
-		MaxRetries:          derefInt(b.Backup.MaxRetries),
-		OutputFile:          derefString(b.Backup.OutputFile),
-		RemoveFiles:         derefBool(b.Backup.RemoveFiles),
-		ModifiedBefore:      derefString(b.Backup.ModifiedBefore),
-		ModifiedAfter:       derefString(b.Backup.ModifiedAfter),
-		FileLimit:           derefUint64(b.Backup.FileLimit),
-		AfterDigest:         derefString(b.Backup.AfterDigest),
-		MaxRecords:          derefInt64(b.Backup.MaxRecords),
-		NoBins:              derefBool(b.Backup.NoBins),
-		SleepBetweenRetries: derefInt(b.Backup.SleepBetweenRetries),
-		FilterExpression:    derefString(b.Backup.FilterExpression),
-		RemoveArtifacts:     derefBool(b.Backup.RemoveArtifacts),
-		Compact:             derefBool(b.Backup.Compact),
-		NodeList:            strings.Join(b.Backup.NodeList, ","),
-		NoTTLOnly:           derefBool(b.Backup.NoTTLOnly),
-		PreferRacks:         strings.Join(b.Backup.PreferRacks, ","),
-		PartitionList:       strings.Join(b.Backup.PartitionList, ","),
-		Estimate:            derefBool(b.Backup.Estimate),
-		EstimateSamples:     derefInt64(b.Backup.EstimateSamples),
-		StateFileDst:        derefString(b.Backup.StateFileDst),
-		Continue:            derefString(b.Backup.Continue),
-		ScanPageSize:        derefInt64(b.Backup.ScanPageSize),
-		OutputFilePrefix:    derefString(b.Backup.OutputFilePrefix),
-		RackList:            strings.Join(b.Backup.RackList, ","),
+		Directory:                     derefString(b.Backup.Directory),
+		Namespace:                     derefString(b.Backup.Namespace),
+		SetList:                       strings.Join(b.Backup.SetList, ","),
+		BinList:                       strings.Join(b.Backup.BinList, ","),
+		Parallel:                      derefInt(b.Backup.Parallel),
+		NoRecords:                     derefBool(b.Backup.NoRecords),
+		NoIndexes:                     derefBool(b.Backup.NoIndexes),
+		NoUDFs:                        derefBool(b.Backup.NoUDFs),
+		RecordsPerSecond:              derefInt(b.Backup.RecordsPerSecond),
+		TotalTimeout:                  derefInt64(b.Backup.TotalTimeout),
+		SocketTimeout:                 derefInt64(b.Backup.SocketTimeout),
+		Bandwidth:                     derefInt64(b.Backup.Bandwidth),
+		InfoTimeout:                   derefInt64(b.Backup.InfoTimeout),
+		InfoMaxRetries:                derefUint(b.Backup.InfoMaxRetries),
+		InfoRetriesMultiplier:         derefFloat64(b.Backup.InfoRetriesMultiplier),
+		InfoRetryIntervalMilliseconds: derefInt64(b.Backup.InfoRetryIntervalMilliseconds),
+		StdBufferSize:                 derefInt(b.Backup.StdBufferSize),
+		MaxRetries:                    derefInt(b.Backup.MaxRetries),
+		OutputFile:                    derefString(b.Backup.OutputFile),
+		RemoveFiles:                   derefBool(b.Backup.RemoveFiles),
+		ModifiedBefore:                derefString(b.Backup.ModifiedBefore),
+		ModifiedAfter:                 derefString(b.Backup.ModifiedAfter),
+		FileLimit:                     derefUint64(b.Backup.FileLimit),
+		AfterDigest:                   derefString(b.Backup.AfterDigest),
+		MaxRecords:                    derefInt64(b.Backup.MaxRecords),
+		NoBins:                        derefBool(b.Backup.NoBins),
+		SleepBetweenRetries:           derefInt(b.Backup.SleepBetweenRetries),
+		FilterExpression:              derefString(b.Backup.FilterExpression),
+		RemoveArtifacts:               derefBool(b.Backup.RemoveArtifacts),
+		Compact:                       derefBool(b.Backup.Compact),
+		NodeList:                      strings.Join(b.Backup.NodeList, ","),
+		NoTTLOnly:                     derefBool(b.Backup.NoTTLOnly),
+		PreferRacks:                   strings.Join(b.Backup.PreferRacks, ","),
+		PartitionList:                 strings.Join(b.Backup.PartitionList, ","),
+		Estimate:                      derefBool(b.Backup.Estimate),
+		EstimateSamples:               derefInt64(b.Backup.EstimateSamples),
+		StateFileDst:                  derefString(b.Backup.StateFileDst),
+		Continue:                      derefString(b.Backup.Continue),
+		ScanPageSize:                  derefInt64(b.Backup.ScanPageSize),
+		OutputFilePrefix:              derefString(b.Backup.OutputFilePrefix),
+		RackList:                      strings.Join(b.Backup.RackList, ","),
+		UseScanCompression:            derefBool(b.Backup.UseScanCompression),
 	}
 }
 
@@ -177,6 +175,7 @@ type BackupConfig struct {
 	InfoRetriesMultiplier         *float64 `yaml:"info-retry-multiplier"`
 	InfoRetryIntervalMilliseconds *int64   `yaml:"info-retry-interval"`
 	StdBufferSize                 *int     `yaml:"std-buffer"`
+	UseScanCompression            *bool    `yaml:"use-scan-compression"`
 }
 
 func defaultBackupConfig() BackupConfig {
@@ -222,5 +221,6 @@ func defaultBackupConfig() BackupConfig {
 		RackList:                      []string{},
 		TotalTimeout:                  new(models.DefaultBackupTotalTimeout),
 		Parallel:                      new(models.DefaultBackupParallel),
+		UseScanCompression:            new(models.DefaultBackupUseScanCompression),
 	}
 }

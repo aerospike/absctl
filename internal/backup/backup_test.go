@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
@@ -50,42 +51,39 @@ func testHostPort() *client.HostTLSPort {
 
 func Test_BackupWithState(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	dir := path.Join(t.TempDir(), "plain")
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
+		},
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
 		},
 		Backup: &models.Backup{
-			StateFileDst: testStateFile,
-			ScanPageSize: 10,
-			FileLimit:    100000,
-			Common: models.Common{
-				Directory:                     dir,
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
+			StateFileDst:                  testStateFile,
+			ScanPageSize:                  10,
+			FileLimit:                     100000,
+			Directory:                     dir,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
+			InfoMaxRetries:                3,
+			InfoRetriesMultiplier:         1,
+			InfoRetryIntervalMilliseconds: 1000,
 		},
 	}
 
@@ -103,46 +101,43 @@ func Test_BackupWithState(t *testing.T) {
 
 func Test_BackupEstimates(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
-			Encryption:  nil,
-			SecretAgent: nil,
-			AwsS3:       nil,
-			GcpStorage:  nil,
-			AzureBlob:   nil,
-			Local:       nil,
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
 		},
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
+		},
+		Encryption:  nil,
+		SecretAgent: nil,
+		AwsS3:       nil,
+		GcpStorage:  nil,
+		AzureBlob:   nil,
+		Local:       nil,
 		Backup: &models.Backup{
-			FileLimit: 100000,
-			Common: models.Common{
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
-			Estimate:        true,
-			EstimateSamples: 100,
+			FileLimit:                     100000,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
+			InfoMaxRetries:                3,
+			InfoRetriesMultiplier:         1,
+			InfoRetryIntervalMilliseconds: 1000,
+			Estimate:                      true,
+			EstimateSamples:               100,
 		},
 	}
 
@@ -164,21 +159,19 @@ func quietLogger() *slog.Logger {
 
 func newBackupCfg(b *models.Backup) *config.BackupServiceConfig {
 	return &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds:    client.HostTLSPortSlice{testHostPort()},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
-			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{Mode: backup.CompressNone},
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds:    client.HostTLSPortSlice{testHostPort()},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
 		},
-		Backup: b,
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{Mode: backup.CompressNone},
+		Backup:      b,
 	}
 }
 
@@ -231,12 +224,10 @@ func Test_BackupInfoPolicies(t *testing.T) {
 
 	cfg := &config.BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				InfoTimeout:                   1500,
-				InfoMaxRetries:                4,
-				InfoRetriesMultiplier:         2.0,
-				InfoRetryIntervalMilliseconds: 250,
-			},
+			InfoTimeout:                   1500,
+			InfoMaxRetries:                4,
+			InfoRetriesMultiplier:         2.0,
+			InfoRetryIntervalMilliseconds: 250,
 		},
 	}
 
@@ -255,10 +246,8 @@ func Test_NewService_InvalidRackList(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit: 1,
 		RackList:  "not-a-number",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace: testNamespace,
+		Parallel:  1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -273,10 +262,8 @@ func Test_NewService_NegativeRackID(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit: 1,
 		RackList:  "-1",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace: testNamespace,
+		Parallel:  1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -290,10 +277,8 @@ func Test_NewService_InvalidPartitionList(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:     1,
 		PartitionList: "not-a-partition",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:     testNamespace,
+		Parallel:      1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -308,10 +293,8 @@ func Test_NewService_InvalidFilterExpression(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:        1,
 		FilterExpression: "!!!not-base64!!!",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:        testNamespace,
+		Parallel:         1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -326,10 +309,8 @@ func Test_NewService_InvalidModifiedBefore(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:      1,
 		ModifiedBefore: "not-a-date",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:      testNamespace,
+		Parallel:       1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -344,10 +325,8 @@ func Test_NewService_InvalidModifiedAfter(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:     1,
 		ModifiedAfter: "not-a-date",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:     testNamespace,
+		Parallel:      1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())

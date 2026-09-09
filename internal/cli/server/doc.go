@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,8 +57,9 @@ func backupStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common commo
 	}
 }
 
-func backupListHelpSections(listFS, awsFS *pflag.FlagSet) []HelpSection {
+func backupListHelpSections(appFS, listFS, awsFS *pflag.FlagSet) []HelpSection {
 	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{appFS}},
 		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{listFS}},
 		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{awsFS}},
 	}
@@ -74,8 +75,9 @@ func backupProgressHelpSections(common commonFlagSets, progressFs, awsFS *pflag.
 	}
 }
 
-func backupValidateHelpSections(validationFS, awsFS *pflag.FlagSet) []HelpSection {
+func backupValidateHelpSections(appFS, validationFS, awsFS *pflag.FlagSet) []HelpSection {
 	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{appFS}},
 		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{validationFS}},
 		{Title: flags.SectionTextAWS, FlagSets: []*pflag.FlagSet{awsFS}},
 	}
@@ -135,7 +137,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Short:    ShortBackupList,
 			Long:     LongBackupList,
 			Usage:    flags.SectionTextUsageBackupList,
-			Sections: backupListHelpSections(listFS, awsFS),
+			Sections: backupListHelpSections(common.app, listFS, awsFS),
 		},
 		{
 			Name:     UseProgress,
@@ -149,7 +151,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Short:    ShortBackupValidate,
 			Long:     LongBackupValidate,
 			Usage:    flags.SectionTextUsageValidate,
-			Sections: backupValidateHelpSections(validationFS, awsFS),
+			Sections: backupValidateHelpSections(common.app, validationFS, awsFS),
 		},
 	}
 }

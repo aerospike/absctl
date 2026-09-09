@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,6 +56,14 @@ const (
 
 	opBackup  = "backup"
 	opRestore = "restore"
+
+	// serverConfigSchemaIntro is the paragraph printed above the generated
+	// snapshot-backup / snapshot-restore YAML schema.
+	serverConfigSchemaIntro = "\nA single file describes the whole `absctl snapshot-%s` command tree. " +
+		"Pass it to any subcommand with `--config`:\n" +
+		"only the section named after that subcommand is read, the others are ignored.\n" +
+		"When `--config` is set it is the single source of truth \u2014 all other flags are ignored.\n\n" +
+		"```bash\nabsctl snapshot-%s start --config cfg.yaml\n```\n\n"
 )
 
 // docSection binds a markdown section, its flag set, and its YAML mapping logic together.
@@ -77,7 +85,7 @@ func main() {
 	}
 
 	for _, gen := range []struct {
-		name string
+		name  string
 		build func() []server.SubcommandDoc
 	}{
 		{opBackup, server.BuildBackupSubcommandDocs},
@@ -103,8 +111,10 @@ func generateScan(operation string) error {
 		return fmt.Errorf("marker %q not found in %s", sectionSupportedFlags, docFilePath)
 	}
 
-	// Keep everything before the marker, plus its leading newline.
-	staticHeader := string(existing[:idx+1])
+	// Keep everything before the marker. Its leading newline is part of
+	// sectionSupportedFlags, so excluding it here keeps the generation
+	// idempotent instead of adding a blank line on every run.
+	staticHeader := string(existing[:idx])
 
 	opID := flags.OperationBackup
 	if operation == opRestore {
@@ -183,6 +193,17 @@ func generateServer(name string, subcommands []server.SubcommandDoc) error {
 		sb.WriteString(generateHelpSectionsContent(sub.Sections))
 		sb.WriteString("```\n")
 	}
+
+	yamlContent, err := generateServerYAMLContent(name)
+	if err != nil {
+		return fmt.Errorf("generate YAML: %w", err)
+	}
+
+	sb.WriteString(sectionConfigSchema)
+	sb.WriteString(fmt.Sprintf(serverConfigSchemaIntro, name, name))
+	sb.WriteString("```yaml\n")
+	sb.WriteString(yamlContent)
+	sb.WriteString("```\n")
 
 	return os.WriteFile(docPath, []byte(sb.String()), 0o644)
 }
@@ -373,6 +394,175 @@ func buildSections(operation string, opID flags.Operation) []docSection {
 	return sections
 }
 
+// buildServerSections associates the snapshot-backup / snapshot-restore flag
+// sets with their YAML paths so the generated schema carries the same
+// descriptions as the flags. Only the FS and YAML mapping matter here: the
+// markdown flag listing comes from the per-subcommand help sections.
+func buildServerSections(operation string) []docSection {
+	sections := []docSection{
+		// App flags.
+		{
+			FS:         flags.NewApp().NewFlagSet(),
+			YAMLPrefix: "app",
+			FlagToYAMLPath: func(prefix string, f *pflag.Flag) string {
+				if f.Name == "config" || f.Name == "help" {
+					return ""
+				}
+				return prefix + "." + f.Name
+			},
+		},
+	}
+
+	// Aerospike client flags.
+	aeroFS := asFlags.NewDefaultAerospikeFlags().NewFlagSet(asFlags.DefaultWrapHelpString)
+	flags.WrapFlagsForSecrets(aeroFS)
+	sections = append(sections, docSection{
+		FS:         aeroFS,
+		YAMLPrefix: "cluster",
+		FlagToYAMLPath: func(prefix string, f *pflag.Flag) string {
+			if f.Name == "host" || f.Name == "port" {
+				return "" // handled by cluster.seeds
+			}
+			if strings.HasPrefix(f.Name, "tls-") {
+				return prefix + ".tls." + strings.TrimPrefix(f.Name, "tls-")
+			}
+			return prefix + "." + f.Name
+		},
+	})
+
+	// Client policy flags.
+	sections = append(sections, docSection{
+		FS:         flags.NewClientPolicy().NewFlagSet(),
+		YAMLPrefix: "cluster",
+	})
+
+	// One section per subcommand, keyed by the subcommand name.
+	if operation == opBackup {
+		sections = append(sections,
+			docSection{FS: flags.NewServerBackup().NewFlagSet(), YAMLPrefix: "backup"},
+			docSection{FS: flags.NewServerBackupList().NewFlagSet(), YAMLPrefix: "list"},
+			docSection{FS: flags.NewServerBackupValidate().NewFlagSet(), YAMLPrefix: "validate"},
+			docSection{FS: flags.NewServerBackupProgress().NewFlagSet(), YAMLPrefix: "progress"},
+		)
+	} else {
+		sections = append(sections,
+			docSection{FS: flags.NewServerRestore().NewFlagSet(), YAMLPrefix: "restore"},
+			docSection{FS: flags.NewServerRestorePrepare().NewFlagSet(), YAMLPrefix: "prepare"},
+			docSection{FS: flags.NewServerRestoreProgress().NewFlagSet(), YAMLPrefix: "progress"},
+		)
+	}
+
+	// Secret agent flags.
+	sections = append(sections, docSection{
+		FS:         flags.NewSecretAgent().NewFlagSet(),
+		YAMLPrefix: "secret-agent",
+		FlagToYAMLPath: func(prefix string, f *pflag.Flag) string {
+			return prefix + "." + strings.TrimPrefix(f.Name, "sa-")
+		},
+	})
+
+	// Object storage flags. The server transfers the data itself, so this is
+	// the reduced S3 flag set, not the full client-side one.
+	sections = append(sections, docSection{
+		FS:         flags.NewObjectStorageS3().NewFlagSet(),
+		YAMLPrefix: "aws.s3",
+		FlagToYAMLPath: func(prefix string, f *pflag.Flag) string {
+			return prefix + "." + strings.TrimPrefix(f.Name, "s3-")
+		},
+	})
+
+	return sections
+}
+
+// generateServerYAMLContent generates the annotated YAML schema for one server
+// command tree.
+func generateServerYAMLContent(operation string) (string, error) {
+	var exampleDTO any
+
+	switch operation {
+	case opBackup:
+		exampleDTO = serverBackupExampleDTO()
+	case opRestore:
+		exampleDTO = serverRestoreExampleDTO()
+	default:
+		return "", fmt.Errorf("unknown server operation %q", operation)
+	}
+
+	return encodeAnnotatedYAML(exampleDTO, buildServerSections(operation))
+}
+
+// serverBackupExampleDTO returns a ServerBackup DTO populated with example values.
+func serverBackupExampleDTO() *dto.ServerBackup {
+	b := dto.DefaultServerBackup()
+
+	ns := "source-ns1"
+	storageType := "aws-s3"
+	jobID := "backup-id-1"
+	path := "backup_dir"
+
+	b.Backup.Namespace = &ns
+	b.Backup.StorageType = &storageType
+	b.Backup.SetList = []string{"set1", "set2"}
+
+	b.List.Path = &path
+
+	b.Validate.JobID = &jobID
+	b.Progress.JobID = &jobID
+
+	applyServerClusterExample(&b.Cluster)
+	applyServerS3Example(&b.Aws.S3)
+
+	return b
+}
+
+// serverRestoreExampleDTO returns a ServerRestore DTO populated with example values.
+func serverRestoreExampleDTO() *dto.ServerRestore {
+	r := dto.DefaultServerRestore()
+
+	ns := "source-ns1"
+	storageType := "aws-s3"
+	jobID := "backup-id-1"
+	path := "backup_dir"
+
+	r.Restore.Namespace = &ns
+	r.Restore.StorageType = &storageType
+	r.Restore.JobID = &jobID
+	r.Restore.Path = &path
+
+	r.Prepare.Namespace = &ns
+	r.Prepare.JobID = &jobID
+
+	r.Progress.Namespace = &ns
+
+	applyServerClusterExample(&r.Cluster)
+	applyServerS3Example(&r.Aws.S3)
+
+	return r
+}
+
+// applyServerClusterExample fills the cluster section with the same example
+// credentials the scan schemas use.
+func applyServerClusterExample(c *dto.Cluster) {
+	user := "db_user"
+	pass := "db_password"
+	c.User = &user
+	c.Password = &pass
+
+	idleTimeout := int64(60000)
+	c.ClientIdleTimeout = &idleTimeout
+
+	tlsEnabled := true
+	c.TLS.Enable = &tlsEnabled
+}
+
+// applyServerS3Example fills the object storage section with example values.
+func applyServerS3Example(s3 *dto.ObjectStorageS3) {
+	bucket := "backup-bucket"
+	region := "us-east-1"
+	s3.BucketName = &bucket
+	s3.Region = &region
+}
+
 // generateFlagsContent generates the markdown flags section by iterating through all docSections.
 func generateFlagsContent(sections []docSection) string {
 	var sb strings.Builder
@@ -444,6 +634,12 @@ func generateYAMLContent(operation string, sections []docSection) (string, error
 		exampleDTO = restoreExampleDTO()
 	}
 
+	return encodeAnnotatedYAML(exampleDTO, sections)
+}
+
+// encodeAnnotatedYAML encodes an example DTO to YAML and annotates each key
+// with the usage text of the flag it mirrors.
+func encodeAnnotatedYAML(exampleDTO any, sections []docSection) (string, error) {
 	var doc yaml.Node
 	if err := doc.Encode(exampleDTO); err != nil {
 		return "", fmt.Errorf("encode DTO: %w", err)
