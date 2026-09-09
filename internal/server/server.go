@@ -390,7 +390,7 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 	streamer, err := streamers.NewS3(
 		client,
 		s.backupCfg.AwsS3.BucketName,
-		s.backupCfg.Progress.JobID,
+		s.backupCfg.Validation.JobID,
 		streamers.WithLogger(s.logger),
 	)
 	if err != nil {

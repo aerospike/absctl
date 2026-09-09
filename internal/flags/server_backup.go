@@ -107,7 +107,7 @@ func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.IntVar(&f.SampleSize, "sample-size",
 		models.DefaultServerBackupValidateSampleSize,
-		"Number of segments for random validation.")
+		"Number of segments for random validation. 0 means validate all segments.")
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")

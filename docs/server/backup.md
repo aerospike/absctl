@@ -308,7 +308,7 @@ General Flags:
       --config string      Path to YAML configuration file.
 
 Backup Flags:
-      --sample-size int    Number of segments for random validation. (default 10000)
+      --sample-size int    Number of segments for random validation. 0 means validate all segments. (default 10000)
       --backup-id string   Backup id
 
 AWS Storage Flags:
@@ -451,7 +451,7 @@ list:
 validate:
   # Backup id
   backup-id: backup-id-1
-  # Number of segments for random validation.
+  # Number of segments for random validation. 0 means validate all segments.
   sample-size: 10000
 progress:
   # Backup id
