@@ -226,6 +226,9 @@ Backup Flags:
       --scan-page-size int          Number of records will be read on one iteration for continuation backup.
                                     Affects size if overlap on resuming backup after an error.
                                     Used only with --state-file-dst or --continue. (default 10000)
+      --use-scan-compression        Uses zlib compression on command buffers sent to the server and responses received from the server.
+                                    This option will increase cpu and memory usage, but decrease the size of data sent over the network.
+                                    Valid for Aerospike Server Enterprise Edition only.
 
 Compression Flags:
   -z, --compress string         Enables compressing of backup files using the specified compression algorithm.
@@ -621,6 +624,10 @@ backup:
   info-retry-interval: 1000
   # Buffer size in MiB for stdin and stdout operations. Used for pipelining.
   std-buffer: 4
+  # Uses zlib compression on command buffers sent to the server and responses received from the server.
+  # This option will increase cpu and memory usage, but decrease the size of data sent over the network.
+  # Valid for Aerospike Server Enterprise Edition only.
+  use-scan-compression: false
 compression:
   # Enables compressing of backup files using the specified compression algorithm.
   # Supported compression algorithms are: ZSTD, NONE

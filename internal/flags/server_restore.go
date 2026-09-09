@@ -31,12 +31,21 @@ func NewServerRestore() *ServerRestore {
 func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
-		"Example: aws-s3")
-	flagSet.StringVar(&f.JobID, "backup-id", "", "Job id used for restore.")
-	flagSet.StringVar(&f.Path, "path", "", "Path to restore from.")
-	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore", false, "Fuzzy restore.")
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace to restore.")
+	flagSet.StringVar(&f.StorageType, "object-storage-type",
+		models.DefaultServerBackupObjectStorageType,
+		"Type of object storage. Example: aws-s3")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Job id used for restore.")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		"Path to restore from.")
+	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore",
+		models.DefaultServerRestoreFuzzyRestore,
+		"Fuzzy restore.")
 
 	return flagSet
 }
@@ -57,8 +66,12 @@ func NewServerRestorePrepare() *ServerRestorePrepare {
 func (f *ServerRestorePrepare) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
-	flagSet.StringVar(&f.JobID, "backup-id", "", "Job id used for restore.")
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace to restore.")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Job id used for restore.")
 
 	return flagSet
 }
@@ -78,7 +91,9 @@ func NewServerRestoreProgress() *ServerRestoreProgress {
 func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to check progress.")
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace to check progress.")
 
 	return flagSet
 }

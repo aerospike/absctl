@@ -267,3 +267,131 @@ Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
       --sa-key-file string          Path to a client private key file for mutual TLS authentication.
       --sa-is-base64                Whether Secret Agent responses are Base64 encoded.
 ```
+
+## Configuration file schema with example values
+
+A single file describes the whole `absctl snapshot-restore` command tree. Pass it to any subcommand with `--config`:
+only the section named after that subcommand is read, the others are ignored.
+When `--config` is set it is the single source of truth — all other flags are ignored.
+
+```bash
+absctl snapshot-restore start --config cfg.yaml
+```
+
+```yaml
+app:
+  # Enable more detailed logging.
+  verbose: false
+  # Determine log level for verbose output. Log levels are: debug, info, warn, error.
+  log-level: debug
+  # Set output in JSON format for parsing by external tools.
+  log-json: false
+  # Path to log file. If empty, logs will be printed to stderr.
+  log-file: ""
+cluster:
+  seeds:
+    - host: 127.0.0.1
+      tls-name: ""
+      port: 3000
+  # The Aerospike user for the connection to the Aerospike cluster.
+  user: db_user
+  # The Aerospike password for the connection to the Aerospike
+  # cluster.
+  password: db_password
+  # The authentication mode used by the Aerospike server. INTERNAL
+  # uses standard user/pass. EXTERNAL uses external methods (like LDAP)
+  # which are configured on the server. EXTERNAL requires TLS. PKI allows
+  # TLS authentication and authorization based on a certificate. No
+  # username needs to be configured.
+  auth: INTERNAL
+  # Initial host connection timeout duration. The timeout when opening a connection
+  # to the server host for the first time.
+  client-timeout: 30000
+  # Idle timeout. Every time a connection is used, its idle
+  # deadline will be extended by this duration. When this deadline is reached,
+  # the connection will be closed and discarded from the connection pool.
+  # The value is limited to 24 hours (86400s).
+  # It's important to set this value to a few seconds less than the server's proto-fd-idle-ms
+  # (default 60000 milliseconds or 1 minute), so the client does not attempt to use a socket
+  # that has already been reaped by the server.
+  # Connection pools are now implemented by a LIFO stack. Connections at the tail of the
+  # stack will always be the least used. These connections are checked for IdleTimeout
+  # on every tend (usually 1 second).
+  client-idle-timeout: 60000
+  # Specifies the login operation timeout for external authentication methods such as LDAP.
+  client-login-timeout: 10000
+  # Determines if the client should use "services-alternate" instead
+  # of "services" in info request during cluster tending.
+  services-alternate: false
+  tls:
+    # Enable TLS authentication with Aerospike. If false, other TLS
+    # options are ignored.
+    enable: true
+    # Set the TLS protocol selection criteria. This format is the same
+    # as Apache's SSLProtocol documented at
+    # https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol
+    protocols: +TLSv1.2
+    # The CA used when connecting to Aerospike.
+    cafile: ""
+    # A path containing CAs for connecting to Aerospike.
+    capath: ""
+    # The certificate file for mutual TLS authentication with
+    # Aerospike.
+    certfile: ""
+    # The key file used for mutual TLS authentication with Aerospike.
+    keyfile: ""
+    # The password used to decrypt the key file if encrypted.
+    keyfile-password: ""
+restore:
+  # The namespace to restore.
+  namespace: source-ns1
+  # Type of object storage. Example: aws-s3
+  object-storage-type: aws-s3
+  # Job id used for restore.
+  backup-id: backup-id-1
+  # Path to restore from.
+  path: backup_dir
+  # Fuzzy restore.
+  fuzzy-restore: false
+prepare:
+  # The namespace to restore.
+  namespace: source-ns1
+  # Job id used for restore.
+  backup-id: backup-id-1
+progress:
+  # The namespace to check progress.
+  namespace: source-ns1
+secret-agent:
+  # Secret Agent connection type. Supported types: TCP, UNIX.
+  connection-type: TCP
+  # Secret Agent host for TCP connection or socket file path for UDS connection.
+  address: ""
+  # Secret Agent port (only for TCP connection).
+  port: 0
+  # Secret Agent connection and reading timeout.
+  timeout: 10000
+  # Path to ca file for encrypted connections.
+  ca-file: ""
+  # Path to a client certificate file for mutual TLS authentication.
+  cert-file: ""
+  # Path to a client private key file for mutual TLS authentication.
+  key-file: ""
+  # TLS name (SNI) for encrypted connections.
+  tls-name: ""
+  # Whether Secret Agent responses are Base64 encoded.
+  is-base64: false
+aws:
+  s3:
+    # Existing S3 bucket name
+    bucket-name: backup-bucket
+    # The S3 region that the bucket(s) exist in.
+    region: us-east-1
+    # The S3 profile to use for credentials.
+    profile: ""
+    # An alternate URL endpoint to send S3 API calls to.
+    endpoint-override: ""
+    # S3 access key ID. If not set, profile auth info will be used.
+    access-key-id: ""
+    # S3 secret access key. If not set, profile auth info will be used.
+    secret-access-key: ""
+```

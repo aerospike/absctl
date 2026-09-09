@@ -43,6 +43,13 @@ func defaultApp() App {
 	}
 }
 
+// DefaultAppDTO returns an App section populated with default values. It is
+// exported so the app settings can be read on their own, ahead of the full
+// schema, when a command needs them to initialize its logger.
+func DefaultAppDTO() App {
+	return defaultApp()
+}
+
 func (a *App) ToModelApp() *models.App {
 	return &models.App{
 		Verbose:  derefBool(a.Verbose),
@@ -368,15 +375,48 @@ func (s *SecretAgent) ToModelSecretAgent() *models.SecretAgent {
 	}
 }
 
+// AwsS3Common defines the S3 connection settings shared by the scan-based
+// commands (backup, restore) and the server-integrated ones (snapshot-backup,
+// snapshot-restore). It is embedded inline so both schemas expose these keys at
+// the same YAML level.
+type AwsS3Common struct {
+	BucketName       *string `yaml:"bucket-name"`
+	Region           *string `yaml:"region"`
+	Profile          *string `yaml:"profile"`
+	EndpointOverride *string `yaml:"endpoint-override"`
+	AccessKeyID      *string `yaml:"access-key-id"`
+	SecretAccessKey  *string `yaml:"secret-access-key"`
+}
+
+func defaultAwsS3Common() AwsS3Common {
+	return AwsS3Common{
+		BucketName:       new(models.DefaultS3BucketName),
+		Region:           new(models.DefaultS3Region),
+		Profile:          new(models.DefaultS3Profile),
+		EndpointOverride: new(models.DefaultS3Endpoint),
+		AccessKeyID:      new(models.DefaultS3AccessKeyID),
+		SecretAccessKey:  new(models.DefaultS3SecretAccessKey),
+	}
+}
+
+// secretableFields returns the string fields that may hold secret agent
+// references (secrets:resource:key).
+func (a *AwsS3Common) secretableFields() []*string {
+	if a == nil {
+		return nil
+	}
+
+	return []*string{
+		a.BucketName, a.Region, a.Profile,
+		a.EndpointOverride, a.AccessKeyID, a.SecretAccessKey,
+	}
+}
+
 // AwsS3 defines configuration for AWS S3 storage including bucket details and retry mechanisms
 // parsed from a YAML file.
 type AwsS3 struct {
-	BucketName           *string  `yaml:"bucket-name"`
-	Region               *string  `yaml:"region"`
-	Profile              *string  `yaml:"profile"`
-	EndpointOverride     *string  `yaml:"endpoint-override"`
-	AccessKeyID          *string  `yaml:"access-key-id"`
-	SecretAccessKey      *string  `yaml:"secret-access-key"`
+	AwsS3Common `yaml:",inline"`
+
 	RestorePollDuration  *int64   `yaml:"restore-poll-duration"`
 	StorageClass         *string  `yaml:"storage-class"`
 	AccessTier           *string  `yaml:"tier"`
@@ -394,12 +434,7 @@ type AwsS3 struct {
 
 func defaultAwsS3() AwsS3 {
 	return AwsS3{
-		BucketName:           new(models.DefaultS3BucketName),
-		Region:               new(models.DefaultS3Region),
-		Profile:              new(models.DefaultS3Profile),
-		EndpointOverride:     new(models.DefaultS3Endpoint),
-		AccessKeyID:          new(models.DefaultS3AccessKeyID),
-		SecretAccessKey:      new(models.DefaultS3SecretAccessKey),
+		AwsS3Common:          defaultAwsS3Common(),
 		RestorePollDuration:  new(models.DefaultS3RestorePollDuration),
 		StorageClass:         new(models.DefaultS3StorageClass),
 		AccessTier:           new(models.DefaultS3AccessTier),
@@ -441,6 +476,44 @@ func (a *AwsS3) ToModelAwsS3() *models.AwsS3 {
 		RetryReadMaxAttempts: derefUint(a.RetryReadMaxAttempts),
 		MaxConnsPerHost:      derefInt(a.MaxConnsPerHost),
 		RequestTimeout:       derefInt(a.RequestTimeout),
+	}
+}
+
+// ObjectStorageS3 is the S3 schema used by the server-integrated commands
+// (snapshot-backup, snapshot-restore). The Aerospike server performs the
+// transfer itself, so only the connection settings are configurable here — the
+// client-side tuning knobs exposed by AwsS3 have no equivalent flag.
+type ObjectStorageS3 struct {
+	AwsS3Common `yaml:",inline"`
+}
+
+func defaultObjectStorageS3() ObjectStorageS3 {
+	return ObjectStorageS3{AwsS3Common: defaultAwsS3Common()}
+}
+
+// ToModelAwsS3 maps the reduced schema onto models.AwsS3, filling the
+// client-side fields with the same defaults flags.ObjectStorageS3.ToAwsS3 uses
+// so the shared validation passes.
+func (o *ObjectStorageS3) ToModelAwsS3() *models.AwsS3 {
+	if o == nil {
+		return nil
+	}
+
+	return &models.AwsS3{
+		BucketName:      derefString(o.BucketName),
+		Region:          derefString(o.Region),
+		Profile:         derefString(o.Profile),
+		Endpoint:        derefString(o.EndpointOverride),
+		AccessKeyID:     derefString(o.AccessKeyID),
+		SecretAccessKey: derefString(o.SecretAccessKey),
+		// Set defaults to pass validation.
+		RestorePollDuration:  models.DefaultS3RestorePollDuration,
+		RetryMaxAttempts:     models.DefaultS3RetryMaxAttempts,
+		RetryMaxBackoff:      models.DefaultS3RetryMaxBackoff,
+		ChunkSize:            models.DefaultS3ChunkSize,
+		RetryReadBackoff:     models.DefaultCloudRetryReadBackoff,
+		RetryReadMultiplier:  models.DefaultCloudRetryReadMultiplier,
+		RetryReadMaxAttempts: models.DefaultCloudRetryReadMaxAttempts,
 	}
 }
 

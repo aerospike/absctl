@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/aerospike/absctl/internal/config/dto"
+	"github.com/aerospike/absctl/internal/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,6 +113,166 @@ func dtoToRestoreServiceConfig(dtoRestore *dto.Restore) (*RestoreServiceConfig, 
 		GcpStorage:   dtoRestore.Gcp.Storage.ToModelGcpStorage(),
 		AzureBlob:    dtoRestore.Azure.Blob.ToModelAzureBlob(),
 	}, nil
+}
+
+// ServerBackupCommand identifies which snapshot-backup subcommand a decoded
+// config is built for. One config file describes the whole command tree, so
+// only the section belonging to the invoked subcommand is populated — the rest
+// stay nil and are skipped by ServerBackupServiceConfig.Validate.
+type ServerBackupCommand int
+
+const (
+	ServerBackupCommandStart ServerBackupCommand = iota
+	ServerBackupCommandList
+	ServerBackupCommandValidate
+	ServerBackupCommandProgress
+)
+
+// DecodeServerBackupServiceConfig reads a snapshot-backup configuration file and
+// decodes it into ServerBackupServiceConfig for the given subcommand.
+// Secret agent references (secrets:resource:key) in the YAML are resolved before conversion.
+func DecodeServerBackupServiceConfig(
+	ctx context.Context, filename string, command ServerBackupCommand,
+) (*ServerBackupServiceConfig, error) {
+	backupDto := dto.DefaultServerBackup()
+	if err := decodeFromFile(filename, backupDto); err != nil {
+		return nil, err
+	}
+
+	if err := backupDto.LoadSecrets(ctx); err != nil {
+		return nil, fmt.Errorf("failed to resolve secrets: %w", err)
+	}
+
+	return dtoToServerBackupServiceConfig(backupDto, command)
+}
+
+func dtoToServerBackupServiceConfig(
+	dtoBackup *dto.ServerBackup, command ServerBackupCommand,
+) (*ServerBackupServiceConfig, error) {
+	if dtoBackup == nil {
+		return nil, fmt.Errorf("dto is nil")
+	}
+
+	asConfig, err := dtoBackup.Cluster.ToAerospikeConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to map to aerospike config: %w", err)
+	}
+
+	cfg := &ServerBackupServiceConfig{
+		App:          dtoBackup.App.ToModelApp(),
+		ClientConfig: asConfig,
+		ClientPolicy: dtoBackup.Cluster.ToModelClientPolicy(),
+		SecretAgent:  dtoBackup.SecretAgent.ToModelSecretAgent(),
+		AwsS3:        dtoBackup.Aws.S3.ToModelAwsS3(),
+	}
+
+	switch command {
+	case ServerBackupCommandStart:
+		cfg.Start = dtoBackup.ToModelServerBackup()
+	case ServerBackupCommandList:
+		cfg.List = dtoBackup.ToModelServerBackupList()
+	case ServerBackupCommandValidate:
+		cfg.Validation = dtoBackup.ToModelServerBackupValidate()
+	case ServerBackupCommandProgress:
+		cfg.Progress = dtoBackup.ToModelServerBackupProgress()
+	default:
+		return nil, fmt.Errorf("unknown snapshot-backup command %d", command)
+	}
+
+	return cfg, nil
+}
+
+// ServerRestoreCommand identifies which snapshot-restore subcommand a decoded
+// config is built for. See ServerBackupCommand.
+type ServerRestoreCommand int
+
+const (
+	ServerRestoreCommandStart ServerRestoreCommand = iota
+	ServerRestoreCommandPrepare
+	ServerRestoreCommandProgress
+)
+
+// DecodeServerRestoreServiceConfig reads a snapshot-restore configuration file and
+// decodes it into ServerRestoreServiceConfig for the given subcommand.
+// Secret agent references (secrets:resource:key) in the YAML are resolved before conversion.
+func DecodeServerRestoreServiceConfig(
+	ctx context.Context, filename string, command ServerRestoreCommand,
+) (*ServerRestoreServiceConfig, error) {
+	restoreDto := dto.DefaultServerRestore()
+	if err := decodeFromFile(filename, restoreDto); err != nil {
+		return nil, err
+	}
+
+	if err := restoreDto.LoadSecrets(ctx); err != nil {
+		return nil, fmt.Errorf("failed to resolve secrets: %w", err)
+	}
+
+	return dtoToServerRestoreServiceConfig(restoreDto, command)
+}
+
+func dtoToServerRestoreServiceConfig(
+	dtoRestore *dto.ServerRestore, command ServerRestoreCommand,
+) (*ServerRestoreServiceConfig, error) {
+	if dtoRestore == nil {
+		return nil, fmt.Errorf("dto is nil")
+	}
+
+	asConfig, err := dtoRestore.Cluster.ToAerospikeConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to map to aerospike config: %w", err)
+	}
+
+	cfg := &ServerRestoreServiceConfig{
+		App:          dtoRestore.App.ToModelApp(),
+		ClientConfig: asConfig,
+		ClientPolicy: dtoRestore.Cluster.ToModelClientPolicy(),
+		SecretAgent:  dtoRestore.SecretAgent.ToModelSecretAgent(),
+		AwsS3:        dtoRestore.Aws.S3.ToModelAwsS3(),
+	}
+
+	switch command {
+	case ServerRestoreCommandStart:
+		cfg.Start = dtoRestore.ToModelServerRestore()
+	case ServerRestoreCommandPrepare:
+		cfg.Prepare = dtoRestore.ToModelServerRestorePrepare()
+	case ServerRestoreCommandProgress:
+		cfg.Progress = dtoRestore.ToModelServerRestoreProgress()
+	default:
+		return nil, fmt.Errorf("unknown snapshot-restore command %d", command)
+	}
+
+	return cfg, nil
+}
+
+// DecodeAppConfig reads only the "app" section of a configuration file.
+//
+// The server command tree initializes its logger in PersistentPreRunE, before
+// the subcommand knows which schema to decode, so the app settings are read
+// separately here. Unknown fields are tolerated on purpose: every other section
+// of the file is irrelevant to this call and is validated by the full decode.
+func DecodeAppConfig(filename string) (*models.App, error) {
+	if filename == "" {
+		return nil, fmt.Errorf("config path is empty")
+	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config file %s: %w", filename, err)
+	}
+
+	defer func() {
+		_ = file.Close()
+	}()
+
+	appDto := struct {
+		App dto.App `yaml:"app"`
+	}{App: dto.DefaultAppDTO()}
+
+	if err := yaml.NewDecoder(file).Decode(&appDto); err != nil {
+		return nil, fmt.Errorf("failed to decode config file %s: %w", filename, err)
+	}
+
+	return appDto.App.ToModelApp(), nil
 }
 
 // decodeFromFile decode yaml to params.
