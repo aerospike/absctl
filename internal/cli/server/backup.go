@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/config"
@@ -46,6 +47,30 @@ func newBackupCtx() *backupCtx {
 		aws:             flags.NewAwsS3(flags.OperationRestore),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
+}
+
+// backupServiceConfig builds the service config for one snapshot-backup
+// subcommand. When --config is set, the YAML file is the single source of
+// truth and every other flag is ignored, matching the scan commands; only the
+// section belonging to command is populated, so the unrelated ones are skipped
+// during validation. Otherwise fromFlags supplies the flag-based config.
+func backupServiceConfig(
+	ctx context.Context,
+	rc *runCtx,
+	command config.ServerBackupCommand,
+	fromFlags func() *config.ServerBackupServiceConfig,
+) (*config.ServerBackupServiceConfig, error) {
+	path := rc.app.GetApp().ConfigFilePath
+	if path == "" {
+		return fromFlags(), nil
+	}
+
+	cfg, err := config.DecodeServerBackupServiceConfig(ctx, path, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+	}
+
+	return cfg, nil
 }
 
 // NewBackupCmd builds the top-level "backup" command for server-integrated
@@ -90,15 +115,21 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupStart,
 		Long:  LongBackupStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerBackupServiceConfig(
-				bf.start.GetServerBackup(),
-				nil, nil, nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				bf.objectStorageS3.ToAwsS3(),
-			)
+			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandStart,
+				func() *config.ServerBackupServiceConfig {
+					return config.NewServerBackupServiceConfig(
+						bf.start.GetServerBackup(),
+						nil, nil, nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						bf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, cfg, nil)
 			if err != nil {
@@ -148,16 +179,22 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupList,
 		Long:  LongBackupList,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerBackupServiceConfig(
-				nil,
-				bf.list.GetServerBackupList(),
-				nil, nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				bf.aws.GetAwsS3(),
-			)
+			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandList,
+				func() *config.ServerBackupServiceConfig {
+					return config.NewServerBackupServiceConfig(
+						nil,
+						bf.list.GetServerBackupList(),
+						nil, nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						bf.aws.GetAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, cfg, nil)
 			if err != nil {
@@ -175,15 +212,15 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	cmd.Flags().AddFlagSet(listFlagSet)
 	cmd.Flags().AddFlagSet(awsFlagSet)
 
-	setHelpBackupList(cmd, listFlagSet, awsFlagSet)
+	setHelpBackupList(cmd, rc.app.NewFlagSet(), listFlagSet, awsFlagSet)
 
 	return cmd
 }
 
-func setHelpBackupList(cmd *cobra.Command, listFS, awsFS *pflag.FlagSet) {
+func setHelpBackupList(cmd *cobra.Command, appFS, listFS, awsFS *pflag.FlagSet) {
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageBackupList,
-		Sections: backupListHelpSections(listFS, awsFS),
+		Sections: backupListHelpSections(appFS, listFS, awsFS),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
@@ -202,15 +239,21 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupProgress,
 		Long:  LongBackupProgress,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerBackupServiceConfig(
-				nil, nil, nil,
-				bf.progress.GetServerBackupProgress(),
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				bf.aws.GetAwsS3(),
-			)
+			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandProgress,
+				func() *config.ServerBackupServiceConfig {
+					return config.NewServerBackupServiceConfig(
+						nil, nil, nil,
+						bf.progress.GetServerBackupProgress(),
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						bf.aws.GetAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, cfg, nil)
 			if err != nil {
@@ -257,16 +300,22 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupValidate,
 		Long:  LongBackupValidate,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerBackupServiceConfig(
-				nil, nil,
-				bf.validate.GetServerBackupValidate(),
-				nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				bf.aws.GetAwsS3(),
-			)
+			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandValidate,
+				func() *config.ServerBackupServiceConfig {
+					return config.NewServerBackupServiceConfig(
+						nil, nil,
+						bf.validate.GetServerBackupValidate(),
+						nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						bf.aws.GetAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, cfg, nil)
 			if err != nil {
@@ -284,15 +333,15 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	cmd.Flags().AddFlagSet(validationFlagSet)
 	cmd.Flags().AddFlagSet(awsFlagSet)
 
-	setHelpBackupValidate(cmd, validationFlagSet, awsFlagSet)
+	setHelpBackupValidate(cmd, rc.app.NewFlagSet(), validationFlagSet, awsFlagSet)
 
 	return cmd
 }
 
-func setHelpBackupValidate(cmd *cobra.Command, validationFS, awsFS *pflag.FlagSet) {
+func setHelpBackupValidate(cmd *cobra.Command, appFS, validationFS, awsFS *pflag.FlagSet) {
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageValidate,
-		Sections: backupValidateHelpSections(validationFS, awsFS),
+		Sections: backupValidateHelpSections(appFS, validationFS, awsFS),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
