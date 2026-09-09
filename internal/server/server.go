@@ -213,20 +213,24 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
 func (s *Service) StartRestore(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	infoClient, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
 
-	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
+	if err = s.checkServerStatus(ctx, infoClient, s.restoreCfg.Start.Namespace); err != nil {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
 
-	// Need clarification before uncomment
-	// if err = s.checkBackupExists(ctx,
-	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Start.JobID, s.restoreCfg.Start.Namespace); err != nil {
-	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
-	// }
+	s3Client, err := storage.NewS3Client(ctx, s.restoreCfg.AwsS3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	if err := s.checkBackupExists(ctx, s3Client,
+		s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Start.JobID); err != nil {
+		return err
+	}
 
 	rReq := &infomodels.RequestRestore{
 		Namespace:    s.restoreCfg.Start.Namespace,
@@ -242,7 +246,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
 	}
 
-	err = client.StartServerRestore(ctx, rReq)
+	err = infoClient.StartServerRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
@@ -264,12 +268,6 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
 
-	// Need clarification before uncomment
-	// if err = s.checkBackupExists(ctx,
-	// 	s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Prepare.JobID, s.restoreCfg.Prepare.Namespace); err != nil {
-	// 	return fmt.Errorf("failed to check if backup exists: %w", err)
-	// }
-
 	err = client.PrepareServerRestore(
 		ctx,
 		s.restoreCfg.Prepare.JobID,
@@ -279,7 +277,7 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to prepare restore: %w", err)
 	}
 
-	s.logger.Info("Restore preparation started",
+	s.logger.Info("restore preparation started",
 		slog.String("backup-id", s.restoreCfg.Prepare.JobID))
 
 	return nil
@@ -431,7 +429,7 @@ func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, j
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
-	s.logger.Info("Backup found",
+	s.logger.Info("backup found",
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
 	)
