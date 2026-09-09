@@ -91,6 +91,19 @@ func applyRootPersistent(cmd *cobra.Command, rc *runCtx) {
 		}
 
 		app := rc.app.GetApp()
+
+		// A config file supersedes the flags entirely, logging settings
+		// included. Only the app section is needed here: the subcommand
+		// decodes the full schema once it knows which one applies.
+		if app.ConfigFilePath != "" {
+			fileApp, err := config.DecodeAppConfig(app.ConfigFilePath)
+			if err != nil {
+				return fmt.Errorf("failed to load config file %s: %w", app.ConfigFilePath, err)
+			}
+
+			app = fileApp
+		}
+
 		cfg := logging.NewConfig(app.Verbose, app.LogJSON, app.LogLevel, app.LogFile)
 
 		logger, closeFn, err := logging.NewLogger(cfg)

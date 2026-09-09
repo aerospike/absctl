@@ -77,10 +77,14 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := backup.GetServerBackup()
 
-	assert.Empty(t, result.Namespace)
-	assert.Empty(t, result.StorageType)
+	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
+	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
 	assert.Equal(t, models.DefaultBackupModifiedAfter, result.ModifiedAfter)
 	assert.Equal(t, models.DefaultBackupModifiedBefore, result.ModifiedBefore)
+	assert.Equal(t, models.DefaultCommonSetList, result.SetList)
+	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
+	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
+	assert.Equal(t, models.DefaultBackupEnableChangeStream, result.EnableChangeStream)
 }
 
 func TestServerBackupList_NewFlagSet(t *testing.T) {
@@ -108,7 +112,7 @@ func TestServerBackupList_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := list.GetServerBackupList()
 
-	assert.Empty(t, result.Path)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 }
 
 func TestServerBackupValidate_NewFlagSet(t *testing.T) {
@@ -142,8 +146,8 @@ func TestServerBackupValidate_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := validate.GetServerBackupValidate()
 
-	assert.Equal(t, 10000, result.SampleSize)
-	assert.Empty(t, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupValidateSampleSize, result.SampleSize)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
 }
 
 func TestServerBackupProgress_NewFlagSet(t *testing.T) {
@@ -179,7 +183,7 @@ func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := progress.GetServerBackupProgress()
 
-	assert.Empty(t, result.JobID)
-	assert.False(t, result.Watch)
-	assert.Equal(t, int64(5000), result.WatchPoll)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupProgressWatch, result.Watch)
+	assert.Equal(t, models.DefaultServerBackupProgressWatchPoll, result.WatchPoll)
 }

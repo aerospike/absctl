@@ -173,7 +173,17 @@ const (
 
 	// Server-specific backup.
 
-	DefaultBackupEnableChangeStream = false
+	DefaultBackupEnableChangeStream       = false
+	DefaultServerBackupValidateSampleSize = 10000
+	DefaultServerBackupProgressWatch      = false
+	DefaultServerBackupProgressWatchPoll  = int64(5000)
+)
+
+// Server-backup common.
+const (
+	DefaultServerBackupObjectStorageType = ""
+	DefaultServerBackupJobID             = ""
+	DefaultServerBackupPath              = ""
 )
 
 // Restore.
@@ -198,4 +208,8 @@ const (
 
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false
+
+	// Server-specific restore.
+
+	DefaultServerRestoreFuzzyRestore = false
 )
