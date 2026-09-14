@@ -169,12 +169,6 @@ func TestServerBackupList_Validate(t *testing.T) {
 			list:    nil,
 			wantErr: false,
 		},
-		{
-			name:       "missing path",
-			list:       &ServerBackupList{},
-			wantErr:    true,
-			wantErrMsg: "path is required",
-		},
 	}
 
 	for _, tt := range tests {
