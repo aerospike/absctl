@@ -85,9 +85,10 @@ func (s *ServerBackupList) Validate() error {
 }
 
 type ServerBackupValidate struct {
-	// ListPath is the path to list backups from.
+	// JobID is the id of the backup to validate.
 	JobID string
 	// SampleSize specifies the sample size limit for validation operations.
+	// Zero means that every segment is validated.
 	SampleSize int
 }
 
@@ -98,6 +99,10 @@ func (s *ServerBackupValidate) Validate() error {
 
 	if s.JobID == "" {
 		return fmt.Errorf("backup-id is required")
+	}
+
+	if s.SampleSize < 0 {
+		return fmt.Errorf("sample-size must be non-negative")
 	}
 
 	return nil

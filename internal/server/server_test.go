@@ -104,8 +104,9 @@ func newTestService(t *testing.T, watch bool) (*Service, *bytes.Buffer) {
 			App:      &models.App{LogJSON: true},
 			AwsS3:    &models.AwsS3{BucketName: testBucket},
 		},
-		logger:              slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		metadataRetryPolicy: backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
+		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
+		vanishedPollInterval: time.Millisecond,
 	}, buf
 }
 
@@ -128,7 +129,9 @@ func TestServiceReportBackupProgress(t *testing.T) {
 		name        string
 		watch       bool
 		answers     []statusAnswer
+		metadata    *fakeMetadataGetter
 		wantErr     error
+		wantErrMsg  string
 		wantCalls   int
 		wantLogs    []string
 		notWantLogs []string
@@ -148,10 +151,44 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			answers: []statusAnswer{
 				{status: testStatus(infomodels.BackupStateIncrScanActive, 95)},
 				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
 			},
-			wantCalls:   2,
+			wantCalls:   6,
 			wantLogs:    []string{logBackupDone, logBackupEntry},
 			notWantLogs: []string{logNoRunningJob},
+		},
+		{
+			// The status of a running job can be unavailable for a moment. Reporting
+			// that gap as a completed backup is the bug this case guards against.
+			name:  "keeps watching after a transient status gap",
+			watch: true,
+			answers: []statusAnswer{
+				{status: testStatus(infomodels.BackupStateBaseScanActive, 3)},
+				{err: asinfo.ErrNotFound},
+				{status: testStatus(infomodels.BackupStateBaseScanActive, 47)},
+				{status: testStatus(infomodels.BackupStateComplete, 100)},
+			},
+			wantCalls: 4,
+			wantLogs:  []string{logBackupDone, logBackupEntry},
+		},
+		{
+			// A job that is gone and left no manifest behind is reported as a failure.
+			name:  "fails when a vanished job left no manifest",
+			watch: true,
+			answers: []statusAnswer{
+				{status: testStatus(infomodels.BackupStateBaseScanActive, 3)},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+				{err: asinfo.ErrNotFound},
+			},
+			metadata:   &fakeMetadataGetter{notFound: 10},
+			wantErrMsg: "timed out waiting for backup metadata",
+			wantCalls:  6,
 		},
 		{
 			name:        "reports a job that was never running",
@@ -191,13 +228,20 @@ func TestServiceReportBackupProgress(t *testing.T) {
 
 			svc, buf := newTestService(t, tt.watch)
 			status := &fakeStatusGetter{answers: tt.answers}
-			metadata := &fakeMetadataGetter{md: md}
+
+			metadata := tt.metadata
+			if metadata == nil {
+				metadata = &fakeMetadataGetter{md: md}
+			}
 
 			err := svc.reportBackupProgress(t.Context(), status, metadata)
 
-			if tt.wantErr != nil {
+			switch {
+			case tt.wantErr != nil:
 				require.ErrorIs(t, err, tt.wantErr)
-			} else {
+			case tt.wantErrMsg != "":
+				require.ErrorContains(t, err, tt.wantErrMsg)
+			default:
 				require.NoError(t, err)
 			}
 

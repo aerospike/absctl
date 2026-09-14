@@ -287,3 +287,91 @@ func TestLogServerValidationReportManifests(t *testing.T) {
 	assert.Contains(t, logOutput, "missing-segments=1")
 	assert.Contains(t, logOutput, "manifest does not match storage")
 }
+
+// withUnrecordedSegments adds segments that no manifest names. They are not
+// problems, so a report carrying them still passes.
+func withUnrecordedSegments(r *sModels.ValidationReport) *sModels.ValidationReport {
+	r.Manifests = sModels.ManifestReport{
+		Total:              500,
+		Checked:            4,
+		CheckedSegments:    40,
+		Unrecorded:         12,
+		UnrecordedExamples: []string{"519118324/ns/source-ns1/query-stream/p1/s41.seg"},
+	}
+
+	return r
+}
+
+func TestPrintServerValidationReportUnrecorded(t *testing.T) {
+	r := withUnrecordedSegments(newSampleValidationReport())
+
+	output := captureOutput(t, func() {
+		printServerValidationReport(r)
+	})
+
+	assert.Contains(t, output, "Unrecorded Segments")
+	assert.Contains(t, output, "Manifest Problems")
+	assert.Contains(t, output, unrecordedHeader)
+	assert.Contains(t, output, "Naming the first 1 of 12 unrecorded segments.")
+	assert.Contains(t, output, "519118324/ns/source-ns1/query-stream/p1/s41.seg")
+}
+
+func TestLogServerValidationReportUnrecorded(t *testing.T) {
+	r := withUnrecordedSegments(newSampleValidationReport())
+
+	var buf bytes.Buffer
+
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logServerValidationReport(r, logger)
+
+	logOutput := buf.String()
+
+	// Unrecorded segments are not problems, so the run still passed, and they
+	// must be reported all the same.
+	assert.Contains(t, logOutput, "backup dry run passed")
+	assert.Contains(t, logOutput, "unrecorded-segments=12")
+	assert.Contains(t, logOutput, "segments not named by any manifest")
+	assert.Contains(t, logOutput, "519118324/ns/source-ns1/query-stream/p1/s41.seg")
+}
+
+// TestServerValidationReportFieldsAgree pins the two renderers to the same set
+// of report fields, so neither can gain a field without the other.
+func TestServerValidationReportFieldsAgree(t *testing.T) {
+	r := withUnrecordedSegments(newSampleValidationReport())
+	r.Manifests.MissingSegments = 1
+	r.Manifests.Problems = 1
+	r.InvalidSegments = 2
+
+	var buf bytes.Buffer
+
+	output := captureOutput(t, func() {
+		printServerValidationReport(r)
+	})
+
+	logServerValidationReport(r, slog.New(slog.NewTextHandler(&buf, nil)))
+	logOutput := buf.String()
+
+	// Printed label paired with the log attribute that must carry the same
+	// field of the report.
+	fields := map[string]string{
+		"Backup ID":                  "backup-id",
+		"Total Segments":             "total-segments",
+		"Checked Segments":           "checked-segments",
+		"Valid Segments":             "valid-segments",
+		"Unreadable Segments":        "unreadable-segments",
+		"Records Read":               "records-read",
+		"Bytes Parsed":               "bytes-parsed",
+		"Skipped Compressed Records": "skipped-compressed",
+		"Total Manifests":            "total-manifests",
+		"Checked Manifests":          "checked-manifests",
+		"Checked Segment Records":    "checked-segment-records",
+		"Missing Segments":           "missing-segments",
+		"Unrecorded Segments":        "unrecorded-segments",
+		"Manifest Problems":          "manifest-problems",
+	}
+
+	for label, attr := range fields {
+		assert.Contains(t, output, label, "printed report is missing a field")
+		assert.Contains(t, logOutput, attr+"=", "logged report is missing a field")
+	}
+}

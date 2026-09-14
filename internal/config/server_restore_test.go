@@ -39,6 +39,7 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 		ClientPolicy: &models.ClientPolicy{},
 		Encryption:   &models.Encryption{},
 		Compression:  &models.Compression{},
+		AwsS3:        validServerObjectStorage(),
 	}
 }
 
@@ -174,6 +175,28 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			isBackup:   false,
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
+		},
+		{
+			name: "missing bucket name in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "nil start skips object storage check",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Start = nil
+				cfg.AwsS3 = nil
+				return cfg
+			},
+			isBackup: false,
+			wantErr:  false,
 		},
 		{
 			name: "nil prepare skips prepare validation",
