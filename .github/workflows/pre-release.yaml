@@ -374,7 +374,7 @@ jobs:
           echo "Checksum signing process completed successfully."
 
       - name: Upload Assets to GitHub Release
-        uses: step-security/action-gh-release@d2093dbdaf0c6507874908247e14bbc4dee6a72d # v3.0.1
+        uses: step-security/action-gh-release@44319d37c8b7966bf07f89f0cbf63408141446df # v3.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.ref_name }}
