@@ -176,7 +176,6 @@ const (
 	DefaultBackupEnableChangeStream       = false
 	DefaultServerBackupValidateSampleSize = 10000
 	DefaultServerBackupProgressWatch      = false
-	DefaultServerBackupProgressWatchPoll  = int64(5000)
 )
 
 // Server-backup common.

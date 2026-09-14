@@ -90,7 +90,6 @@ validate:
 progress:
   backup-id: bkp-1
   watch: true
-  watch-poll: 2000
 aws:
   s3:
     bucket-name: my-bucket
@@ -503,7 +502,6 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "bkp-1", cfg.Progress.JobID)
 				assert.True(t, cfg.Progress.Watch)
-				assert.Equal(t, int64(2000), cfg.Progress.WatchPoll)
 			},
 		},
 	}

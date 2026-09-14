@@ -58,7 +58,6 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	progress := defaultServerBackupProgressConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(progress.JobID))
 	assert.Equal(t, models.DefaultServerBackupProgressWatch, derefBool(progress.Watch))
-	assert.Equal(t, models.DefaultServerBackupProgressWatchPoll, derefInt64(progress.WatchPoll))
 }
 
 func TestServerBackupToModels(t *testing.T) {
@@ -75,7 +74,6 @@ func TestServerBackupToModels(t *testing.T) {
 	jobID := "bkp-1"
 	sampleSize := 500
 	watch := true
-	watchPoll := int64(2000)
 
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
@@ -90,7 +88,7 @@ func TestServerBackupToModels(t *testing.T) {
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, SampleSize: &sampleSize},
-		Progress: ServerBackupProgressConfig{JobID: &jobID, Watch: &watch, WatchPoll: &watchPoll},
+		Progress: ServerBackupProgressConfig{JobID: &jobID, Watch: &watch},
 	}
 
 	start := backup.ToModelServerBackup()
@@ -118,7 +116,6 @@ func TestServerBackupToModels(t *testing.T) {
 	require.NotNil(t, progress)
 	assert.Equal(t, jobID, progress.JobID)
 	assert.True(t, progress.Watch)
-	assert.Equal(t, watchPoll, progress.WatchPoll)
 }
 
 func TestServerBackupToModelsNil(t *testing.T) {
