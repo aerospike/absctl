@@ -51,6 +51,15 @@ const (
 	metadataRetryBase       = 2 * time.Second
 	metadataRetryMultiplier = 1.0
 	metadataRetryAttempts   = 30
+
+	// vanishedJobConfirmations is how many lookups in a row must miss the job before
+	// the watcher accepts that the cluster no longer runs it. The status of a running
+	// job can be unavailable for a moment - between backup stages, or while a node is
+	// busy - and a single miss must not be reported as a finished backup.
+	// Together with vanishedJobPollInterval this tolerates a gap of about 15 seconds.
+	vanishedJobConfirmations = 5
+	// vanishedJobPollInterval paces those confirmation lookups.
+	vanishedJobPollInterval = 3 * time.Second
 )
 
 // errBackupFailed is returned when the cluster reports a failed backup job.
@@ -83,6 +92,9 @@ type Service struct {
 	// metadataRetryPolicy paces the polling of a backup manifest that the server has
 	// not uploaded yet.
 	metadataRetryPolicy *backupmodels.RetryPolicy
+	// vanishedPollInterval paces the lookups that confirm a job the cluster stopped
+	// reporting is really gone.
+	vanishedPollInterval time.Duration
 }
 
 // NewService initializes and returns a new Service instance.
@@ -100,6 +112,7 @@ func NewService(
 			metadataRetryMultiplier,
 			metadataRetryAttempts,
 		),
+		vanishedPollInterval: vanishedJobPollInterval,
 	}, nil
 }
 
@@ -346,16 +359,37 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 
 	// observed reports whether the cluster has ever returned a state for this job.
 	var observed bool
+	// misses counts the lookups in a row that did not find the job.
+	var misses int
 
 	for {
 		now := time.Now()
 
 		status, err := client.GetBackupStatus(ctx, jobID)
-		if err != nil {
-			return s.reportMissingBackup(ctx, l, jobID, err, observed)
+
+		switch {
+		case err != nil && !errors.Is(err, asinfo.ErrNotFound):
+			return fmt.Errorf("failed to get backup status: %w", err)
+		case err != nil:
+			misses++
+
+			if s.jobVanished(observed, misses) {
+				return s.reportMissingBackup(ctx, l, jobID, observed)
+			}
+
+			s.logger.Debug("backup status is temporarily unavailable",
+				slog.String("backup-id", jobID),
+				slog.Int("attempt", misses))
+
+			if err := waitFor(ctx, s.vanishedPollInterval); err != nil {
+				return err
+			}
+
+			continue
 		}
 
 		observed = true
+		misses = 0
 
 		printer.Print(status, now)
 
@@ -372,29 +406,45 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 			return nil
 		}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(nextPoll(status, now)):
+		if err := waitFor(ctx, nextPoll(status, now)); err != nil {
+			return err
 		}
 	}
 }
 
-// reportMissingBackup handles a status lookup that found nothing. The cluster drops the
-// state of a job shortly after finishing it, so a job that was seen running and then
-// disappeared has completed, and its manifest is worth waiting for. A job that was never
-// seen either finished long ago or does not exist, and is looked up only once.
+// jobVanished reports whether a lookup that did not find the job is final. A job that
+// was never seen, or a one-shot lookup made without --watch, is answered right away.
+// A job that was seen running has to be missing several times in a row, so that a
+// momentary gap in the cluster status is not mistaken for a finished backup.
+func (s *Service) jobVanished(observed bool, misses int) bool {
+	if !observed || !s.backupCfg.Progress.Watch {
+		return true
+	}
+
+	return misses >= vanishedJobConfirmations
+}
+
+// waitFor sleeps for d and returns the context error if the watch is canceled first.
+func waitFor(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
+}
+
+// reportMissingBackup handles a job the cluster no longer reports, once the caller has
+// confirmed that it is really gone. The cluster drops the state of a job shortly after
+// finishing it, so a job that was seen running and then disappeared has completed, and
+// its manifest is worth waiting for. A job that was never seen either finished long ago
+// or does not exist, and is looked up only once.
 func (s *Service) reportMissingBackup(
 	ctx context.Context,
 	l metadataGetter,
 	jobID string,
-	err error,
 	observed bool,
 ) error {
-	if !errors.Is(err, asinfo.ErrNotFound) {
-		return fmt.Errorf("failed to get backup status: %w", err)
-	}
-
 	if observed {
 		s.logger.Info("backup complete")
 

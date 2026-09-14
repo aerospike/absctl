@@ -68,6 +68,16 @@ func TestServerRestore_Validate(t *testing.T) {
 			wantErrMsg: "storage-type is required",
 		},
 		{
+			name: "unsupported storage type",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.StorageType = testUnsupportedStorage
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "unsupported storage-type",
+		},
+		{
 			name: "missing namespace",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()

@@ -26,6 +26,7 @@ const (
 	headerDryRunReport  = "Dry Run Validation Report"
 	segmentParseHeader  = "Failed to parse segment"
 	manifestIssueHeader = "Manifest does not match storage"
+	unrecordedHeader    = "Segments not named by any manifest"
 )
 
 // PrintServerValidationReport logs or prints the dry-run validation report
@@ -55,6 +56,7 @@ func printServerValidationReport(r *sModels.ValidationReport) {
 	printToOutWriter("")
 
 	printManifestMetrics(&r.Manifests)
+	printUnrecordedSegments(&r.Manifests)
 
 	// A run over a badly damaged backup reports more failures than it
 	// describes, so say which of the two the list below is.
@@ -88,6 +90,30 @@ func printManifestMetrics(m *sModels.ManifestReport) {
 	printMetric("Checked Manifests", m.Checked)
 	printMetric("Checked Segment Records", m.CheckedSegments)
 	printMetric("Missing Segments", m.MissingSegments)
+	printMetric("Unrecorded Segments", m.Unrecorded)
+	printMetric("Manifest Problems", m.Problems)
+	printToOutWriter("")
+}
+
+// printUnrecordedSegments names the segments no manifest accounts for. A backup
+// can hold them and still restore, so they are listed apart from the problems.
+func printUnrecordedSegments(m *sModels.ManifestReport) {
+	if len(m.UnrecordedExamples) == 0 {
+		return
+	}
+
+	printToOutWriter(unrecordedHeader)
+	printToOutWriter(strings.Repeat("-", len(unrecordedHeader)))
+
+	if int64(len(m.UnrecordedExamples)) < m.Unrecorded {
+		printToOutWriter(fmt.Sprintf("Naming the first %d of %d unrecorded segments.",
+			len(m.UnrecordedExamples), m.Unrecorded))
+	}
+
+	for _, segment := range m.UnrecordedExamples {
+		printMetric("Segment", segment)
+	}
+
 	printToOutWriter("")
 }
 
@@ -113,12 +139,14 @@ func printManifestIssues(m *sModels.ManifestReport) {
 }
 
 func logServerValidationReport(r *sModels.ValidationReport, logger *slog.Logger) {
-	attrs := make([]any, 0, 12)
-	attrs = append(attrs,
+	// The same counters go out whether the run passed or failed, so a log
+	// reader does not have to know which outcome carries which field.
+	attrs := []any{
 		slog.String("backup-id", r.BackupID),
 		slog.Int64("total-segments", r.TotalSegments),
 		slog.Int64("checked-segments", r.CheckedSegments),
 		slog.Int64("valid-segments", r.ValidSegments),
+		slog.Int64("unreadable-segments", r.InvalidSegments),
 		slog.Int64("records-read", r.TotalRecords),
 		slog.Int64("bytes-parsed", r.TotalBytes),
 		slog.Int64("skipped-compressed", r.SkippedCompressed),
@@ -126,17 +154,17 @@ func logServerValidationReport(r *sModels.ValidationReport, logger *slog.Logger)
 		slog.Int64("checked-manifests", r.Manifests.Checked),
 		slog.Int64("checked-segment-records", r.Manifests.CheckedSegments),
 		slog.Int64("missing-segments", r.Manifests.MissingSegments),
-	)
-
-	if !r.Failed() {
-		logger.Info("backup dry run passed", attrs...)
-		return
+		slog.Int64("unrecorded-segments", r.Manifests.Unrecorded),
+		slog.Int64("manifest-problems", r.Manifests.Problems),
 	}
 
-	logger.Error("backup dry run failed", append(attrs,
-		slog.Int64("unreadable-segments", r.InvalidSegments),
-		slog.Int64("manifest-problems", r.Manifests.Problems),
-	)...)
+	if r.Failed() {
+		logger.Error("backup dry run failed", attrs...)
+	} else {
+		logger.Info("backup dry run passed", attrs...)
+	}
+
+	logUnrecordedSegments(&r.Manifests, logger)
 
 	if r.Truncated() {
 		logger.Warn("unreadable segment list truncated",
@@ -166,6 +194,20 @@ func logServerValidationReport(r *sModels.ValidationReport, logger *slog.Logger)
 	}
 
 	logManifestIssues(&r.Manifests, logger)
+}
+
+// logUnrecordedSegments names the segments no manifest accounts for. They do
+// not fail the run, so they are reported even when everything else was clean.
+func logUnrecordedSegments(m *sModels.ManifestReport, logger *slog.Logger) {
+	if len(m.UnrecordedExamples) == 0 {
+		return
+	}
+
+	logger.Warn("segments not named by any manifest",
+		slog.Int("named-segments", len(m.UnrecordedExamples)),
+		slog.Int64("unrecorded-segments", m.Unrecorded),
+		slog.Any("segments", m.UnrecordedExamples),
+	)
 }
 
 func logManifestIssues(m *sModels.ManifestReport, logger *slog.Logger) {

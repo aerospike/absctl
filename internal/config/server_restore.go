@@ -65,6 +65,14 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
+	// Only "snapshot-restore start" talks to object storage; prepare and
+	// progress are served by the cluster alone.
+	if s.Start != nil {
+		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+			return err
+		}
+	}
+
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
