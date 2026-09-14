@@ -22,10 +22,11 @@ import (
 )
 
 const (
-	testServerNamespace = "test-ns"
-	testServerJobID     = "backup-job-1"
-	testServerListPath  = "/backups"
-	testServerStorage   = "s3"
+	testServerNamespace    = "test-ns"
+	testServerJobID        = "backup-job-1"
+	testServerListPath     = "/backups"
+	testServerStorage      = StorageTypeAwsS3
+	testUnsupportedStorage = "gcp-storage"
 )
 
 func validServerBackup() *ServerBackup {
@@ -75,6 +76,16 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
+		},
+		{
+			name: "unsupported storage type",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.StorageType = testUnsupportedStorage
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "unsupported storage-type",
 		},
 		{
 			name: "invalid modified after",
@@ -259,6 +270,23 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			validation: &ServerBackupValidate{},
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "zero sample size validates all segments",
+			validation: &ServerBackupValidate{
+				JobID:      testServerJobID,
+				SampleSize: 0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "negative sample size",
+			validation: &ServerBackupValidate{
+				JobID:      testServerJobID,
+				SampleSize: -1,
+			},
+			wantErr:    true,
+			wantErrMsg: "sample-size must be non-negative",
 		},
 	}
 

@@ -54,6 +54,15 @@ func TestServerCommon_Validate(t *testing.T) {
 			wantErr:    true,
 			wantErrMsg: "storage-type is required",
 		},
+		{
+			name: "unsupported storage type",
+			common: ServerCommon{
+				Namespace:   testServerNamespace,
+				StorageType: testUnsupportedStorage,
+			},
+			wantErr:    true,
+			wantErrMsg: "unsupported storage-type",
+		},
 	}
 
 	for _, tt := range tests {

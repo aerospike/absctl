@@ -15,6 +15,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 )
@@ -69,12 +71,29 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
+	if err := s.Progress.Validate(); err != nil {
+		return err
+	}
+
+	// Every snapshot-backup subcommand reads from or writes to object storage.
+	if err := validateServerObjectStorage(s.AwsS3); err != nil {
+		return err
+	}
+
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
 
-	if err := s.Progress.Validate(); err != nil {
-		return err
+	return nil
+}
+
+// validateServerObjectStorage makes sure the object storage of a
+// server-integrated command is addressable. An empty S3 section would otherwise
+// pass silently: AwsS3.IsConfigured reports false, validateStorages skips it,
+// and the command only fails later against an empty bucket name.
+func validateServerObjectStorage(awsS3 *models.AwsS3) error {
+	if awsS3 == nil || awsS3.BucketName == "" {
+		return fmt.Errorf("s3-bucket-name is required")
 	}
 
 	return nil

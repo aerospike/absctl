@@ -27,8 +27,20 @@ const (
 	testServerNamespace = "test-ns"
 	testServerJobID     = "backup-job-1"
 	testServerListPath  = "/backups"
-	testServerStorage   = "s3"
+	testServerStorage   = models.StorageTypeAwsS3
 )
+
+// validServerObjectStorage returns the S3 section a server-integrated command
+// needs to pass validation in both backup and restore mode.
+func validServerObjectStorage() *models.AwsS3 {
+	return &models.AwsS3{
+		BucketName:          testBucket,
+		RestorePollDuration: 1,
+		ChunkSize:           5,
+		RetryReadBackoff:    100,
+		RetryReadMultiplier: 2,
+	}
+}
 
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
@@ -47,6 +59,7 @@ func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 		ClientPolicy: &models.ClientPolicy{},
 		Encryption:   &models.Encryption{},
 		Compression:  &models.Compression{},
+		AwsS3:        validServerObjectStorage(),
 	}
 }
 
@@ -208,6 +221,28 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			isBackup:   true,
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "missing bucket name",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "nil object storage",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3 = nil
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
 		},
 		{
 			name: "multiple cloud providers configured",
