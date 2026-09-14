@@ -161,16 +161,14 @@ func (b *ServerBackup) ToModelServerBackupValidate() *models.ServerBackupValidat
 // ServerBackupProgressConfig maps the "progress" section, used by
 // "snapshot-backup progress".
 type ServerBackupProgressConfig struct {
-	JobID     *string `yaml:"backup-id"`
-	Watch     *bool   `yaml:"watch"`
-	WatchPoll *int64  `yaml:"watch-poll"`
+	JobID *string `yaml:"backup-id"`
+	Watch *bool   `yaml:"watch"`
 }
 
 func defaultServerBackupProgressConfig() ServerBackupProgressConfig {
 	return ServerBackupProgressConfig{
-		JobID:     new(models.DefaultServerBackupJobID),
-		Watch:     new(models.DefaultServerBackupProgressWatch),
-		WatchPoll: new(models.DefaultServerBackupProgressWatchPoll),
+		JobID: new(models.DefaultServerBackupJobID),
+		Watch: new(models.DefaultServerBackupProgressWatch),
 	}
 }
 
@@ -181,8 +179,7 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 	}
 
 	return &models.ServerBackupProgress{
-		JobID:     derefString(b.Progress.JobID),
-		Watch:     derefBool(b.Progress.Watch),
-		WatchPoll: derefInt64(b.Progress.WatchPoll),
+		JobID: derefString(b.Progress.JobID),
+		Watch: derefBool(b.Progress.Watch),
 	}
 }

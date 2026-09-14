@@ -29,6 +29,7 @@ import (
 	"github.com/aerospike/absctl/internal/storage"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
+	"github.com/aerospike/backup-go/errclass"
 	backupmodels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
@@ -40,6 +41,21 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+const (
+	// metadataRequestTimeout bounds a single manifest request, in milliseconds.
+	metadataRequestTimeout = 10_000
+
+	// The server uploads the manifest shortly after a backup completes, so it is polled
+	// at a steady pace for about a minute instead of being backed off exponentially:
+	// a growing delay would end in a long blind gap for a file that is due in seconds.
+	metadataRetryBase       = 2 * time.Second
+	metadataRetryMultiplier = 1.0
+	metadataRetryAttempts   = 30
+)
+
+// errBackupFailed is returned when the cluster reports a failed backup job.
+var errBackupFailed = errors.New("backup failed")
+
 // S3API is an interface for the S3 client.
 type S3API interface {
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
@@ -49,11 +65,24 @@ type S3API interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
+// backupStatusGetter is the part of asinfo.Client that the progress watcher needs.
+type backupStatusGetter interface {
+	GetBackupStatus(ctx context.Context, jobID string) (*infomodels.ResponseBackupState, error)
+}
+
+// metadataGetter is the part of lister.Lister that the progress watcher needs.
+type metadataGetter interface {
+	GetMetadata(ctx context.Context, backupID string) (servermodels.Metadata, error)
+}
+
 // Service represents a server integrated backup and restore service.
 type Service struct {
 	backupCfg  *config.ServerBackupServiceConfig
 	restoreCfg *config.ServerRestoreServiceConfig
 	logger     *slog.Logger
+	// metadataRetryPolicy paces the polling of a backup manifest that the server has
+	// not uploaded yet.
+	metadataRetryPolicy *backupmodels.RetryPolicy
 }
 
 // NewService initializes and returns a new Service instance.
@@ -66,6 +95,11 @@ func NewService(
 		backupCfg:  backupCfg,
 		restoreCfg: restoreCfg,
 		logger:     logger,
+		metadataRetryPolicy: backupmodels.NewRetryPolicy(
+			metadataRetryBase,
+			metadataRetryMultiplier,
+			metadataRetryAttempts,
+		),
 	}, nil
 }
 
@@ -287,41 +321,52 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 
 // BackupProgress returns the progress of the currently running backup.
 func (s *Service) BackupProgress(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	infoClient, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
 
+	// The storage client is created before the watch loop on purpose: a wrong endpoint
+	// or wrong credentials must fail now, not after hours of watching a backup.
+	s3Client, err := storage.NewS3Client(ctx, s.metadataS3Config())
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	l := lister.NewLister(s3Client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
+
+	return s.reportBackupProgress(ctx, infoClient, l)
+}
+
+// reportBackupProgress polls the cluster for the status of the configured job and logs
+// it until the backup reaches a terminal state, or once when watching is disabled.
+func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusGetter, l metadataGetter) error {
+	jobID := s.backupCfg.Progress.JobID
+	printer := newProgressPrinter(s.logger)
+
+	// observed reports whether the cluster has ever returned a state for this job.
+	var observed bool
+
 	for {
-		result, err := client.GetBackupStatus(ctx, s.backupCfg.Progress.JobID)
+		now := time.Now()
+
+		status, err := client.GetBackupStatus(ctx, jobID)
 		if err != nil {
-			if errors.Is(err, asinfo.ErrNotFound) {
-				s.logger.Info("no running backup found")
-
-				if err := s.getBackupState(ctx); err != nil {
-					return fmt.Errorf("failed to get backup state: %w", err)
-				}
-
-				return nil
-			}
-
-			return fmt.Errorf("failed to get backup status: %w", err)
+			return s.reportMissingBackup(ctx, l, jobID, err, observed)
 		}
 
-		if result.State == infomodels.BackupStateComplete {
+		observed = true
+
+		printer.Print(status, now)
+
+		switch status.State {
+		case infomodels.BackupStateComplete:
 			s.logger.Info("backup complete")
 
-			if err := s.getBackupState(ctx); err != nil {
-				return fmt.Errorf("failed to get backup state: %w", err)
-			}
-
-			return nil
+			return s.printMetadata(ctx, l, jobID, true)
+		case infomodels.BackupStateFailed:
+			return fmt.Errorf("%w: backup-id %s", errBackupFailed, jobID)
 		}
-
-		s.logger.Info("backup progress",
-			slog.String("backup-id", result.JobID),
-			slog.String("state", result.State.Describe()),
-			slog.String("pct", fmt.Sprintf("%.1f%%", result.ProgressPct)))
 
 		if !s.backupCfg.Progress.Watch {
 			return nil
@@ -330,32 +375,106 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(s.backupCfg.Progress.WatchPoll) * time.Millisecond):
+		case <-time.After(nextPoll(status, now)):
 		}
 	}
 }
 
-func (s *Service) getBackupState(ctx context.Context) error {
-	// Set timeout for metadata fetch.
-	s.backupCfg.AwsS3.RequestTimeout = 10000
-
-	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
-	if err != nil {
-		return fmt.Errorf("failed to create s3 client: %w", err)
+// reportMissingBackup handles a status lookup that found nothing. The cluster drops the
+// state of a job shortly after finishing it, so a job that was seen running and then
+// disappeared has completed, and its manifest is worth waiting for. A job that was never
+// seen either finished long ago or does not exist, and is looked up only once.
+func (s *Service) reportMissingBackup(
+	ctx context.Context,
+	l metadataGetter,
+	jobID string,
+	err error,
+	observed bool,
+) error {
+	if !errors.Is(err, asinfo.ErrNotFound) {
+		return fmt.Errorf("failed to get backup status: %w", err)
 	}
 
-	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
+	if observed {
+		s.logger.Info("backup complete")
 
-	md, err := l.GetMetadata(ctx, s.backupCfg.Progress.JobID)
-	if err != nil {
-		return fmt.Errorf("failed to get backup metadata: %w", err)
+		return s.printMetadata(ctx, l, jobID, true)
 	}
 
-	if err := logging.PrintMetadata([]servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger); err != nil {
+	s.logger.Info("no running backup found")
+
+	return s.printMetadata(ctx, l, jobID, false)
+}
+
+// printMetadata reads the manifest of a finished backup and prints it.
+func (s *Service) printMetadata(ctx context.Context, l metadataGetter, jobID string, wait bool) error {
+	md, err := s.fetchMetadata(ctx, l, jobID, wait)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	return logging.PrintMetadata([]servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger)
+}
+
+// fetchMetadata reads the backup manifest from object storage. Only a missing manifest is
+// retried, and only when wait is set: every other failure is permanent, and polling for a
+// backup that never existed would just hang the command.
+func (s *Service) fetchMetadata(
+	ctx context.Context,
+	l metadataGetter,
+	jobID string,
+	wait bool,
+) (servermodels.Metadata, error) {
+	if !wait {
+		md, err := l.GetMetadata(ctx, jobID)
+		if err != nil {
+			return servermodels.Metadata{}, fmt.Errorf("failed to get backup metadata: %w", err)
+		}
+
+		return md, nil
+	}
+
+	var (
+		md      servermodels.Metadata
+		permErr error
+	)
+
+	retryErr := s.metadataRetryPolicy.Do(ctx, func() error {
+		var err error
+
+		md, err = l.GetMetadata(ctx, jobID)
+
+		switch {
+		case err == nil:
+			return nil
+		case errors.Is(err, errclass.ErrNotFound):
+			s.logger.Debug("backup metadata is not uploaded yet", slog.String("backup-id", jobID))
+
+			return err
+		default:
+			permErr = err
+
+			return nil
+		}
+	})
+
+	switch {
+	case permErr != nil:
+		return servermodels.Metadata{}, fmt.Errorf("failed to get backup metadata: %w", permErr)
+	case retryErr != nil:
+		return servermodels.Metadata{}, fmt.Errorf("timed out waiting for backup metadata: %w", retryErr)
+	}
+
+	return md, nil
+}
+
+// metadataS3Config returns a copy of the S3 configuration with a bounded request timeout,
+// so that reading a manifest never mutates the configuration shared with other commands.
+func (s *Service) metadataS3Config() *models.AwsS3 {
+	cfg := *s.backupCfg.AwsS3
+	cfg.RequestTimeout = metadataRequestTimeout
+
+	return &cfg
 }
 
 // RestoreProgress returns the progress of the currently running restore.

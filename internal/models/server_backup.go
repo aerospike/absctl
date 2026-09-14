@@ -105,9 +105,8 @@ func (s *ServerBackupValidate) Validate() error {
 
 // ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
 type ServerBackupProgress struct {
-	JobID     string
-	Watch     bool
-	WatchPoll int64
+	JobID string
+	Watch bool
 }
 
 func (s *ServerBackupProgress) Validate() error {
@@ -117,10 +116,6 @@ func (s *ServerBackupProgress) Validate() error {
 
 	if s.JobID == "" {
 		return fmt.Errorf("backup-id is required")
-	}
-
-	if s.WatchPoll < 1000 {
-		return fmt.Errorf("watch-poll must be greater than 1000 (1 second)")
 	}
 
 	return nil
