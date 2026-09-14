@@ -190,8 +190,7 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 		{
 			name: "valid progress",
 			progress: &ServerBackupProgress{
-				JobID:     testServerJobID,
-				WatchPoll: 5000,
+				JobID: testServerJobID,
 			},
 			wantErr: false,
 		},
@@ -201,27 +200,16 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing backup id",
-			progress: &ServerBackupProgress{
-				WatchPoll: 5000,
-			},
+			name:       "missing backup id",
+			progress:   &ServerBackupProgress{},
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
 		},
 		{
-			name: "watch poll below minimum",
+			name: "watch enabled",
 			progress: &ServerBackupProgress{
-				JobID:     testServerJobID,
-				WatchPoll: 999,
-			},
-			wantErr:    true,
-			wantErrMsg: "watch-poll must be greater than 1000 (1 second)",
-		},
-		{
-			name: "watch poll at minimum",
-			progress: &ServerBackupProgress{
-				JobID:     testServerJobID,
-				WatchPoll: 1000,
+				JobID: testServerJobID,
+				Watch: true,
 			},
 			wantErr: false,
 		},

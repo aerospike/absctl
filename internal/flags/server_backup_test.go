@@ -159,7 +159,6 @@ func TestServerBackupProgress_NewFlagSet(t *testing.T) {
 	args := []string{
 		"--backup-id", "backup-job-1",
 		"--watch",
-		"--watch-poll", "2000",
 	}
 
 	err := flagSet.Parse(args)
@@ -169,7 +168,6 @@ func TestServerBackupProgress_NewFlagSet(t *testing.T) {
 
 	assert.Equal(t, "backup-job-1", result.JobID)
 	assert.True(t, result.Watch)
-	assert.Equal(t, int64(2000), result.WatchPoll)
 }
 
 func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
@@ -185,5 +183,4 @@ func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
 
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
 	assert.Equal(t, models.DefaultServerBackupProgressWatch, result.Watch)
-	assert.Equal(t, models.DefaultServerBackupProgressWatchPoll, result.WatchPoll)
 }

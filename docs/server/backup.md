@@ -235,8 +235,6 @@ Aerospike Client Flags:
 Backup Flags:
       --backup-id string   Backup id
       --watch              Watch the progress of the backup.
-      --watch-poll int     Polling interval in milliseconds for watch.
-                           Minimum value is 1000 (1 second). (default 5000)
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -458,9 +456,6 @@ progress:
   backup-id: backup-id-1
   # Watch the progress of the backup.
   watch: false
-  # Polling interval in milliseconds for watch.
-  # Minimum value is 1000 (1 second).
-  watch-poll: 5000
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP

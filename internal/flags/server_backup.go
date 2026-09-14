@@ -137,10 +137,6 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVar(&f.Watch, "watch",
 		models.DefaultServerBackupProgressWatch,
 		"Watch the progress of the backup.")
-	flagSet.Int64Var(&f.WatchPoll, "watch-poll",
-		models.DefaultServerBackupProgressWatchPoll,
-		"Polling interval in milliseconds for watch.\n"+
-			"Minimum value is 1000 (1 second).")
 
 	return flagSet
 }
