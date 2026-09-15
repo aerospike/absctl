@@ -39,7 +39,9 @@ func main() {
 
 	go func() {
 		sig := <-sigChan
-		log.Printf("stopping backup: %v\n", sig)
+		// Only the local command is stopped here. A server-side job keeps running, and
+		// saying otherwise makes an interrupted "progress" look like an aborted backup.
+		log.Printf("stopping absctl: %v\n", sig)
 		cancel()
 	}()
 

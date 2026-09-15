@@ -49,7 +49,9 @@ type statusAnswer struct {
 	err    error
 }
 
-// fakeStatusGetter replays canned answers, one per call.
+// fakeStatusGetter replays canned answers, one per call, and keeps reporting the job as
+// missing once they run out. Every call is counted, so that a test that expects the watch
+// to stop also proves that it stopped polling.
 type fakeStatusGetter struct {
 	answers []statusAnswer
 	calls   int
@@ -58,14 +60,14 @@ type fakeStatusGetter struct {
 func (f *fakeStatusGetter) GetBackupStatus(
 	_ context.Context, _ string,
 ) (*infomodels.ResponseBackupState, error) {
-	if f.calls >= len(f.answers) {
+	call := f.calls
+	f.calls++
+
+	if call >= len(f.answers) {
 		return nil, asinfo.ErrNotFound
 	}
 
-	answer := f.answers[f.calls]
-	f.calls++
-
-	return answer.status, answer.err
+	return f.answers[call].status, f.answers[call].err
 }
 
 // fakeMetadataGetter answers "not found" a given number of times before it either
@@ -110,6 +112,16 @@ func newTestService(t *testing.T, watch bool) (*Service, *bytes.Buffer) {
 	}, buf
 }
 
+// repeatNotFound builds n answers that report the job as missing.
+func repeatNotFound(n int) []statusAnswer {
+	answers := make([]statusAnswer, n)
+	for i := range answers {
+		answers[i] = statusAnswer{err: asinfo.ErrNotFound}
+	}
+
+	return answers
+}
+
 func testStatus(state infomodels.BackupState, pct float64) *infomodels.ResponseBackupState {
 	return &infomodels.ResponseBackupState{
 		JobID:       testJobID,
@@ -145,11 +157,11 @@ func TestServiceReportBackupProgress(t *testing.T) {
 		},
 		{
 			// The cluster drops the job state right after finishing the backup. The job
-			// was seen running, so this is a completion and not a missing backup.
-			name:  "treats a vanished job as a completed backup",
+			// was last seen draining, so this is a completion and not a missing backup.
+			name:  "treats a job vanished while draining as a completed backup",
 			watch: true,
 			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateIncrScanActive, 95)},
+				{status: testStatus(infomodels.BackupStateFinalDraining, 97)},
 				{err: asinfo.ErrNotFound},
 				{err: asinfo.ErrNotFound},
 				{err: asinfo.ErrNotFound},
@@ -175,27 +187,82 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			wantLogs:  []string{logBackupDone, logBackupEntry},
 		},
 		{
-			// A job that is gone and left no manifest behind is reported as a failure.
-			name:  "fails when a vanished job left no manifest",
+			// A scan that stops reporting for longer than the confirmations of a
+			// finished job still has to be waited for: it is nowhere near the stages a
+			// backup can complete from, so the watch keeps the job until it comes back.
+			name:  "keeps watching a scan that stops reporting for a long time",
 			watch: true,
-			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateBaseScanActive, 3)},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-			},
-			metadata:   &fakeMetadataGetter{notFound: 10},
-			wantErrMsg: "timed out waiting for backup metadata",
-			wantCalls:  6,
+			answers: append(
+				append(
+					[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 4)}},
+					repeatNotFound(vanishedJobConfirmations*3)...,
+				),
+				statusAnswer{status: testStatus(infomodels.BackupStateIncrScanActive, 95)},
+				statusAnswer{status: testStatus(infomodels.BackupStateComplete, 100)},
+			),
+			wantCalls: vanishedJobConfirmations*3 + 3,
+			wantLogs:  []string{logBackupDone, logBackupEntry},
 		},
 		{
+			// The watch can be between polls while the job runs through its last stages.
+			// The manifest proves the backup finished even though the last state seen
+			// was not one a backup completes from.
+			name:  "reports a backup that finished between polls",
+			watch: true,
+			answers: append(
+				[]statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 95)}},
+				repeatNotFound(midBackupGapConfirmations)...,
+			),
+			wantCalls: midBackupGapConfirmations + 1,
+			wantLogs:  []string{logBackupDone, logBackupEntry},
+		},
+		{
+			// A job that stopped reporting in the middle of a backup and left no
+			// manifest behind did not complete, and must not be announced as complete.
+			name:  "fails when a job vanished mid-backup left no manifest",
+			watch: true,
+			answers: append(
+				[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 3)}},
+				repeatNotFound(midBackupGapConfirmations)...,
+			),
+			metadata:    &fakeMetadataGetter{notFound: 10},
+			wantErr:     errBackupStatusLost,
+			wantCalls:   midBackupGapConfirmations + 1,
+			notWantLogs: []string{logBackupDone},
+		},
+		{
+			// A job the cluster never reported is looked up a few more times before it
+			// is called missing: a backup that was just started may not be in the status
+			// yet, and reporting it as missing would end the watch before it began.
 			name:        "reports a job that was never running",
 			watch:       true,
-			answers:     []statusAnswer{{err: asinfo.ErrNotFound}},
+			answers:     repeatNotFound(vanishedJobConfirmations),
+			wantCalls:   vanishedJobConfirmations,
+			wantLogs:    []string{logNoRunningJob, logBackupEntry},
+			notWantLogs: []string{logBackupDone},
+		},
+		{
+			// Without --watch there is nothing to wait for, so a missing job is answered
+			// by the single lookup the user asked for.
+			name:        "reports a missing job once when watching is disabled",
+			watch:       false,
+			answers:     repeatNotFound(1),
 			wantCalls:   1,
 			wantLogs:    []string{logNoRunningJob, logBackupEntry},
+			notWantLogs: []string{logBackupDone},
+		},
+		{
+			// A manifest that cannot be read for a reason other than being absent is a
+			// storage failure, and must not be reported as a job that stopped reporting.
+			name:  "propagates a storage failure for a job vanished mid-backup",
+			watch: true,
+			answers: append(
+				[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 3)}},
+				repeatNotFound(midBackupGapConfirmations)...,
+			),
+			metadata:    &fakeMetadataGetter{err: errBoom},
+			wantErr:     errBoom,
+			wantCalls:   midBackupGapConfirmations + 1,
 			notWantLogs: []string{logBackupDone},
 		},
 		{
@@ -254,6 +321,106 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			for _, notWant := range tt.notWantLogs {
 				assert.NotContains(t, buf.String(), notWant)
 			}
+		})
+	}
+}
+
+// TestServiceJobVanished pins down what a job disappearing from the cluster status means
+// for every stage of the backup lifecycle: only the last stages may be read as a finished
+// backup, and every earlier one has to be waited out.
+func TestServiceJobVanished(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		watch        bool
+		lastState    infomodels.BackupState
+		wantAfter    int
+		wantNotAfter int
+	}{
+		{
+			name:         "never reported",
+			watch:        true,
+			wantAfter:    vanishedJobConfirmations,
+			wantNotAfter: vanishedJobConfirmations - 1,
+		},
+		{
+			name:         "init",
+			watch:        true,
+			lastState:    infomodels.BackupStateInit,
+			wantAfter:    midBackupGapConfirmations,
+			wantNotAfter: midBackupGapConfirmations - 1,
+		},
+		{
+			name:         "base scan active",
+			watch:        true,
+			lastState:    infomodels.BackupStateBaseScanActive,
+			wantAfter:    midBackupGapConfirmations,
+			wantNotAfter: midBackupGapConfirmations - 1,
+		},
+		{
+			name:         "base scan done",
+			watch:        true,
+			lastState:    infomodels.BackupStateBaseScanDone,
+			wantAfter:    midBackupGapConfirmations,
+			wantNotAfter: midBackupGapConfirmations - 1,
+		},
+		{
+			name:         "incremental scan active",
+			watch:        true,
+			lastState:    infomodels.BackupStateIncrScanActive,
+			wantAfter:    midBackupGapConfirmations,
+			wantNotAfter: midBackupGapConfirmations - 1,
+		},
+		{
+			name:         "unknown state",
+			watch:        true,
+			lastState:    infomodels.BackupStateUnknown,
+			wantAfter:    midBackupGapConfirmations,
+			wantNotAfter: midBackupGapConfirmations - 1,
+		},
+		{
+			name:         "stopping change stream",
+			watch:        true,
+			lastState:    infomodels.BackupStateStoppingChangeStream,
+			wantAfter:    vanishedJobConfirmations,
+			wantNotAfter: vanishedJobConfirmations - 1,
+		},
+		{
+			name:         "final draining",
+			watch:        true,
+			lastState:    infomodels.BackupStateFinalDraining,
+			wantAfter:    vanishedJobConfirmations,
+			wantNotAfter: vanishedJobConfirmations - 1,
+		},
+		{
+			name:         "complete",
+			watch:        true,
+			lastState:    infomodels.BackupStateComplete,
+			wantAfter:    vanishedJobConfirmations,
+			wantNotAfter: vanishedJobConfirmations - 1,
+		},
+		{
+			name:      "one-shot lookup does not wait",
+			watch:     false,
+			lastState: infomodels.BackupStateBaseScanActive,
+			wantAfter: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, _ := newTestService(t, tt.watch)
+
+			if tt.wantNotAfter > 0 {
+				assert.False(t, svc.jobVanished(tt.lastState, tt.wantNotAfter),
+					"the job must still be waited for after %d misses", tt.wantNotAfter)
+			}
+
+			assert.True(t, svc.jobVanished(tt.lastState, tt.wantAfter),
+				"the job must be given up after %d misses", tt.wantAfter)
 		})
 	}
 }
