@@ -52,18 +52,45 @@ const (
 	metadataRetryMultiplier = 1.0
 	metadataRetryAttempts   = 30
 
-	// vanishedJobConfirmations is how many lookups in a row must miss the job before
-	// the watcher accepts that the cluster no longer runs it. The status of a running
-	// job can be unavailable for a moment - between backup stages, or while a node is
-	// busy - and a single miss must not be reported as a finished backup.
-	// Together with vanishedJobPollInterval this tolerates a gap of about 15 seconds.
+	// vanishedJobConfirmations is how many lookups in a row must miss a job that had
+	// reached its last stages before the watcher accepts that the cluster dropped the
+	// state of a finished backup. The status of a running job can be unavailable for a
+	// moment - between backup stages, or while a node is busy - and a single miss must
+	// not be reported as a finished backup. Together with vanishedJobPollInterval this
+	// tolerates a gap of about 15 seconds.
 	vanishedJobConfirmations = 5
 	// vanishedJobPollInterval paces those confirmation lookups.
 	vanishedJobPollInterval = 3 * time.Second
+	// midBackupGapConfirmations bounds the same wait for a job that stopped reporting
+	// before it reached its last stages. Such a gap cannot be a completion, so the job
+	// is given a much longer benefit of the doubt - about two minutes - before the watch
+	// gives up on it.
+	midBackupGapConfirmations = 40
+	// statusGapWarnEvery paces the reminders logged while a job is missing from the
+	// cluster status, so that a long wait does not look like a hung command.
+	statusGapWarnEvery = 20
 )
 
-// errBackupFailed is returned when the cluster reports a failed backup job.
-var errBackupFailed = errors.New("backup failed")
+var (
+	// errBackupFailed is returned when the cluster reports a failed backup job.
+	errBackupFailed = errors.New("backup failed")
+
+	// errBackupStatusLost is returned when the cluster stopped reporting a job in the
+	// middle of a backup and left no manifest behind.
+	errBackupStatusLost = errors.New("cluster stopped reporting backup status")
+)
+
+// completionStates are the stages a backup job can be in when the cluster drops its
+// status because the job is done: the state of a finished job is kept for a while and
+// then discarded. A job that stops reporting from one of these stages has completed.
+// A job that stops reporting from an earlier stage has not - its status is either
+// temporarily unavailable or the job is gone for good - and treating that as a finished
+// backup makes the watcher announce a success in the middle of a backup.
+var completionStates = map[infomodels.BackupState]bool{
+	infomodels.BackupStateStoppingChangeStream: true,
+	infomodels.BackupStateFinalDraining:        true,
+	infomodels.BackupStateComplete:             true,
+}
 
 // S3API is an interface for the S3 client.
 type S3API interface {
@@ -357,8 +384,10 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 	jobID := s.backupCfg.Progress.JobID
 	printer := newProgressPrinter(s.logger)
 
-	// observed reports whether the cluster has ever returned a state for this job.
-	var observed bool
+	// lastState is the state the cluster reported for this job most recently. It stays
+	// empty while the job has never been observed, and it decides what a job that stops
+	// reporting means.
+	var lastState infomodels.BackupState
 	// misses counts the lookups in a row that did not find the job.
 	var misses int
 
@@ -373,13 +402,11 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 		case err != nil:
 			misses++
 
-			if s.jobVanished(observed, misses) {
-				return s.reportMissingBackup(ctx, l, jobID, observed)
+			if s.jobVanished(lastState, misses) {
+				return s.reportMissingBackup(ctx, l, jobID, lastState)
 			}
 
-			s.logger.Debug("backup status is temporarily unavailable",
-				slog.String("backup-id", jobID),
-				slog.Int("attempt", misses))
+			s.logStatusGap(jobID, lastState, misses)
 
 			if err := waitFor(ctx, s.vanishedPollInterval); err != nil {
 				return err
@@ -388,7 +415,7 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 			continue
 		}
 
-		observed = true
+		lastState = status.State
 		misses = 0
 
 		printer.Print(status, now)
@@ -412,16 +439,44 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusG
 	}
 }
 
-// jobVanished reports whether a lookup that did not find the job is final. A job that
-// was never seen, or a one-shot lookup made without --watch, is answered right away.
-// A job that was seen running has to be missing several times in a row, so that a
-// momentary gap in the cluster status is not mistaken for a finished backup.
-func (s *Service) jobVanished(observed bool, misses int) bool {
-	if !observed || !s.backupCfg.Progress.Watch {
+// jobVanished reports whether a lookup that did not find the job is final. A one-shot
+// lookup made without --watch is answered right away. A watched job has to be missing
+// several times in a row, so that a momentary gap in the cluster status is not mistaken
+// for a terminal outcome, and a job that was seen before it reached its last stages gets
+// the longer of the two waits: its status is the only thing that can end the watch.
+func (s *Service) jobVanished(lastState infomodels.BackupState, misses int) bool {
+	switch {
+	case !s.backupCfg.Progress.Watch:
 		return true
+	case lastState == "" || completionStates[lastState]:
+		return misses >= vanishedJobConfirmations
+	default:
+		return misses >= midBackupGapConfirmations
+	}
+}
+
+// logStatusGap reports a job that is temporarily missing from the cluster status. The
+// first confirmations are routine and stay on the debug level, but a gap that outlives
+// them is worth telling the user about, and is repeated while it lasts: it is the only
+// sign that the watch is still waiting on a backup the cluster is no longer talking
+// about.
+func (s *Service) logStatusGap(jobID string, lastState infomodels.BackupState, misses int) {
+	attrs := []any{
+		slog.String("backup-id", jobID),
+		slog.Int("attempt", misses),
 	}
 
-	return misses >= vanishedJobConfirmations
+	if lastState != "" {
+		attrs = append(attrs, slog.String("last-state", lastState.Describe()))
+	}
+
+	if misses == vanishedJobConfirmations || misses%statusGapWarnEvery == 0 {
+		s.logger.Warn("backup status is unavailable, still waiting for the job", attrs...)
+
+		return
+	}
+
+	s.logger.Debug("backup status is temporarily unavailable", attrs...)
 }
 
 // waitFor sleeps for d and returns the context error if the watch is canceled first.
@@ -436,24 +491,45 @@ func waitFor(ctx context.Context, d time.Duration) error {
 
 // reportMissingBackup handles a job the cluster no longer reports, once the caller has
 // confirmed that it is really gone. The cluster drops the state of a job shortly after
-// finishing it, so a job that was seen running and then disappeared has completed, and
-// its manifest is worth waiting for. A job that was never seen either finished long ago
-// or does not exist, and is looked up only once.
+// finishing it, so a job last seen in one of the completionStates has completed, and its
+// manifest is worth waiting for. A job that was never seen either finished long ago or
+// does not exist, and is looked up only once. Anything else stopped reporting in the
+// middle of a backup, and only a manifest can turn that into a completion.
 func (s *Service) reportMissingBackup(
 	ctx context.Context,
 	l metadataGetter,
 	jobID string,
-	observed bool,
+	lastState infomodels.BackupState,
 ) error {
-	if observed {
+	switch {
+	case lastState == "":
+		s.logger.Info("no running backup found")
+
+		return s.printMetadata(ctx, l, jobID, false)
+	case completionStates[lastState]:
 		s.logger.Info("backup complete")
 
 		return s.printMetadata(ctx, l, jobID, true)
 	}
 
-	s.logger.Info("no running backup found")
+	// The watch may have been between polls while the job ran through its last stages,
+	// in which case the backup is done and the manifest is already in place. A missing
+	// manifest means the backup did not finish, and reporting it as complete would hide
+	// a job that died, was aborted, or fell out of the cluster status for good. Any
+	// other failure is about the storage and is reported as itself.
+	md, err := s.fetchMetadata(ctx, l, jobID, false)
 
-	return s.printMetadata(ctx, l, jobID, false)
+	switch {
+	case err == nil:
+		s.logger.Info("backup complete")
+
+		return s.printMetadataEntry(md)
+	case errors.Is(err, errclass.ErrNotFound):
+		return fmt.Errorf("%w: backup-id %s, last reported state %q",
+			errBackupStatusLost, jobID, lastState.Describe())
+	default:
+		return err
+	}
 }
 
 // printMetadata reads the manifest of a finished backup and prints it.
@@ -463,6 +539,11 @@ func (s *Service) printMetadata(ctx context.Context, l metadataGetter, jobID str
 		return err
 	}
 
+	return s.printMetadataEntry(md)
+}
+
+// printMetadataEntry prints a single backup manifest.
+func (s *Service) printMetadataEntry(md servermodels.Metadata) error {
 	return logging.PrintMetadata([]servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger)
 }
 
