@@ -468,7 +468,7 @@ func (s *Service) logStatusGap(jobID string, lastState infomodels.BackupState, m
 	}
 
 	if misses == vanishedJobConfirmations || misses%statusGapWarnEvery == 0 {
-		s.logger.Warn("backup status is unavailable, still waiting for the job", attrs...)
+		s.logger.Debug("backup status is unavailable, still waiting for the job", attrs...)
 
 		return
 	}
