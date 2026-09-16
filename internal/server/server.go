@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -219,9 +218,7 @@ func (s *Service) ListBackups(ctx context.Context) error {
 }
 
 func findBackupByPath(ctx context.Context, l *lister.Lister, path string) ([]servermodels.Metadata, error) {
-	backupID := filepath.Base(path)
-
-	md, err := l.GetMetadata(ctx, backupID)
+	md, err := l.GetMetadata(ctx, path)
 	if err != nil {
 		return nil, err
 	}
