@@ -58,6 +58,9 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	progress := defaultServerBackupProgressConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(progress.JobID))
 	assert.Equal(t, models.DefaultServerBackupProgressWatch, derefBool(progress.Watch))
+
+	abort := defaultServerBackupAbortConfig()
+	assert.Equal(t, models.DefaultServerBackupJobID, derefString(abort.JobID))
 }
 
 func TestServerBackupToModels(t *testing.T) {
@@ -89,6 +92,7 @@ func TestServerBackupToModels(t *testing.T) {
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, SampleSize: &sampleSize},
 		Progress: ServerBackupProgressConfig{JobID: &jobID, Watch: &watch},
+		Abort:    ServerBackupAbortConfig{JobID: &jobID},
 	}
 
 	start := backup.ToModelServerBackup()
@@ -116,6 +120,10 @@ func TestServerBackupToModels(t *testing.T) {
 	require.NotNil(t, progress)
 	assert.Equal(t, jobID, progress.JobID)
 	assert.True(t, progress.Watch)
+
+	abort := backup.ToModelServerBackupAbort()
+	require.NotNil(t, abort)
+	assert.Equal(t, jobID, abort.JobID)
 }
 
 func TestServerBackupToModelsNil(t *testing.T) {
@@ -127,6 +135,7 @@ func TestServerBackupToModelsNil(t *testing.T) {
 	assert.Nil(t, backup.ToModelServerBackupList())
 	assert.Nil(t, backup.ToModelServerBackupValidate())
 	assert.Nil(t, backup.ToModelServerBackupProgress())
+	assert.Nil(t, backup.ToModelServerBackupAbort())
 }
 
 func TestServerBackupLoadSecretsNoAgent(t *testing.T) {

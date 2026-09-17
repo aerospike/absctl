@@ -83,6 +83,14 @@ func backupValidateHelpSections(appFS, validationFS, awsFS *pflag.FlagSet) []Hel
 	}
 }
 
+func backupAbortHelpSections(common commonFlagSets, abortFS *pflag.FlagSet) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{abortFS}},
+	}
+}
+
 func restoreStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
 	return []HelpSection{
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
@@ -123,6 +131,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 	awsFS := bc.aws.NewFlagSet()
 	validationFS := bc.validate.NewFlagSet()
 	progressFS := bc.progress.NewFlagSet()
+	abortFS := bc.abort.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -152,6 +161,13 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Long:     LongBackupValidate,
 			Usage:    flags.SectionTextUsageValidate,
 			Sections: backupValidateHelpSections(common.app, validationFS, awsFS),
+		},
+		{
+			Name:     UseAbort,
+			Short:    ShortBackupAbort,
+			Long:     LongBackupAbort,
+			Usage:    flags.SectionTextUsageBackupAbort,
+			Sections: backupAbortHelpSections(common, abortFS),
 		},
 	}
 }

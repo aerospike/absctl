@@ -125,3 +125,20 @@ func (s *ServerBackupProgress) Validate() error {
 
 	return nil
 }
+
+// ServerBackupAbort contains flags that will be mapped to ServerBackupAbort.
+type ServerBackupAbort struct {
+	JobID string
+}
+
+func (s *ServerBackupAbort) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	return nil
+}

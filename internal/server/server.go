@@ -68,6 +68,11 @@ const (
 	// statusGapWarnEvery paces the reminders logged while a job is missing from the
 	// cluster status, so that a long wait does not look like a hung command.
 	statusGapWarnEvery = 20
+
+	// abortStatusTimeout bounds the wait for an aborted job to stop running, and
+	// abortStatusPollInterval paces the status lookups made while waiting.
+	abortStatusTimeout      = 5 * time.Minute
+	abortStatusPollInterval = 5 * time.Second
 )
 
 var (
@@ -77,6 +82,10 @@ var (
 	// errBackupStatusLost is returned when the cluster stopped reporting a job in the
 	// middle of a backup and left no manifest behind.
 	errBackupStatusLost = errors.New("cluster stopped reporting backup status")
+
+	// errAbortStatusTimeout is returned when the cluster accepted an abort request but
+	// kept reporting the job as running until the wait ran out.
+	errAbortStatusTimeout = errors.New("checking backup status after abortion timed out")
 )
 
 // completionStates are the stages a backup job can be in when the cluster drops its
@@ -100,11 +109,6 @@ type S3API interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
-// backupStatusGetter is the part of asinfo.Client that the progress watcher needs.
-type backupStatusGetter interface {
-	GetBackupStatus(ctx context.Context, jobID string) (*infomodels.ResponseBackupState, error)
-}
-
 // metadataGetter is the part of lister.Lister that the progress watcher needs.
 type metadataGetter interface {
 	GetMetadata(ctx context.Context, backupID string) (servermodels.Metadata, error)
@@ -121,6 +125,10 @@ type Service struct {
 	// vanishedPollInterval paces the lookups that confirm a job the cluster stopped
 	// reporting is really gone.
 	vanishedPollInterval time.Duration
+	// abortPollInterval paces the lookups that confirm an aborted job stopped running,
+	// and abortTimeout bounds how long they are made for.
+	abortPollInterval time.Duration
+	abortTimeout      time.Duration
 }
 
 // NewService initializes and returns a new Service instance.
@@ -139,6 +147,8 @@ func NewService(
 			metadataRetryAttempts,
 		),
 		vanishedPollInterval: vanishedJobPollInterval,
+		abortPollInterval:    abortStatusPollInterval,
+		abortTimeout:         abortStatusTimeout,
 	}, nil
 }
 
@@ -273,7 +283,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		EnableChangeStream: s.backupCfg.Start.EnableChangeStream,
 	}
 
-	JobID, err := client.StartServerBackup(ctx, bReq)
+	JobID, err := client.StartBackup(ctx, bReq)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
@@ -319,7 +329,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
 	}
 
-	err = infoClient.StartServerRestore(ctx, rReq)
+	err = infoClient.StartRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
@@ -341,7 +351,7 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
 
-	err = client.PrepareServerRestore(
+	err = client.PrepareRestore(
 		ctx,
 		s.restoreCfg.Prepare.JobID,
 		s.restoreCfg.Prepare.Namespace,
@@ -377,7 +387,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 
 // reportBackupProgress polls the cluster for the status of the configured job and logs
 // it until the backup reaches a terminal state, or once when watching is disabled.
-func (s *Service) reportBackupProgress(ctx context.Context, client backupStatusGetter, l metadataGetter) error {
+func (s *Service) reportBackupProgress(ctx context.Context, client backup.ServerBackupInfo, l metadataGetter) error {
 	jobID := s.backupCfg.Progress.JobID
 	printer := newProgressPrinter(s.logger)
 
@@ -695,6 +705,82 @@ func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, j
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
 	)
+
+	return nil
+}
+
+// AbortBackup asks the cluster to abort the configured backup job and waits for the job
+// to stop running.
+func (s *Service) AbortBackup(ctx context.Context) error {
+	client, err := s.newInfoClient()
+	if err != nil {
+		return err
+	}
+
+	return s.abortBackup(ctx, client)
+}
+
+// abortBackup requests the abort and then confirms it through the job status.
+func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInfo) error {
+	jobID := s.backupCfg.Abort.JobID
+
+	if err := client.AbortBackup(ctx, jobID); err != nil {
+		return fmt.Errorf("failed to abort backup: %w", err)
+	}
+
+	s.logger.Info("aborting",
+		slog.String("backup-id", jobID))
+
+	// The cluster accepts the abort request before the job actually winds down, so the
+	// abort is confirmed by the status that follows it. The wait is bounded: a job that
+	// never reacts to the abort has to end the command instead of being polled forever,
+	// and the deadline also cuts short a status request that is already in flight.
+	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
+	defer cancel()
+
+	for {
+		state, err := client.GetBackupStatus(statusCtx, jobID)
+		if err != nil {
+			// The cluster drops the state of a job that is no longer running.
+			if errors.Is(err, asinfo.ErrNotFound) {
+				break
+			}
+
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: backup-id %s", errAbortStatusTimeout, jobID)
+			}
+
+			return fmt.Errorf("failed to get backup status: %w", err)
+		}
+
+		// The server fails a job that it aborted.
+		if state.State == infomodels.BackupStateFailed {
+			break
+		}
+
+		// A job that reached the end of the backup before the abort landed was not
+		// aborted: its data is in storage, and waiting for it to stop would only end in
+		// the cluster dropping the state of a finished backup.
+		if state.State == infomodels.BackupStateComplete {
+			s.logger.Info("backup finished before it could be aborted",
+				slog.String("backup-id", jobID))
+
+			return nil
+		}
+
+		// waitFor returns as soon as the command is canceled or the wait runs out, so
+		// the abort never keeps polling a job the caller stopped waiting for.
+		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: backup-id %s, last reported state %q",
+					errAbortStatusTimeout, jobID, state.State.Describe())
+			}
+
+			return err
+		}
+	}
+
+	s.logger.Info("backup was successfully aborted")
 
 	return nil
 }

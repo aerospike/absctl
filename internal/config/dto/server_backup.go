@@ -31,6 +31,7 @@ type ServerBackup struct {
 	List        ServerBackupListConfig     `yaml:"list"`
 	Validate    ServerBackupValidateConfig `yaml:"validate"`
 	Progress    ServerBackupProgressConfig `yaml:"progress"`
+	Abort       ServerBackupAbortConfig    `yaml:"abort"`
 	SecretAgent SecretAgent                `yaml:"secret-agent"`
 	Aws         struct {
 		S3 ObjectStorageS3 `yaml:"s3"`
@@ -46,6 +47,7 @@ func DefaultServerBackup() *ServerBackup {
 		List:        defaultServerBackupListConfig(),
 		Validate:    defaultServerBackupValidateConfig(),
 		Progress:    defaultServerBackupProgressConfig(),
+		Abort:       defaultServerBackupAbortConfig(),
 		SecretAgent: defaultSecretAgent(),
 		Aws: struct {
 			S3 ObjectStorageS3 `yaml:"s3"`
@@ -181,5 +183,27 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 	return &models.ServerBackupProgress{
 		JobID: derefString(b.Progress.JobID),
 		Watch: derefBool(b.Progress.Watch),
+	}
+}
+
+// ServerBackupAbortConfig maps the "abort" section, used by "snapshot-backup abort".
+type ServerBackupAbortConfig struct {
+	JobID *string `yaml:"backup-id"`
+}
+
+func defaultServerBackupAbortConfig() ServerBackupAbortConfig {
+	return ServerBackupAbortConfig{
+		JobID: new(models.DefaultServerBackupJobID),
+	}
+}
+
+// ToModelServerBackupAbort maps the "abort" section onto its model.
+func (b *ServerBackup) ToModelServerBackupAbort() *models.ServerBackupAbort {
+	if b == nil {
+		return nil
+	}
+
+	return &models.ServerBackupAbort{
+		JobID: derefString(b.Abort.JobID),
 	}
 }

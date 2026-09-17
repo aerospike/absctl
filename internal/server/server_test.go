@@ -24,6 +24,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go/mocks"
 	backupmodels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
@@ -38,36 +39,68 @@ const (
 	logBackupDone   = "backup complete"
 	logNoRunningJob = "no running backup found"
 	logBackupEntry  = "backup entry"
+
+	logAborting     = "aborting"
+	logAborted      = "backup was successfully aborted"
+	logAbortTooLate = "backup finished before it could be aborted"
+
+	// testAbortTimeout bounds the abort wait in the tests. It has to outlast a handful
+	// of one-millisecond polls, and still expire quickly when a test wants it to.
+	testAbortTimeout = 50 * time.Millisecond
 )
 
 // errBoom stands for any failure that is not a missing job or a missing manifest.
 var errBoom = errors.New("boom")
 
-// statusAnswer is a single canned answer of fakeStatusGetter.
+// statusAnswer is a single canned answer of fakeInfoClient.
 type statusAnswer struct {
 	status *infomodels.ResponseBackupState
 	err    error
 }
 
-// fakeStatusGetter replays canned answers, one per call, and keeps reporting the job as
-// missing once they run out. Every call is counted, so that a test that expects the watch
-// to stop also proves that it stopped polling.
-type fakeStatusGetter struct {
-	answers []statusAnswer
-	calls   int
+// fakeInfoClient replays canned answers to the status lookups, one per call, and keeps
+// reporting the job as missing once they run out - unless repeatLast is set, which makes
+// the last answer stand forever, for the loops that only a timeout can end. Every call is
+// counted, so that a test which expects a loop to stop also proves that it stopped
+// polling.
+//
+// The embedded mock supplies the rest of backup.ServerBackupInfo: reaching one of those
+// methods means the code under test called something it has no business calling, and the
+// mock panics instead of quietly answering.
+type fakeInfoClient struct {
+	mocks.MockServerBackupInfo
+
+	answers    []statusAnswer
+	repeatLast bool
+	calls      int
+
+	abortErr   error
+	abortJobID string
+	abortCalls int
 }
 
-func (f *fakeStatusGetter) GetBackupStatus(
+func (f *fakeInfoClient) GetBackupStatus(
 	_ context.Context, _ string,
 ) (*infomodels.ResponseBackupState, error) {
 	call := f.calls
 	f.calls++
 
 	if call >= len(f.answers) {
-		return nil, asinfo.ErrNotFound
+		if !f.repeatLast || len(f.answers) == 0 {
+			return nil, asinfo.ErrNotFound
+		}
+
+		call = len(f.answers) - 1
 	}
 
 	return f.answers[call].status, f.answers[call].err
+}
+
+func (f *fakeInfoClient) AbortBackup(_ context.Context, jobID string) error {
+	f.abortCalls++
+	f.abortJobID = jobID
+
+	return f.abortErr
 }
 
 // fakeMetadataGetter answers "not found" a given number of times before it either
@@ -93,8 +126,8 @@ func (f *fakeMetadataGetter) GetMetadata(_ context.Context, _ string) (servermod
 	return f.md, nil
 }
 
-// newTestService builds a service that logs into the returned buffer and retries the
-// manifest fast enough not to slow the tests down.
+// newTestService builds a service that logs into the returned buffer and polls and
+// retries fast enough not to slow the tests down.
 func newTestService(t *testing.T, watch bool) (*Service, *bytes.Buffer) {
 	t.Helper()
 
@@ -103,12 +136,15 @@ func newTestService(t *testing.T, watch bool) (*Service, *bytes.Buffer) {
 	return &Service{
 		backupCfg: &config.ServerBackupServiceConfig{
 			Progress: &models.ServerBackupProgress{JobID: testJobID, Watch: watch},
+			Abort:    &models.ServerBackupAbort{JobID: testJobID},
 			App:      &models.App{LogJSON: true},
 			AwsS3:    &models.AwsS3{BucketName: testBucket},
 		},
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
 		vanishedPollInterval: time.Millisecond,
+		abortPollInterval:    time.Millisecond,
+		abortTimeout:         testAbortTimeout,
 	}, buf
 }
 
@@ -294,7 +330,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			t.Parallel()
 
 			svc, buf := newTestService(t, tt.watch)
-			status := &fakeStatusGetter{answers: tt.answers}
+			status := &fakeInfoClient{answers: tt.answers}
 
 			metadata := tt.metadata
 			if metadata == nil {
@@ -490,6 +526,155 @@ func TestServiceFetchMetadata(t *testing.T) {
 			assert.Equal(t, tt.wantCalls, tt.getter.calls)
 		})
 	}
+}
+
+// TestServiceAbortBackup covers the outcomes the abort reaches within a few polls. The
+// two that only time can produce - the bounded wait and a canceled command - are driven
+// separately below.
+func TestServiceAbortBackup(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		abortErr    error
+		answers     []statusAnswer
+		wantErr     error
+		wantCalls   int
+		wantLogs    []string
+		notWantLogs []string
+	}{
+		{
+			// The server fails a job that it aborted, so a failed state confirms it.
+			name:      "confirms the abort through the failed state",
+			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateFailed, 12)}},
+			wantCalls: 1,
+			wantLogs:  []string{logAborting, logAborted},
+		},
+		{
+			// The cluster drops the state of a job that is no longer running, so a job
+			// missing from the status has stopped too.
+			name:      "confirms the abort for a job the cluster no longer reports",
+			answers:   []statusAnswer{{err: asinfo.ErrNotFound}},
+			wantCalls: 1,
+			wantLogs:  []string{logAborted},
+		},
+		{
+			// The cluster keeps reporting the job while it winds down, so the state that
+			// confirms the abort only arrives a few polls later.
+			name: "waits for a job that is still winding down",
+			answers: []statusAnswer{
+				{status: testStatus(infomodels.BackupStateBaseScanActive, 12)},
+				{status: testStatus(infomodels.BackupStateIncrScanActive, 91)},
+				{status: testStatus(infomodels.BackupStateFailed, 91)},
+			},
+			wantCalls: 3,
+			wantLogs:  []string{logAborted},
+		},
+		{
+			// A backup that reached the end before the abort landed was not aborted, and
+			// announcing it as aborted would hide a backup that is in storage.
+			name:        "reports a backup that finished before the abort landed",
+			answers:     []statusAnswer{{status: testStatus(infomodels.BackupStateComplete, 100)}},
+			wantCalls:   1,
+			wantLogs:    []string{logAbortTooLate},
+			notWantLogs: []string{logAborted},
+		},
+		{
+			// Nothing was aborted, so there is nothing to confirm.
+			name:        "propagates a rejected abort request without polling",
+			abortErr:    errBoom,
+			wantErr:     errBoom,
+			wantCalls:   0,
+			notWantLogs: []string{logAborting, logAborted},
+		},
+		{
+			name:        "propagates an unexpected status error",
+			answers:     []statusAnswer{{err: errBoom}},
+			wantErr:     errBoom,
+			wantCalls:   1,
+			notWantLogs: []string{logAborted},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, buf := newTestService(t, false)
+			client := &fakeInfoClient{answers: tt.answers, abortErr: tt.abortErr}
+
+			err := svc.abortBackup(t.Context(), client)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			// The abort is requested once, for the configured job, whatever follows.
+			assert.Equal(t, 1, client.abortCalls)
+			assert.Equal(t, testJobID, client.abortJobID)
+			assert.Equal(t, tt.wantCalls, client.calls)
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
+		})
+	}
+}
+
+// TestServiceAbortBackupTimesOut pins down the bound on the wait: a job that never reacts
+// to the abort has to end the command instead of being polled forever, and the failure
+// has to say so rather than claim the backup stopped.
+func TestServiceAbortBackupTimesOut(t *testing.T) {
+	t.Parallel()
+
+	svc, buf := newTestService(t, false)
+
+	client := &fakeInfoClient{
+		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 80)}},
+		repeatLast: true,
+	}
+
+	err := svc.abortBackup(t.Context(), client)
+
+	require.ErrorIs(t, err, errAbortStatusTimeout)
+	// The last state the cluster reported belongs in the error: it is the only clue
+	// about what the job was still doing.
+	require.ErrorContains(t, err, infomodels.BackupStateIncrScanActive.Describe())
+	require.Greater(t, client.calls, 1, "the abort must keep polling until the wait runs out")
+	require.NotContains(t, buf.String(), logAborted)
+}
+
+// TestServiceAbortBackupCanceled makes sure a command the user interrupted is reported as
+// canceled and not as a timeout, and that the wait ends at once instead of sitting out the
+// poll interval.
+func TestServiceAbortBackupCanceled(t *testing.T) {
+	t.Parallel()
+
+	svc, buf := newTestService(t, false)
+	// A poll interval longer than the test would tolerate: only the cancellation can
+	// end this wait.
+	svc.abortPollInterval = time.Minute
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	client := &fakeInfoClient{
+		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 40)}},
+		repeatLast: true,
+	}
+
+	cancel()
+
+	err := svc.abortBackup(ctx, client)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, errAbortStatusTimeout)
+	assert.NotContains(t, buf.String(), logAborted)
 }
 
 func TestServiceMetadataS3Config(t *testing.T) {

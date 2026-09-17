@@ -27,6 +27,7 @@ type ServerBackupServiceConfig struct {
 	List       *models.ServerBackupList
 	Validation *models.ServerBackupValidate
 	Progress   *models.ServerBackupProgress
+	Abort      *models.ServerBackupAbort
 
 	ServiceConfigCommon
 }
@@ -38,6 +39,7 @@ func NewServerBackupServiceConfig(
 	list *models.ServerBackupList,
 	validation *models.ServerBackupValidate,
 	progress *models.ServerBackupProgress,
+	abort *models.ServerBackupAbort,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -49,6 +51,7 @@ func NewServerBackupServiceConfig(
 		List:         list,
 		Validation:   validation,
 		Progress:     progress,
+		Abort:        abort,
 		App:          app,
 		ClientConfig: clientConfig,
 		ClientPolicy: clientPolicy,
@@ -75,9 +78,15 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
-	// Every snapshot-backup subcommand reads from or writes to object storage.
-	if err := validateServerObjectStorage(s.AwsS3); err != nil {
+	if err := s.Abort.Validate(); err != nil {
 		return err
+	}
+
+	// Abort talks only to the cluster; the other subcommands need object storage.
+	if s.needsObjectStorage() {
+		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+			return err
+		}
 	}
 
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
@@ -85,6 +94,10 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 	}
 
 	return nil
+}
+
+func (s *ServerBackupServiceConfig) needsObjectStorage() bool {
+	return s.Start != nil || s.List != nil || s.Validation != nil || s.Progress != nil
 }
 
 // validateServerObjectStorage makes sure the object storage of a
