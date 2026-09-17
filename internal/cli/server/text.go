@@ -50,7 +50,11 @@ const (
 
 // Long descriptions (cobra "Long" values).
 const (
-	LongBackupStart     = "Start a server-integrated backup on the Aerospike cluster."
+	LongBackupStart = "Start a server-integrated backup on the Aerospike cluster and\n" +
+		"follow its progress until it completes. Interrupting the command\n" +
+		"stops the reporting only; use the abort command to stop the backup.\n" +
+		"With --async the command returns as soon as the cluster accepts\n" +
+		"the backup."
 	LongBackupList      = "List available server-integrated backups from the configured storage."
 	LongBackupProgress  = "Show the progress of a currently running server-integrated backup."
 	LongBackupValidate  = "Validate available server-integrated backups from the configured storage."

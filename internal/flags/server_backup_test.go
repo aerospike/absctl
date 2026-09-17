@@ -85,6 +85,19 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultBackupEnableChangeStream, result.EnableChangeStream)
+	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+}
+
+func TestServerBackup_NewFlagSet_Async(t *testing.T) {
+	t.Parallel()
+
+	backup := NewServerBackup()
+	flagSet := backup.NewFlagSet()
+
+	err := flagSet.Parse([]string{"--async"})
+	require.NoError(t, err)
+
+	assert.True(t, backup.GetServerBackup().Async)
 }
 
 func TestServerBackupList_NewFlagSet(t *testing.T) {

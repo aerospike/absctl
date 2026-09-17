@@ -47,6 +47,7 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
 	assert.Equal(t, models.DefaultBackupEnableChangeStream, derefBool(backup.EnableChangeStream))
+	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -73,6 +74,7 @@ func TestServerBackupToModels(t *testing.T) {
 	noIndexes := true
 	noUDFs := true
 	changeStream := true
+	async := true
 	path := "some/prefix"
 	jobID := "bkp-1"
 	sampleSize := 500
@@ -88,6 +90,7 @@ func TestServerBackupToModels(t *testing.T) {
 			NoIndexes:          &noIndexes,
 			NoUDFs:             &noUDFs,
 			EnableChangeStream: &changeStream,
+			Async:              &async,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, SampleSize: &sampleSize},
@@ -106,6 +109,7 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.True(t, start.NoIndexes)
 	assert.True(t, start.NoUDFs)
 	assert.True(t, start.EnableChangeStream)
+	assert.True(t, start.Async)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)
