@@ -79,6 +79,7 @@ type ServerBackupConfig struct {
 	NoIndexes          *bool    `yaml:"no-indexes"`
 	NoUDFs             *bool    `yaml:"no-udfs"`
 	EnableChangeStream *bool    `yaml:"enable-change-stream"`
+	Async              *bool    `yaml:"async"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
@@ -91,6 +92,7 @@ func defaultServerBackupConfig() ServerBackupConfig {
 		NoIndexes:          new(models.DefaultCommonNoIndexes),
 		NoUDFs:             new(models.DefaultCommonNoUDFs),
 		EnableChangeStream: new(models.DefaultBackupEnableChangeStream),
+		Async:              new(models.DefaultServerBackupAsync),
 	}
 }
 
@@ -109,6 +111,7 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		NoIndexes:          derefBool(b.Backup.NoIndexes),
 		NoUDFs:             derefBool(b.Backup.NoUDFs),
 		EnableChangeStream: derefBool(b.Backup.EnableChangeStream),
+		Async:              derefBool(b.Backup.Async),
 	}
 }
 

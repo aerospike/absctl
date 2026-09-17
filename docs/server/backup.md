@@ -9,7 +9,11 @@ These commands coordinate backups through the Aerospike cluster rather than scan
 
 Start a server-integrated backup
 
-Start a server-integrated backup on the Aerospike cluster.
+Start a server-integrated backup on the Aerospike cluster and
+follow its progress until it completes. Interrupting the command
+stops the reporting only; use the abort command to stop the backup.
+With --async the command returns as soon as the cluster accepts
+the backup.
 
 ### Supported flags
 ```bash
@@ -85,6 +89,9 @@ Backup Flags:
   -i, --no-indexes                   Exclude indexes from the backup.
   -u, --no-udfs                      Exclude user-defined functions from the backup.
       --enable-change-stream         Enable backup of change stream.
+      --async                        Return as soon as the cluster accepts the backup, without
+                                     following its progress. Use the progress command to follow
+                                     the backup later.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -508,6 +515,10 @@ backup:
   no-udfs: false
   # Enable backup of change stream.
   enable-change-stream: false
+  # Return as soon as the cluster accepts the backup, without
+  # following its progress. Use the progress command to follow
+  # the backup later.
+  async: false
 list:
   # Path to list backups from.
   path: backup_dir

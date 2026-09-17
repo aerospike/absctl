@@ -236,8 +236,9 @@ func findBackupByPath(ctx context.Context, l *lister.Lister, path string) ([]ser
 	return []servermodels.Metadata{md}, nil
 }
 
-// StartBackup initiates a backup process using the service's configured backup settings
-// and returns an error if it fails.
+// StartBackup initiates a backup process using the service's configured backup settings,
+// then follows the job it started until the backup reaches a terminal state. With Async
+// set it returns as soon as the cluster accepts the job.
 func (s *Service) StartBackup(ctx context.Context) error {
 	client, err := s.newInfoClient()
 	if err != nil {
@@ -283,15 +284,36 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		EnableChangeStream: s.backupCfg.Start.EnableChangeStream,
 	}
 
-	JobID, err := client.StartBackup(ctx, bReq)
+	// Following the backup ends by reading its manifest, so the storage is opened before
+	// the backup is requested: an unusable configuration has to fail the command now,
+	// not once there is a running backup that cannot be followed. It is the same
+	// configuration the cluster writes the backup with, so a backup started without it
+	// would not get far either. An asynchronous start reads nothing and needs none of it.
+	var l *lister.Lister
+
+	if !s.backupCfg.Start.Async {
+		l, err = s.newMetadataLister(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	jobID, err := client.StartBackup(ctx, bReq)
 	if err != nil {
 		return fmt.Errorf("failed to start backup: %w", err)
 	}
 
 	s.logger.Info("server integrated backup started",
-		slog.String("backup-id", JobID))
+		slog.String("backup-id", jobID))
 
-	return nil
+	if s.backupCfg.Start.Async {
+		return nil
+	}
+
+	// The backup runs in the cluster, so watching it only reads its status: leaving the
+	// watch, whether by an interrupt or by a failure here, does not stop the backup, and
+	// "backup abort" is the only thing that does.
+	return s.reportBackupProgress(ctx, client, l, jobID, true)
 }
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
@@ -375,20 +397,36 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 
 	// The storage client is created before the watch loop on purpose: a wrong endpoint
 	// or wrong credentials must fail now, not after hours of watching a backup.
-	s3Client, err := storage.NewS3Client(ctx, s.metadataS3Config())
+	l, err := s.newMetadataLister(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create s3 client: %w", err)
+		return err
 	}
 
-	l := lister.NewLister(s3Client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger))
-
-	return s.reportBackupProgress(ctx, infoClient, l)
+	return s.reportBackupProgress(ctx, infoClient, l,
+		s.backupCfg.Progress.JobID, s.backupCfg.Progress.Watch)
 }
 
-// reportBackupProgress polls the cluster for the status of the configured job and logs
-// it until the backup reaches a terminal state, or once when watching is disabled.
-func (s *Service) reportBackupProgress(ctx context.Context, client backup.ServerBackupInfo, l metadataGetter) error {
-	jobID := s.backupCfg.Progress.JobID
+// newMetadataLister returns the reader of backup manifests in the configured bucket.
+func (s *Service) newMetadataLister(ctx context.Context) (*lister.Lister, error) {
+	s3Client, err := storage.NewS3Client(ctx, s.metadataS3Config())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	return lister.NewLister(s3Client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger)), nil
+}
+
+// reportBackupProgress polls the cluster for the status of jobID and logs it until the
+// backup reaches a terminal state, or once when watch is not set. The job is named by the
+// caller rather than taken from the configuration, because the job that "backup start"
+// follows is the one the cluster just handed it and not one named on the command line.
+func (s *Service) reportBackupProgress(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	l metadataGetter,
+	jobID string,
+	watch bool,
+) error {
 	printer := newProgressPrinter(s.logger)
 
 	// lastState is the state the cluster reported for this job most recently. It stays
@@ -409,7 +447,7 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backup.Server
 		case err != nil:
 			misses++
 
-			if s.jobVanished(lastState, misses) {
+			if jobVanished(lastState, misses, watch) {
 				return s.reportMissingBackup(ctx, l, jobID, lastState)
 			}
 
@@ -436,7 +474,7 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backup.Server
 			return fmt.Errorf("%w: backup-id %s", errBackupFailed, jobID)
 		}
 
-		if !s.backupCfg.Progress.Watch {
+		if !watch {
 			return nil
 		}
 
@@ -451,9 +489,9 @@ func (s *Service) reportBackupProgress(ctx context.Context, client backup.Server
 // several times in a row, so that a momentary gap in the cluster status is not mistaken
 // for a terminal outcome, and a job that was seen before it reached its last stages gets
 // the longer of the two waits: its status is the only thing that can end the watch.
-func (s *Service) jobVanished(lastState infomodels.BackupState, misses int) bool {
+func jobVanished(lastState infomodels.BackupState, misses int, watch bool) bool {
 	switch {
-	case !s.backupCfg.Progress.Watch:
+	case !watch:
 		return true
 	case lastState == "" || completionStates[lastState]:
 		return misses >= vanishedJobConfirmations
