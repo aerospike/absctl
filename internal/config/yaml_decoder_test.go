@@ -90,6 +90,8 @@ validate:
 progress:
   backup-id: bkp-1
   watch: true
+abort:
+  backup-id: bkp-1
 aws:
   s3:
     bucket-name: my-bucket
@@ -499,9 +501,25 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Start)
 				assert.Nil(t, cfg.List)
 				assert.Nil(t, cfg.Validation)
+				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "bkp-1", cfg.Progress.JobID)
 				assert.True(t, cfg.Progress.Watch)
+			},
+		},
+		{
+			name:    "abort reads the abort section",
+			command: ServerBackupCommandAbort,
+			assert: func(t *testing.T, cfg *ServerBackupServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Abort)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.List)
+				assert.Nil(t, cfg.Validation)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "bkp-1", cfg.Abort.JobID)
 			},
 		},
 	}

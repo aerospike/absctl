@@ -31,6 +31,7 @@ type backupCtx struct {
 	list     *flags.ServerBackupList
 	validate *flags.ServerBackupValidate
 	progress *flags.ServerBackupProgress
+	abort    *flags.ServerBackupAbort
 
 	// aws is the listing/validation source (list, validate, progress).
 	aws *flags.AwsS3
@@ -40,10 +41,12 @@ type backupCtx struct {
 
 func newBackupCtx() *backupCtx {
 	return &backupCtx{
-		start:           flags.NewServerBackup(),
-		list:            flags.NewServerBackupList(),
-		validate:        flags.NewServerBackupValidate(),
-		progress:        flags.NewServerBackupProgress(),
+		start:    flags.NewServerBackup(),
+		list:     flags.NewServerBackupList(),
+		validate: flags.NewServerBackupValidate(),
+		progress: flags.NewServerBackupProgress(),
+		abort:    flags.NewServerBackupAbort(),
+
 		aws:             flags.NewAwsS3(flags.OperationRestore),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
@@ -89,6 +92,7 @@ func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime strin
 		newBackupListCmd(rc, bc),
 		newBackupProgressCmd(rc, bc),
 		newBackupValidateCmd(rc, bc),
+		newBackupAbortCmd(rc, bc),
 	)
 
 	applyRootPersistent(cmd, rc)
@@ -119,7 +123,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						bf.start.GetServerBackup(),
-						nil, nil, nil,
+						nil, nil, nil, nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -184,7 +188,7 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 					return config.NewServerBackupServiceConfig(
 						nil,
 						bf.list.GetServerBackupList(),
-						nil, nil,
+						nil, nil, nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -244,6 +248,7 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 					return config.NewServerBackupServiceConfig(
 						nil, nil, nil,
 						bf.progress.GetServerBackupProgress(),
+						nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -305,7 +310,7 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 					return config.NewServerBackupServiceConfig(
 						nil, nil,
 						bf.validate.GetServerBackupValidate(),
-						nil,
+						nil, nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -342,6 +347,64 @@ func setHelpBackupValidate(cmd *cobra.Command, appFS, validationFS, awsFS *pflag
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageValidate,
 		Sections: backupValidateHelpSections(appFS, validationFS, awsFS),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newBackupAbortCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
+	abortFlagSet := bf.abort.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseAbort,
+		Short: ShortBackupAbort,
+		Long:  LongBackupAbort,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandAbort,
+				func() *config.ServerBackupServiceConfig {
+					return config.NewServerBackupServiceConfig(
+						nil, nil, nil, nil,
+						bf.abort.GetServerBackupAbort(),
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						nil,
+					)
+				})
+			if err != nil {
+				return err
+			}
+
+			svc, err := newService(rc, cfg, nil)
+			if err != nil {
+				return fmt.Errorf("failed to initialize backup abort: %w", err)
+			}
+
+			if err := svc.AbortBackup(cmd.Context()); err != nil {
+				return fmt.Errorf("failed to abort backup: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(abortFlagSet)
+
+	setHelpBackupAbort(cmd, common, abortFlagSet)
+
+	return cmd
+}
+
+func setHelpBackupAbort(cmd *cobra.Command, common commonFlagSets, abortFS *pflag.FlagSet) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageBackupAbort,
+		Sections: backupAbortHelpSections(common, abortFS),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {

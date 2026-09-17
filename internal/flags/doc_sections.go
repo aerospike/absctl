@@ -29,6 +29,7 @@ const (
 	SectionTextUsageBackupStart     = "\nUsage:\n  absctl snapshot-backup start [flags]"
 	SectionTextUsageBackupList      = "\nUsage:\n  absctl snapshot-backup list [flags]"
 	SectionTextUsageValidate        = "\nUsage:\n  absctl snapshot-backup validate [flags]"
+	SectionTextUsageBackupAbort     = "\nUsage:\n  absctl snapshot-backup abort [flags]"
 	SectionTextUsageBackupProgress  = "\nUsage:\n  absctl snapshot-backup progress [flags]"
 	SectionTextUsageRestorePrepare  = "\nUsage:\n  absctl snapshot-restore prepare [flags]"
 	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl snapshot-restore progress [flags]"

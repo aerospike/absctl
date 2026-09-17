@@ -170,6 +170,34 @@ func TestServerBackupProgress_NewFlagSet(t *testing.T) {
 	assert.True(t, result.Watch)
 }
 
+func TestServerBackupAbort_NewFlagSet(t *testing.T) {
+	t.Parallel()
+
+	abort := NewServerBackupAbort()
+	flagSet := abort.NewFlagSet()
+
+	err := flagSet.Parse([]string{"--backup-id", "backup-job-1"})
+	require.NoError(t, err)
+
+	result := abort.GetServerBackupAbort()
+
+	assert.Equal(t, "backup-job-1", result.JobID)
+}
+
+func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
+	t.Parallel()
+
+	abort := NewServerBackupAbort()
+	flagSet := abort.NewFlagSet()
+
+	err := flagSet.Parse([]string{})
+	require.NoError(t, err)
+
+	result := abort.GetServerBackupAbort()
+
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+}
+
 func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
 	t.Parallel()
 

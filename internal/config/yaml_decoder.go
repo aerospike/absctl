@@ -126,6 +126,7 @@ const (
 	ServerBackupCommandList
 	ServerBackupCommandValidate
 	ServerBackupCommandProgress
+	ServerBackupCommandAbort
 )
 
 // DecodeServerBackupServiceConfig reads a snapshot-backup configuration file and
@@ -175,6 +176,8 @@ func dtoToServerBackupServiceConfig(
 		cfg.Validation = dtoBackup.ToModelServerBackupValidate()
 	case ServerBackupCommandProgress:
 		cfg.Progress = dtoBackup.ToModelServerBackupProgress()
+	case ServerBackupCommandAbort:
+		cfg.Abort = dtoBackup.ToModelServerBackupAbort()
 	default:
 		return nil, fmt.Errorf("unknown snapshot-backup command %d", command)
 	}
