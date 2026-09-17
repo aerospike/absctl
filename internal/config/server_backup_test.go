@@ -71,6 +71,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		list         = &models.ServerBackupList{}
 		validation   = &models.ServerBackupValidate{}
 		progress     = &models.ServerBackupProgress{}
+		abort        = &models.ServerBackupAbort{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -84,6 +85,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		list       *models.ServerBackupList
 		validation *models.ServerBackupValidate
 		progress   *models.ServerBackupProgress
+		abort      *models.ServerBackupAbort
 		app        *models.App
 		clientCfg  *client.AerospikeConfig
 		clientPol  *models.ClientPolicy
@@ -96,6 +98,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			list:       list,
 			validation: validation,
 			progress:   progress,
+			abort:      abort,
 			app:        app,
 			clientCfg:  clientCfg,
 			clientPol:  clientPolicy,
@@ -126,6 +129,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 				tt.list,
 				tt.validation,
 				tt.progress,
+				tt.abort,
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,
@@ -139,6 +143,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			assert.Same(t, tt.list, got.List)
 			assert.Same(t, tt.validation, got.Validation)
 			assert.Same(t, tt.progress, got.Progress)
+			assert.Same(t, tt.abort, got.Abort)
 			assert.Same(t, tt.app, got.App)
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)
@@ -243,6 +248,33 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			isBackup:   true,
 			wantErr:    true,
 			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "valid abort config without object storage",
+			cfg: func() *ServerBackupServiceConfig {
+				return &ServerBackupServiceConfig{
+					Abort: &models.ServerBackupAbort{
+						JobID: testServerJobID,
+					},
+					App:          &models.App{},
+					ClientConfig: &client.AerospikeConfig{},
+					ClientPolicy: &models.ClientPolicy{},
+				}
+			},
+			isBackup: true,
+			wantErr:  false,
+		},
+		{
+			name: "missing abort backup id",
+			cfg: func() *ServerBackupServiceConfig {
+				return &ServerBackupServiceConfig{
+					Abort: &models.ServerBackupAbort{},
+					App:   &models.App{},
+				}
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
 		},
 		{
 			name: "multiple cloud providers configured",

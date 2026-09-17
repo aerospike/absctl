@@ -443,6 +443,7 @@ func buildServerSections(operation string) []docSection {
 			docSection{FS: flags.NewServerBackupList().NewFlagSet(), YAMLPrefix: "list"},
 			docSection{FS: flags.NewServerBackupValidate().NewFlagSet(), YAMLPrefix: "validate"},
 			docSection{FS: flags.NewServerBackupProgress().NewFlagSet(), YAMLPrefix: "progress"},
+			docSection{FS: flags.NewServerBackupAbort().NewFlagSet(), YAMLPrefix: "abort"},
 		)
 	} else {
 		sections = append(sections,

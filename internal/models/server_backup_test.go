@@ -244,6 +244,53 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 	}
 }
 
+func TestServerBackupAbort_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		abort      *ServerBackupAbort
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name: "valid backup id",
+			abort: &ServerBackupAbort{
+				JobID: testServerJobID,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "nil abort",
+			abort:   nil,
+			wantErr: false,
+		},
+		{
+			name:       "missing backup id",
+			abort:      &ServerBackupAbort{},
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.abort.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestServerBackupValidate_Validate(t *testing.T) {
 	t.Parallel()
 

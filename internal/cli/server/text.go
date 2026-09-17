@@ -31,6 +31,7 @@ const (
 	UseProgress        = "progress"
 	UsePrepare         = "prepare"
 	UseValidate        = "validate"
+	UseAbort           = "abort"
 )
 
 // Short descriptions (cobra "Short" values).
@@ -44,6 +45,7 @@ const (
 	ShortRestoreStart    = "Start a server-integrated restore"
 	ShortRestorePrepare  = "Prepare a server-integrated restore"
 	ShortRestoreProgress = "Show the progress of a restore"
+	ShortBackupAbort     = "Abort a server-integrated backup"
 )
 
 // Long descriptions (cobra "Long" values).
@@ -55,4 +57,5 @@ const (
 	LongRestoreStart    = "Start a server-integrated restore on the Aerospike cluster."
 	LongRestorePrepare  = "Prepare a server-integrated restore on the Aerospike cluster."
 	LongRestoreProgress = "Show the status of a currently running server-integrated restore."
+	LongBackupAbort     = "Abort a server-integrated backup on the Aerospike cluster."
 )

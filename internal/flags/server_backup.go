@@ -144,3 +144,26 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 func (f *ServerBackupProgress) GetServerBackupProgress() *models.ServerBackupProgress {
 	return &f.ServerBackupProgress
 }
+
+type ServerBackupAbort struct {
+	models.ServerBackupAbort
+}
+
+// NewServerBackupAbort initializes and returns a new instance of ServerBackupAbort.
+func NewServerBackupAbort() *ServerBackupAbort {
+	return &ServerBackupAbort{}
+}
+
+func (f *ServerBackupAbort) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+
+	return flagSet
+}
+
+func (f *ServerBackupAbort) GetServerBackupAbort() *models.ServerBackupAbort {
+	return &f.ServerBackupAbort
+}
