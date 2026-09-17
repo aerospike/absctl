@@ -64,6 +64,11 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
 		models.DefaultBackupEnableChangeStream,
 		"Enable backup of change stream.")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerBackupAsync,
+		"Return as soon as the cluster accepts the backup, without\n"+
+			"following its progress. Use the progress command to follow\n"+
+			"the backup later.")
 
 	return flagSet
 }

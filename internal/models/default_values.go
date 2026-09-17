@@ -174,6 +174,7 @@ const (
 	// Server-specific backup.
 
 	DefaultBackupEnableChangeStream       = false
+	DefaultServerBackupAsync              = false
 	DefaultServerBackupValidateSampleSize = 10000
 	DefaultServerBackupProgressWatch      = false
 )

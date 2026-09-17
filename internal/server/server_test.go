@@ -128,17 +128,16 @@ func (f *fakeMetadataGetter) GetMetadata(_ context.Context, _ string) (servermod
 
 // newTestService builds a service that logs into the returned buffer and polls and
 // retries fast enough not to slow the tests down.
-func newTestService(t *testing.T, watch bool) (*Service, *bytes.Buffer) {
+func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 	t.Helper()
 
 	buf := &bytes.Buffer{}
 
 	return &Service{
 		backupCfg: &config.ServerBackupServiceConfig{
-			Progress: &models.ServerBackupProgress{JobID: testJobID, Watch: watch},
-			Abort:    &models.ServerBackupAbort{JobID: testJobID},
-			App:      &models.App{LogJSON: true},
-			AwsS3:    &models.AwsS3{BucketName: testBucket},
+			Abort: &models.ServerBackupAbort{JobID: testJobID},
+			App:   &models.App{LogJSON: true},
+			AwsS3: &models.AwsS3{BucketName: testBucket},
 		},
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
@@ -329,7 +328,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc, buf := newTestService(t, tt.watch)
+			svc, buf := newTestService(t)
 			status := &fakeInfoClient{answers: tt.answers}
 
 			metadata := tt.metadata
@@ -337,7 +336,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 				metadata = &fakeMetadataGetter{md: md}
 			}
 
-			err := svc.reportBackupProgress(t.Context(), status, metadata)
+			err := svc.reportBackupProgress(t.Context(), status, metadata, testJobID, tt.watch)
 
 			switch {
 			case tt.wantErr != nil:
@@ -448,14 +447,12 @@ func TestServiceJobVanished(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc, _ := newTestService(t, tt.watch)
-
 			if tt.wantNotAfter > 0 {
-				assert.False(t, svc.jobVanished(tt.lastState, tt.wantNotAfter),
+				assert.False(t, jobVanished(tt.lastState, tt.wantNotAfter, tt.watch),
 					"the job must still be waited for after %d misses", tt.wantNotAfter)
 			}
 
-			assert.True(t, svc.jobVanished(tt.lastState, tt.wantAfter),
+			assert.True(t, jobVanished(tt.lastState, tt.wantAfter, tt.watch),
 				"the job must be given up after %d misses", tt.wantAfter)
 		})
 	}
@@ -512,7 +509,7 @@ func TestServiceFetchMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc, _ := newTestService(t, true)
+			svc, _ := newTestService(t)
 
 			got, err := svc.fetchMetadata(t.Context(), tt.getter, testJobID, tt.wait)
 
@@ -600,7 +597,7 @@ func TestServiceAbortBackup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc, buf := newTestService(t, false)
+			svc, buf := newTestService(t)
 			client := &fakeInfoClient{answers: tt.answers, abortErr: tt.abortErr}
 
 			err := svc.abortBackup(t.Context(), client)
@@ -633,7 +630,7 @@ func TestServiceAbortBackup(t *testing.T) {
 func TestServiceAbortBackupTimesOut(t *testing.T) {
 	t.Parallel()
 
-	svc, buf := newTestService(t, false)
+	svc, buf := newTestService(t)
 
 	client := &fakeInfoClient{
 		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 80)}},
@@ -656,7 +653,7 @@ func TestServiceAbortBackupTimesOut(t *testing.T) {
 func TestServiceAbortBackupCanceled(t *testing.T) {
 	t.Parallel()
 
-	svc, buf := newTestService(t, false)
+	svc, buf := newTestService(t)
 	// A poll interval longer than the test would tolerate: only the cancellation can
 	// end this wait.
 	svc.abortPollInterval = time.Minute
@@ -680,7 +677,7 @@ func TestServiceAbortBackupCanceled(t *testing.T) {
 func TestServiceMetadataS3Config(t *testing.T) {
 	t.Parallel()
 
-	svc, _ := newTestService(t, false)
+	svc, _ := newTestService(t)
 
 	cfg := svc.metadataS3Config()
 

@@ -29,6 +29,9 @@ type ServerBackup struct {
 	NoIndexes          bool
 	NoUDFs             bool
 	EnableChangeStream bool
+	// Async returns from the start command as soon as the cluster accepts the job,
+	// instead of following the backup until it ends.
+	Async bool
 }
 
 func (s *ServerBackup) Validate() error {

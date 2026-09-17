@@ -82,6 +82,7 @@ backup:
     - set1
     - set2
   no-indexes: true
+  async: true
 list:
   path: some/prefix
 validate:
@@ -460,6 +461,7 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
 				assert.Equal(t, "set1,set2", cfg.Start.SetList)
 				assert.True(t, cfg.Start.NoIndexes)
+				assert.True(t, cfg.Start.Async)
 			},
 		},
 		{
