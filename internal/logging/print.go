@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,10 @@ import (
 	"io"
 	"os"
 	"strings"
+)
+
+const (
+	metricIndent = 30
 )
 
 // outWriter is a package-level reference to stderr that tests may override
@@ -45,5 +49,5 @@ func printMetric(key string, value any) {
 }
 
 func indent(key string) string {
-	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", 21-len(key)))
+	return fmt.Sprintf("%s:%s", key, strings.Repeat(" ", metricIndent-len(key)))
 }

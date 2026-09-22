@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,9 +31,13 @@ func NewServerBackup() *ServerBackup {
 func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
-		"Example: aws-s3")
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace to be backed up.")
+	flagSet.StringVar(&f.StorageType, "object-storage-type",
+		models.DefaultServerBackupObjectStorageType,
+		"Type of object storage. "+
+			"Example: aws-s3")
 	flagSet.StringVarP(&f.ModifiedAfter, "modified-after", "a",
 		models.DefaultBackupModifiedAfter,
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
@@ -60,6 +64,11 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
 		models.DefaultBackupEnableChangeStream,
 		"Enable backup of change stream.")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerBackupAsync,
+		"Return as soon as the cluster accepts the backup, without\n"+
+			"following its progress. Use the progress command to follow\n"+
+			"the backup later.")
 
 	return flagSet
 }
@@ -80,7 +89,7 @@ func NewServerBackupList() *ServerBackupList {
 func (f *ServerBackupList) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.ListPath, "path", "/", "Path to list backups from.")
+	flagSet.StringVar(&f.Path, "path", models.DefaultServerBackupPath, "Path to list backups from.")
 
 	return flagSet
 }
@@ -101,8 +110,12 @@ func NewServerBackupValidate() *ServerBackupValidate {
 func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.IntVar(&f.SampleSize, "sample-size", 10000, "Number of segments for random validation.")
-	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
+	flagSet.IntVar(&f.SampleSize, "sample-size",
+		models.DefaultServerBackupValidateSampleSize,
+		"Number of segments for random validation. 0 means validate all segments.")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
 
 	return flagSet
 }
@@ -123,13 +136,39 @@ func NewServerBackupProgress() *ServerBackupProgress {
 func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.JobID, "backup-id", "", "Backup id used for validation.")
-	flagSet.BoolVar(&f.Watch, "watch", false, "Watch the progress of the backup.")
-	flagSet.Int64Var(&f.WatchPoll, "watch-poll", 1000, "Polling interval in milliseconds for watch.")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+	flagSet.BoolVar(&f.Watch, "watch",
+		models.DefaultServerBackupProgressWatch,
+		"Watch the progress of the backup.")
 
 	return flagSet
 }
 
 func (f *ServerBackupProgress) GetServerBackupProgress() *models.ServerBackupProgress {
 	return &f.ServerBackupProgress
+}
+
+type ServerBackupAbort struct {
+	models.ServerBackupAbort
+}
+
+// NewServerBackupAbort initializes and returns a new instance of ServerBackupAbort.
+func NewServerBackupAbort() *ServerBackupAbort {
+	return &ServerBackupAbort{}
+}
+
+func (f *ServerBackupAbort) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+
+	return flagSet
+}
+
+func (f *ServerBackupAbort) GetServerBackupAbort() *models.ServerBackupAbort {
+	return &f.ServerBackupAbort
 }

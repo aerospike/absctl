@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 )
@@ -25,6 +27,7 @@ type ServerBackupServiceConfig struct {
 	List       *models.ServerBackupList
 	Validation *models.ServerBackupValidate
 	Progress   *models.ServerBackupProgress
+	Abort      *models.ServerBackupAbort
 
 	ServiceConfigCommon
 }
@@ -36,6 +39,7 @@ func NewServerBackupServiceConfig(
 	list *models.ServerBackupList,
 	validation *models.ServerBackupValidate,
 	progress *models.ServerBackupProgress,
+	abort *models.ServerBackupAbort,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -43,17 +47,16 @@ func NewServerBackupServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
-		Start:      start,
-		List:       list,
-		Validation: validation,
-		Progress:   progress,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-		},
+		Start:        start,
+		List:         list,
+		Validation:   validation,
+		Progress:     progress,
+		Abort:        abort,
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
 	}
 }
 
@@ -71,12 +74,39 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
+	if err := s.Progress.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.Abort.Validate(); err != nil {
+		return err
+	}
+
+	// Abort talks only to the cluster; the other subcommands need object storage.
+	if s.needsObjectStorage() {
+		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+			return err
+		}
+	}
+
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {
 		return err
 	}
 
-	if err := s.Progress.Validate(); err != nil {
-		return err
+	return nil
+}
+
+func (s *ServerBackupServiceConfig) needsObjectStorage() bool {
+	return s.Start != nil || s.List != nil || s.Validation != nil || s.Progress != nil
+}
+
+// validateServerObjectStorage makes sure the object storage of a
+// server-integrated command is addressable. An empty S3 section would otherwise
+// pass silently: AwsS3.IsConfigured reports false, validateStorages skips it,
+// and the command only fails later against an empty bucket name.
+func validateServerObjectStorage(awsS3 *models.AwsS3) error {
+	if awsS3 == nil || awsS3.BucketName == "" {
+		return fmt.Errorf("s3-bucket-name is required")
 	}
 
 	return nil

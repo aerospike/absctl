@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package flags
 import (
 	"testing"
 
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,9 +55,11 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := restore.GetServerRestore()
 
-	assert.Empty(t, result.Namespace)
-	assert.Empty(t, result.StorageType)
-	assert.Empty(t, result.JobID)
+	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
+	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
+	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, result.FuzzyRestore)
 }
 
 func TestServerRestorePrepare_NewFlagSet(t *testing.T) {
@@ -90,6 +93,6 @@ func TestServerRestorePrepare_NewFlagSet_DefaultValues(t *testing.T) {
 
 	result := prepare.GetServerRestorePrepare()
 
-	assert.Empty(t, result.Namespace)
-	assert.Empty(t, result.JobID)
+	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
 }

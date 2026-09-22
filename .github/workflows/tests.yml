@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -73,7 +73,7 @@ jobs:
           -e "MINIO_ACCESS_KEY=minioadmin" \
           -e "MINIO_SECRET_KEY=minioadminpassword" \
           -e "MINIO_BROWSER=off" \
-          minio/minio:RELEASE.2025-09-07T16-13-09Z server /data \
+          coollabsio/minio:RELEASE.2025-10-15T17-29-55Z server /data \
           && until (curl -I http://127.0.0.1:9000/minio/health/live | grep "OK"); do echo "Waiting for MinIO server to be ready..."; sleep 3; done \
           && docker exec minio sh -c "mc alias set myminio http://127.0.0.1:9000 minioadmin minioadminpassword && mc mb myminio/backup && mc mb myminio/aerospike-backup \
           && mc anonymous set upload myminio/backup && mc anonymous set download myminio/backup && mc anonymous set public myminio/backup \

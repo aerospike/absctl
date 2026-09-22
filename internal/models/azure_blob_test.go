@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,10 +53,8 @@ func TestAzureBlob_Validate(t *testing.T) {
 				BlockSize:           1024,
 				RestorePollDuration: 10,
 				Endpoint:            testEndpoint,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",
@@ -162,10 +160,8 @@ func TestAzureBlob_Validate(t *testing.T) {
 				BlockSize:           1,
 				RestorePollDuration: 1,
 				Endpoint:            testEndpoint,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",
@@ -178,7 +174,7 @@ func TestAzureBlob_Validate(t *testing.T) {
 				RetryMaxDelay:     60,
 				BlockSize:         1024,
 				UploadConcurrency: 1,
-				StorageCommon:     StorageCommon{MaxConnsPerHost: -1},
+				MaxConnsPerHost:   -1,
 				Endpoint:          testEndpoint,
 			},
 			isBackup: true,
@@ -194,10 +190,8 @@ func TestAzureBlob_Validate(t *testing.T) {
 				BlockSize:           1,
 				RestorePollDuration: 1,
 				Endpoint:            testEndpoint,
-				StorageCommon: StorageCommon{
-					RetryReadMultiplier: 3,
-					RetryReadBackoff:    3,
-				},
+				RetryReadMultiplier: 3,
+				RetryReadBackoff:    3,
 			},
 			isBackup: false,
 			wantErr:  "",

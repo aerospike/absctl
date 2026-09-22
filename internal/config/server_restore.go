@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,16 +40,14 @@ func NewServerRestoreServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
-		Start:    start,
-		Prepare:  prepare,
-		Progress: progress,
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          app,
-			ClientConfig: clientConfig,
-			ClientPolicy: clientPolicy,
-			SecretAgent:  secretAgent,
-			AwsS3:        awsS3,
-		},
+		Start:        start,
+		Prepare:      prepare,
+		Progress:     progress,
+		App:          app,
+		ClientConfig: clientConfig,
+		ClientPolicy: clientPolicy,
+		SecretAgent:  secretAgent,
+		AwsS3:        awsS3,
 	}
 }
 
@@ -65,6 +63,14 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 
 	if err := s.Progress.Validate(); err != nil {
 		return err
+	}
+
+	// Only "snapshot-restore start" talks to object storage; prepare and
+	// progress are served by the cluster alone.
+	if s.Start != nil {
+		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+			return err
+		}
 	}
 
 	if err := s.ServiceConfigCommon.Validate(isBackup); err != nil {

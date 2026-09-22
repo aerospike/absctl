@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -236,16 +236,12 @@ func TestNewBackupConfig_RegularBackup(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Namespace: "test-namespace",
-				Parallel:  4,
-			},
+			Namespace: "test-namespace",
+			Parallel:  4,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -295,15 +291,11 @@ func TestNewBackupConfig_BandwidthConversion(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			serviceConfig := &BackupServiceConfig{
 				Backup: &models.Backup{
-					Common: models.Common{
-						Bandwidth: tt.bandwidthMiB,
-					},
+					Bandwidth: tt.bandwidthMiB,
 				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					Compression: &models.Compression{},
-					Encryption:  &models.Encryption{},
-					SecretAgent: &models.SecretAgent{},
-				},
+				Compression: &models.Compression{},
+				Encryption:  &models.Encryption{},
+				SecretAgent: &models.SecretAgent{},
 			}
 
 			backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -323,15 +315,11 @@ func TestNewBackupConfig_StdoutConfiguration(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: StdPlaceholder,
 			FileLimit:  1000,
-			Common: models.Common{
-				Parallel: 8,
-			},
+			Parallel:   8,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -349,18 +337,16 @@ func TestNewBackupConfig_AllFlags(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2,set3",
-				BinList:          "bin1,bin2,bin3",
-				NoRecords:        true,
-				NoIndexes:        true,
-				NoUDFs:           true,
-				RecordsPerSecond: 5000,
-				Parallel:         8,
-				Bandwidth:        100,
-				Directory:        "/tmp",
-			},
+			Namespace:        "test-namespace",
+			SetList:          "set1,set2,set3",
+			BinList:          "bin1,bin2,bin3",
+			NoRecords:        true,
+			NoIndexes:        true,
+			NoUDFs:           true,
+			RecordsPerSecond: 5000,
+			Parallel:         8,
+			Bandwidth:        100,
+			Directory:        "/tmp",
 			FileLimit:        100,
 			Compact:          true,
 			NoTTLOnly:        true,
@@ -368,16 +354,14 @@ func TestNewBackupConfig_AllFlags(t *testing.T) {
 			StateFileDst:     "state.asb",
 			ScanPageSize:     10000,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{
-				Mode:  "zstd",
-				Level: 3,
-			},
-			Encryption: &models.Encryption{
-				Mode: "aes256",
-			},
-			SecretAgent: &models.SecretAgent{},
+		Compression: &models.Compression{
+			Mode:  "zstd",
+			Level: 3,
 		},
+		Encryption: &models.Encryption{
+			Mode: "aes256",
+		},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -413,17 +397,13 @@ func TestNewBackupConfig_ContinueBackup(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Directory: "/backup/dir",
-			},
+			Directory:    "/backup/dir",
 			Continue:     "continue.state",
 			ScanPageSize: 5000,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -443,11 +423,9 @@ func TestNewBackupConfig_ParallelNodes(t *testing.T) {
 		Backup: &models.Backup{
 			NodeList: "node1,node2,node3",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -468,11 +446,9 @@ func TestNewBackupConfig_RackList(t *testing.T) {
 		Backup: &models.Backup{
 			RackList: "1,2,3",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -491,11 +467,9 @@ func TestNewBackupConfig_InvalidRackList(t *testing.T) {
 		Backup: &models.Backup{
 			RackList: "invalid,rack,list",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	_, err := NewBackupConfig(serviceConfig, logger)
@@ -511,11 +485,9 @@ func TestNewBackupConfig_ModifiedBefore(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedBefore: "2024-01-01",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -533,11 +505,9 @@ func TestNewBackupConfig_ModifiedAfter(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedAfter: "2024-01-01",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -555,11 +525,9 @@ func TestNewBackupConfig_InvalidModifiedBefore(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedBefore: "invalid-date",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	_, err := NewBackupConfig(serviceConfig, logger)
@@ -576,11 +544,9 @@ func TestNewBackupConfig_InvalidModifiedAfter(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedAfter: "invalid-date",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	_, err := NewBackupConfig(serviceConfig, logger)
@@ -595,17 +561,13 @@ func TestNewBackupConfig_EmptyStringLists(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				SetList: "",
-				BinList: "",
-			},
+			SetList:  "",
+			BinList:  "",
 			NodeList: "",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	backupConfig, err := NewBackupConfig(serviceConfig, logger)
@@ -621,12 +583,10 @@ func TestNewBackupConfig_NilValues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
-		Backup: &models.Backup{},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: nil,
-			Encryption:  nil,
-			SecretAgent: nil,
-		},
+		Backup:      &models.Backup{},
+		Compression: nil,
+		Encryption:  nil,
+		SecretAgent: nil,
 	}
 
 	// Should not panic.
@@ -656,23 +616,19 @@ func TestMapBackupConfig_Success(t *testing.T) {
 			Compact:          true,
 			NodeList:         "node1,node2",
 			NoTTLOnly:        true,
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2",
-				BinList:          "bin1,bin2",
-				NoRecords:        true,
-				NoIndexes:        false,
-				RecordsPerSecond: 1000,
-				Bandwidth:        10,
-				Parallel:         5,
-			},
+			Namespace:        "test-namespace",
+			SetList:          "set1,set2",
+			BinList:          "bin1,bin2",
+			NoRecords:        true,
+			NoIndexes:        false,
+			RecordsPerSecond: 1000,
+			Bandwidth:        10,
+			Parallel:         5,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -720,16 +676,12 @@ func TestMapBackupConfig_InvalidModifiedBefore(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			ModifiedBefore: "invalid-date",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:      "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -744,16 +696,12 @@ func TestMapBackupConfig_InvalidModifiedAfter(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			ModifiedAfter: "invalid-date",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:     "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -768,16 +716,12 @@ func TestMapBackupConfig_InvalidExpression(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			FilterExpression: "invalid-exp",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:        "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)

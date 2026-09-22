@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,18 +22,17 @@ import (
 )
 
 const (
-	testServerNamespace = "test-ns"
-	testServerJobID     = "backup-job-1"
-	testServerListPath  = "/backups"
-	testServerStorage   = "s3"
+	testServerNamespace    = "test-ns"
+	testServerJobID        = "backup-job-1"
+	testServerListPath     = "/backups"
+	testServerStorage      = StorageTypeAwsS3
+	testUnsupportedStorage = "gcp-storage"
 )
 
 func validServerBackup() *ServerBackup {
 	return &ServerBackup{
-		ServerCommon: ServerCommon{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
-		},
+		Namespace:   testServerNamespace,
+		StorageType: testServerStorage,
 	}
 }
 
@@ -77,6 +76,16 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
+		},
+		{
+			name: "unsupported storage type",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.StorageType = testUnsupportedStorage
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "unsupported storage-type",
 		},
 		{
 			name: "invalid modified after",
@@ -151,7 +160,7 @@ func TestServerBackupList_Validate(t *testing.T) {
 		{
 			name: "valid list path",
 			list: &ServerBackupList{
-				ListPath: testServerListPath,
+				Path: testServerListPath,
 			},
 			wantErr: false,
 		},
@@ -160,12 +169,6 @@ func TestServerBackupList_Validate(t *testing.T) {
 			list:    nil,
 			wantErr: false,
 		},
-		{
-			name:       "missing list path",
-			list:       &ServerBackupList{},
-			wantErr:    true,
-			wantErrMsg: "list-path is required",
-		},
 	}
 
 	for _, tt := range tests {
@@ -173,6 +176,108 @@ func TestServerBackupList_Validate(t *testing.T) {
 			t.Parallel()
 
 			err := tt.list.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerBackupProgress_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		progress   *ServerBackupProgress
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name: "valid progress",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+			},
+			wantErr: false,
+		},
+		{
+			name:     "nil progress",
+			progress: nil,
+			wantErr:  false,
+		},
+		{
+			name:       "missing backup id",
+			progress:   &ServerBackupProgress{},
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "watch enabled",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+				Watch: true,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.progress.Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerBackupAbort_Validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		abort      *ServerBackupAbort
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name: "valid backup id",
+			abort: &ServerBackupAbort{
+				JobID: testServerJobID,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "nil abort",
+			abort:   nil,
+			wantErr: false,
+		},
+		{
+			name:       "missing backup id",
+			abort:      &ServerBackupAbort{},
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.abort.Validate()
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -212,6 +317,23 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			validation: &ServerBackupValidate{},
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "zero sample size validates all segments",
+			validation: &ServerBackupValidate{
+				JobID:      testServerJobID,
+				SampleSize: 0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "negative sample size",
+			validation: &ServerBackupValidate{
+				JobID:      testServerJobID,
+				SampleSize: -1,
+			},
+			wantErr:    true,
+			wantErrMsg: "sample-size must be non-negative",
 		},
 	}
 

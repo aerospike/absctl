@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,9 @@ type ServerBackup struct {
 	NoIndexes          bool
 	NoUDFs             bool
 	EnableChangeStream bool
+	// Async returns from the start command as soon as the cluster accepts the job,
+	// instead of following the backup until it ends.
+	Async bool
 }
 
 func (s *ServerBackup) Validate() error {
@@ -72,8 +75,8 @@ func (s *ServerBackup) ModifiedAfterTime() (time.Time, error) {
 }
 
 type ServerBackupList struct {
-	// ListPath is the path to list backups from.
-	ListPath string
+	// Path is the path to list backups from.
+	Path string
 }
 
 func (s *ServerBackupList) Validate() error {
@@ -81,17 +84,14 @@ func (s *ServerBackupList) Validate() error {
 		return nil
 	}
 
-	if s.ListPath == "" {
-		return fmt.Errorf("list-path is required")
-	}
-
 	return nil
 }
 
 type ServerBackupValidate struct {
-	// ListPath is the path to list backups from.
+	// JobID is the id of the backup to validate.
 	JobID string
 	// SampleSize specifies the sample size limit for validation operations.
+	// Zero means that every segment is validated.
 	SampleSize int
 }
 
@@ -104,17 +104,37 @@ func (s *ServerBackupValidate) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
+	if s.SampleSize < 0 {
+		return fmt.Errorf("sample-size must be non-negative")
+	}
+
 	return nil
 }
 
 // ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
 type ServerBackupProgress struct {
-	JobID     string
-	Watch     bool
-	WatchPoll int64
+	JobID string
+	Watch bool
 }
 
 func (s *ServerBackupProgress) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	return nil
+}
+
+// ServerBackupAbort contains flags that will be mapped to ServerBackupAbort.
+type ServerBackupAbort struct {
+	JobID string
+}
+
+func (s *ServerBackupAbort) Validate() error {
 	if s == nil {
 		return nil
 	}

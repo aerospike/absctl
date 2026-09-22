@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/aerospike/backup-go/pkg/server/models"
+	"github.com/aerospike/backup-go/pkg/server/lister/models"
 )
 
 // PrintMetadata displays backup metadata either as a formatted table
@@ -43,6 +43,7 @@ func printMetadataToLog(md models.Metadata, logger *slog.Logger) {
 	attrs := []any{
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
+		slog.String("status", md.Status),
 	}
 
 	logger.Info("backup entry", attrs...)

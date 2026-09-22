@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,23 +26,20 @@ import (
 func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
-			ServerCommon: models.ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testServerStorage,
-			},
-			JobID: testServerJobID,
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
+			JobID:       testServerJobID,
 		},
 		Prepare: &models.ServerRestorePrepare{
 			Namespace: testServerNamespace,
 			JobID:     testServerJobID,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:          &models.App{},
-			ClientConfig: &client.AerospikeConfig{},
-			ClientPolicy: &models.ClientPolicy{},
-			Encryption:   &models.Encryption{},
-			Compression:  &models.Compression{},
-		},
+		App:          &models.App{},
+		ClientConfig: &client.AerospikeConfig{},
+		ClientPolicy: &models.ClientPolicy{},
+		Encryption:   &models.Encryption{},
+		Compression:  &models.Compression{},
+		AwsS3:        validServerObjectStorage(),
 	}
 }
 
@@ -180,6 +177,28 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "namespace is required",
 		},
 		{
+			name: "missing bucket name in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "nil start skips object storage check",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Start = nil
+				cfg.AwsS3 = nil
+				return cfg
+			},
+			isBackup: false,
+			wantErr:  false,
+		},
+		{
 			name: "nil prepare skips prepare validation",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
@@ -208,20 +227,16 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 					BucketName:          testBucket,
 					Region:              "us-west-2",
 					RestorePollDuration: 1,
-					StorageCommon: models.StorageCommon{
-						RetryReadMultiplier: 2,
-						RetryReadBackoff:    100,
-					},
-					ChunkSize: 5,
+					RetryReadMultiplier: 2,
+					RetryReadBackoff:    100,
+					ChunkSize:           5,
 				}
 				cfg.GcpStorage = &models.GcpStorage{
 					BucketName:             testBucket,
 					RetryBackoffMultiplier: 2,
-					StorageCommon: models.StorageCommon{
-						RetryReadMultiplier: 2,
-						RetryReadBackoff:    100,
-					},
-					ChunkSize: 5,
+					RetryReadMultiplier:    2,
+					RetryReadBackoff:       100,
+					ChunkSize:              5,
 				}
 				return cfg
 			},

@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/config"
@@ -40,6 +41,30 @@ func newRestoreCtx() *restoreCtx {
 		progress:        flags.NewServerRestoreProgress(),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
+}
+
+// restoreServiceConfig builds the service config for one snapshot-restore
+// subcommand. When --config is set, the YAML file is the single source of
+// truth and every other flag is ignored, matching the scan commands; only the
+// section belonging to command is populated, so the unrelated ones are skipped
+// during validation. Otherwise fromFlags supplies the flag-based config.
+func restoreServiceConfig(
+	ctx context.Context,
+	rc *runCtx,
+	command config.ServerRestoreCommand,
+	fromFlags func() *config.ServerRestoreServiceConfig,
+) (*config.ServerRestoreServiceConfig, error) {
+	path := rc.app.GetApp().ConfigFilePath
+	if path == "" {
+		return fromFlags(), nil
+	}
+
+	cfg, err := config.DecodeServerRestoreServiceConfig(ctx, path, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+	}
+
+	return cfg, nil
 }
 
 // NewRestoreCmd builds the top-level "restore" command for server-integrated
@@ -84,16 +109,22 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		Short: ShortRestoreStart,
 		Long:  LongRestoreStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerRestoreServiceConfig(
-				rf.start.GetServerRestore(),
-				nil,
-				nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				rf.objectStorageS3.ToAwsS3(),
-			)
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandStart,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						rf.start.GetServerRestore(),
+						nil,
+						nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, nil, cfg)
 			if err != nil {
@@ -142,16 +173,22 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		Short: ShortRestorePrepare,
 		Long:  LongRestorePrepare,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerRestoreServiceConfig(
-				nil,
-				rf.prepare.GetServerRestorePrepare(),
-				nil,
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				rf.objectStorageS3.ToAwsS3(),
-			)
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandPrepare,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil,
+						rf.prepare.GetServerRestorePrepare(),
+						nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, nil, cfg)
 			if err != nil {
@@ -195,16 +232,22 @@ func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		Short: ShortRestoreProgress,
 		Long:  LongRestoreProgress,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.NewServerRestoreServiceConfig(
-				nil,
-				nil,
-				rf.progress.GetServerRestoreProgress(),
-				rc.app.GetApp(),
-				rc.aerospike.NewAerospikeConfig(),
-				rc.clientPolicy.GetClientPolicy(),
-				rc.secretAgent.GetSecretAgent(),
-				rf.objectStorageS3.ToAwsS3(),
-			)
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandProgress,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil,
+						nil,
+						rf.progress.GetServerRestoreProgress(),
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
 
 			svc, err := newService(rc, nil, cfg)
 			if err != nil {

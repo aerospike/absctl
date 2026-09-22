@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,19 @@
 
 package models
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// StorageTypeAwsS3 is the object storage type of the server-integrated backup and restore.
+const StorageTypeAwsS3 = "aws-s3"
+
+// supportedStorageTypes lists every value accepted by --object-storage-type.
+// The cluster reports an unknown type only after the job has been submitted,
+// so the value is checked locally to fail fast on a typo.
+var supportedStorageTypes = []string{StorageTypeAwsS3}
 
 // ServerCommon contains flags that will be mapped to ServerBackup and ServerRestore.
 type ServerCommon struct {
@@ -29,6 +41,11 @@ func (s *ServerCommon) Validate() error {
 
 	if s.StorageType == "" {
 		return fmt.Errorf("storage-type is required")
+	}
+
+	if !slices.Contains(supportedStorageTypes, s.StorageType) {
+		return fmt.Errorf("unsupported storage-type %q, supported types: %s",
+			s.StorageType, strings.Join(supportedStorageTypes, ", "))
 	}
 
 	return nil

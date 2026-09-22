@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,6 +53,15 @@ func TestServerCommon_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "storage-type is required",
+		},
+		{
+			name: "unsupported storage type",
+			common: ServerCommon{
+				Namespace:   testServerNamespace,
+				StorageType: testUnsupportedStorage,
+			},
+			wantErr:    true,
+			wantErrMsg: "unsupported storage-type",
 		},
 	}
 

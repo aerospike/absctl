@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ const (
 	UseProgress        = "progress"
 	UsePrepare         = "prepare"
 	UseValidate        = "validate"
+	UseAbort           = "abort"
 )
 
 // Short descriptions (cobra "Short" values).
@@ -44,15 +45,21 @@ const (
 	ShortRestoreStart    = "Start a server-integrated restore"
 	ShortRestorePrepare  = "Prepare a server-integrated restore"
 	ShortRestoreProgress = "Show the progress of a restore"
+	ShortBackupAbort     = "Abort a server-integrated backup"
 )
 
 // Long descriptions (cobra "Long" values).
 const (
-	LongBackupStart     = "Start a server-integrated backup on the Aerospike cluster."
+	LongBackupStart = "Start a server-integrated backup on the Aerospike cluster and\n" +
+		"follow its progress until it completes. Interrupting the command\n" +
+		"stops the reporting only; use the abort command to stop the backup.\n" +
+		"With --async the command returns as soon as the cluster accepts\n" +
+		"the backup."
 	LongBackupList      = "List available server-integrated backups from the configured storage."
 	LongBackupProgress  = "Show the progress of a currently running server-integrated backup."
 	LongBackupValidate  = "Validate available server-integrated backups from the configured storage."
 	LongRestoreStart    = "Start a server-integrated restore on the Aerospike cluster."
 	LongRestorePrepare  = "Prepare a server-integrated restore on the Aerospike cluster."
 	LongRestoreProgress = "Show the status of a currently running server-integrated restore."
+	LongBackupAbort     = "Abort a server-integrated backup on the Aerospike cluster."
 )

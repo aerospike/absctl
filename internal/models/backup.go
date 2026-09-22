@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,6 +65,7 @@ type Backup struct {
 	ScanPageSize        int64
 	OutputFilePrefix    string
 	RackList            string
+	UseScanCompression  bool
 }
 
 // ShouldClearTarget check if we should clean target directory.
@@ -160,6 +161,9 @@ func (b *Backup) ScanPolicy() (*aerospike.ScanPolicy, error) {
 	if b.NoBins {
 		p.IncludeBinData = false
 	}
+
+	// Use scan compression if requested.
+	p.UseCompression = b.UseScanCompression
 
 	if b.FilterExpression != "" {
 		exp, err := aerospike.ExpFromBase64(b.FilterExpression)

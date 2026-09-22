@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ const (
 	SectionTextUsageBackupStart     = "\nUsage:\n  absctl snapshot-backup start [flags]"
 	SectionTextUsageBackupList      = "\nUsage:\n  absctl snapshot-backup list [flags]"
 	SectionTextUsageValidate        = "\nUsage:\n  absctl snapshot-backup validate [flags]"
+	SectionTextUsageBackupAbort     = "\nUsage:\n  absctl snapshot-backup abort [flags]"
 	SectionTextUsageBackupProgress  = "\nUsage:\n  absctl snapshot-backup progress [flags]"
 	SectionTextUsageRestorePrepare  = "\nUsage:\n  absctl snapshot-restore prepare [flags]"
 	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl snapshot-restore progress [flags]"
