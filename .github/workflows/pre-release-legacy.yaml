@@ -1,4 +1,13 @@
-name: Create Aerospike Backup Tools Pre Release
+# Transitional scaffolding: the proven JFrog-direct pipeline (targets the "ecosystem" JFrog project),
+# kept only as a safety-net/comparison run alongside the new shared-workflows pipeline in pre-release.yml
+# while that one is being trusted. Exists only on switch-to-sharedworkflows — delete this file outright
+# (do not merge it) once the new pipeline is trusted and this branch merges into main.
+#
+# Manual trigger only (workflow_dispatch) -- unlike the new pipeline, this no longer runs
+# automatically on every tag push, so it doesn't double-build/double-publish alongside the
+# new pipeline by default. Dispatch it explicitly (with the tag to release) when you want a
+# comparison run against the old "ecosystem"-project path.
+name: Create Aerospike Backup Tools Pre Release (Legacy)
 
 permissions:
   contents: write
@@ -7,16 +16,18 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+    inputs:
+      tag:
+        description: Existing tag to release (must already exist, e.g. v1.2.0)
+        required: true
+        type: string
 
 jobs:
   go-releaser:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
@@ -24,6 +35,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
+          ref: refs/tags/${{ inputs.tag }}
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -55,16 +67,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
       - name: Check if release exists
         id: check-release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         with:
           script: |
-            const tag = process.env.GITHUB_REF_NAME;
+            const tag = process.env.RELEASE_TAG;
             core.info(`Checking if release exists for tag: ${tag}`);
             try {
               const release = await github.rest.repos.getReleaseByTag({
@@ -91,7 +105,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag: ${{ github.ref_name }}
+          tag: ${{ inputs.tag }}
           draft: true
           prerelease: true
 
@@ -105,7 +119,7 @@ jobs:
       package_version: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
@@ -113,7 +127,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
-          ref: ${{ github.ref }}
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -160,7 +174,7 @@ jobs:
       - name: Get Metadata
         id: metadata
         env:
-          GIT_TAG: ${{ github.ref_name }}
+          GIT_TAG: ${{ inputs.tag }}
         run: |
           echo "Starting metadata extraction..."
 
@@ -377,7 +391,7 @@ jobs:
         uses: step-security/action-gh-release@d2093dbdaf0c6507874908247e14bbc4dee6a72d # v3.0.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag }}
           files: |
             **/*.rpm
             **/*.deb
@@ -493,7 +507,7 @@ jobs:
       image_version: ${{ steps.metadata.outputs.IMAGE_VERSION }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
@@ -503,11 +517,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
-          ref: ${{ github.ref }}
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Get Metadata
         env:
-          GIT_TAG: ${{ github.ref_name }}
+          GIT_TAG: ${{ inputs.tag }}
         id: metadata
         run: |
           echo "Starting metadata extraction for Docker image build."
@@ -570,7 +584,7 @@ jobs:
           CONTEXT: ${{ github.workspace }}
           LATEST: false
           TAG: ${{env.IMAGE_VERSION}}
-          GIT_BRANCH: ${{ github.ref }}
+          GIT_BRANCH: refs/tags/${{ inputs.tag }}
           GIT_COMMIT_SHA: ${{ github.sha }}
           VERSION: ${{env.VERSION}}
           ISO8601: ${{env.ISO8601}}
@@ -656,7 +670,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
