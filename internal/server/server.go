@@ -73,11 +73,19 @@ const (
 	// abortStatusPollInterval paces the status lookups made while waiting.
 	abortStatusTimeout      = 5 * time.Minute
 	abortStatusPollInterval = 5 * time.Second
+
+	// msgBackupComplete announces a finished backup, whether the completion came from
+	// the job status or from the manifest of a job the cluster no longer reports.
+	msgBackupComplete = "backup complete"
 )
 
 var (
 	// errBackupFailed is returned when the cluster reports a failed backup job.
 	errBackupFailed = errors.New("backup failed")
+
+	// errBackupAborted is returned when the cluster reports a backup job that was
+	// aborted: the job stopped on request and left no usable backup behind.
+	errBackupAborted = errors.New("backup aborted")
 
 	// errBackupStatusLost is returned when the cluster stopped reporting a job in the
 	// middle of a backup and left no manifest behind.
@@ -97,6 +105,7 @@ var (
 var completionStates = map[infomodels.BackupState]bool{
 	infomodels.BackupStateStoppingChangeStream: true,
 	infomodels.BackupStateFinalDraining:        true,
+	infomodels.BackupStateCommitting:           true,
 	infomodels.BackupStateComplete:             true,
 }
 
@@ -486,13 +495,17 @@ func (s *Service) reportBackupProgress(
 
 		printer.Print(status, now)
 
+		// BackupStateAborting is not terminal: the job is still winding down and keeps
+		// reporting until it reaches BackupStateAborted or leaves the cluster status.
 		switch status.State {
 		case infomodels.BackupStateComplete:
-			s.logger.Info("backup complete")
+			s.logBackupComplete(status)
 
 			return s.printMetadata(ctx, l, jobID, true)
 		case infomodels.BackupStateFailed:
-			return fmt.Errorf("%w: backup-id %s", errBackupFailed, jobID)
+			return terminalStateError(errBackupFailed, jobID, status.ErrorReason)
+		case infomodels.BackupStateAborted:
+			return terminalStateError(errBackupAborted, jobID, status.ErrorReason)
 		}
 
 		if !watch {
@@ -503,6 +516,28 @@ func (s *Service) reportBackupProgress(
 			return err
 		}
 	}
+}
+
+// logBackupComplete announces a backup the cluster reported as finished, and says how
+// long the job took when the cluster reported both ends of it.
+func (s *Service) logBackupComplete(status *infomodels.ResponseBackupState) {
+	attrs := []any{slog.String("backup-id", status.JobID)}
+
+	if duration, ok := backupDuration(status); ok {
+		attrs = append(attrs, slog.String("duration", duration.Round(time.Second).String()))
+	}
+
+	s.logger.Info(msgBackupComplete, attrs...)
+}
+
+// terminalStateError names the job that ended in a terminal state, along with the reason
+// the cluster gave for it when there was one.
+func terminalStateError(err error, jobID, errorReason string) error {
+	if errorReason == "" {
+		return fmt.Errorf("%w: backup-id %s", err, jobID)
+	}
+
+	return fmt.Errorf("%w: backup-id %s, reason %q", err, jobID, errorReason)
 }
 
 // jobVanished reports whether a lookup that did not find the job is final. A one-shot
@@ -573,7 +608,7 @@ func (s *Service) reportMissingBackup(
 
 		return s.printMetadata(ctx, l, jobID, false)
 	case completionStates[lastState]:
-		s.logger.Info("backup complete")
+		s.logger.Info(msgBackupComplete)
 
 		return s.printMetadata(ctx, l, jobID, true)
 	}
@@ -587,7 +622,7 @@ func (s *Service) reportMissingBackup(
 
 	switch {
 	case err == nil:
-		s.logger.Info("backup complete")
+		s.logger.Info(msgBackupComplete)
 
 		return s.printMetadataEntry(md)
 	case errors.Is(err, errclass.ErrNotFound):
@@ -814,8 +849,9 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 			return fmt.Errorf("failed to get backup status: %w", err)
 		}
 
-		// The server fails a job that it aborted.
-		if state.State == infomodels.BackupStateFailed {
+		// The job is done winding down once it reports the abort. A job that hit a
+		// failure on the way out reports that instead, and is just as stopped.
+		if state.State == infomodels.BackupStateAborted || state.State == infomodels.BackupStateFailed {
 			break
 		}
 
