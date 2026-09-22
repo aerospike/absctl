@@ -460,8 +460,12 @@ jobs:
             exit 1
           fi
           echo "$GPG_PUBLIC_KEY" | gpg --import
-          # rpm --checksig reads its own keyring, not GnuPG's.
-          echo "$GPG_PUBLIC_KEY" | sudo rpm --import /dev/stdin
+          # rpm --checksig reads its own keyring, not GnuPG's, so the key goes in twice.
+          # Via a real file, not a pipe: rpm --import sizes its read buffer from the fstat
+          # of the argument, which is 0 for a pipe, so `rpm --import /dev/stdin` reads
+          # nothing and dies with "import read failed(0)".
+          printf '%s\n' "$GPG_PUBLIC_KEY" > "${RUNNER_TEMP}/gpg-public-key.asc"
+          sudo rpm --import "${RUNNER_TEMP}/gpg-public-key.asc"
 
       - name: Verify every artifact carries a valid signature
         run: |
