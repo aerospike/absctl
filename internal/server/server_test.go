@@ -36,7 +36,6 @@ import (
 
 const (
 	testBucket      = "asbackup"
-	logBackupDone   = "backup complete"
 	logNoRunningJob = "no running backup found"
 	logBackupEntry  = "backup entry"
 
@@ -47,6 +46,14 @@ const (
 	// testAbortTimeout bounds the abort wait in the tests. It has to outlast a handful
 	// of one-millisecond polls, and still expire quickly when a test wants it to.
 	testAbortTimeout = 50 * time.Millisecond
+
+	// testBackupDuration is how long a finished job ran in the tests, and logDuration is
+	// how the completion line reports it.
+	testBackupDuration = time.Minute
+	logDuration        = "duration=1m0s"
+
+	// testErrorReason stands for the reason the cluster gives for a terminal state.
+	testErrorReason = "storage unreachable"
 )
 
 // errBoom stands for any failure that is not a missing job or a missing manifest.
@@ -163,8 +170,25 @@ func testStatus(state infomodels.BackupState, pct float64) *infomodels.ResponseB
 		Namespace:   testNamespace,
 		State:       state,
 		ProgressPct: pct,
-		StartTime:   time.Now().Add(-time.Minute),
+		StartTime:   time.Now().Add(-testBackupDuration),
 	}
+}
+
+// testFinishedStatus reports a job that reached a terminal state, which is the only case
+// in which the cluster fills in the finish time.
+func testFinishedStatus(state infomodels.BackupState, pct float64) *infomodels.ResponseBackupState {
+	status := testStatus(state, pct)
+	status.FinishTime = status.StartTime.Add(testBackupDuration)
+
+	return status
+}
+
+// testFailedStatus reports a job that ended in a terminal state with a reason attached.
+func testFailedStatus(state infomodels.BackupState) *infomodels.ResponseBackupState {
+	status := testFinishedStatus(state, 42)
+	status.ErrorReason = testErrorReason
+
+	return status
 }
 
 func TestServiceReportBackupProgress(t *testing.T) {
@@ -184,11 +208,13 @@ func TestServiceReportBackupProgress(t *testing.T) {
 		notWantLogs []string
 	}{
 		{
-			name:      "reports a completed backup",
+			// The cluster reports both ends of a finished job, so the completion line
+			// can say how long the backup took.
+			name:      "reports a completed backup with the time it took",
 			watch:     true,
-			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateComplete, 100)}},
+			answers:   []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateComplete, 100)}},
 			wantCalls: 1,
-			wantLogs:  []string{logBackupDone, logBackupEntry},
+			wantLogs:  []string{msgBackupComplete, logDuration, logBackupEntry},
 		},
 		{
 			// The cluster drops the job state right after finishing the backup. The job
@@ -204,7 +230,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 				{err: asinfo.ErrNotFound},
 			},
 			wantCalls:   6,
-			wantLogs:    []string{logBackupDone, logBackupEntry},
+			wantLogs:    []string{msgBackupComplete, logBackupEntry},
 			notWantLogs: []string{logNoRunningJob},
 		},
 		{
@@ -219,7 +245,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 				{status: testStatus(infomodels.BackupStateComplete, 100)},
 			},
 			wantCalls: 4,
-			wantLogs:  []string{logBackupDone, logBackupEntry},
+			wantLogs:  []string{msgBackupComplete, logBackupEntry},
 		},
 		{
 			// A scan that stops reporting for longer than the confirmations of a
@@ -236,7 +262,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 				statusAnswer{status: testStatus(infomodels.BackupStateComplete, 100)},
 			),
 			wantCalls: vanishedJobConfirmations*3 + 3,
-			wantLogs:  []string{logBackupDone, logBackupEntry},
+			wantLogs:  []string{msgBackupComplete, logBackupEntry},
 		},
 		{
 			// The watch can be between polls while the job runs through its last stages.
@@ -249,7 +275,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 				repeatNotFound(midBackupGapConfirmations)...,
 			),
 			wantCalls: midBackupGapConfirmations + 1,
-			wantLogs:  []string{logBackupDone, logBackupEntry},
+			wantLogs:  []string{msgBackupComplete, logBackupEntry},
 		},
 		{
 			// A job that stopped reporting in the middle of a backup and left no
@@ -263,7 +289,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			metadata:    &fakeMetadataGetter{notFound: 10},
 			wantErr:     errBackupStatusLost,
 			wantCalls:   midBackupGapConfirmations + 1,
-			notWantLogs: []string{logBackupDone},
+			notWantLogs: []string{msgBackupComplete},
 		},
 		{
 			// A job the cluster never reported is looked up a few more times before it
@@ -274,7 +300,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			answers:     repeatNotFound(vanishedJobConfirmations),
 			wantCalls:   vanishedJobConfirmations,
 			wantLogs:    []string{logNoRunningJob, logBackupEntry},
-			notWantLogs: []string{logBackupDone},
+			notWantLogs: []string{msgBackupComplete},
 		},
 		{
 			// Without --watch there is nothing to wait for, so a missing job is answered
@@ -284,7 +310,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			answers:     repeatNotFound(1),
 			wantCalls:   1,
 			wantLogs:    []string{logNoRunningJob, logBackupEntry},
-			notWantLogs: []string{logBackupDone},
+			notWantLogs: []string{msgBackupComplete},
 		},
 		{
 			// A manifest that cannot be read for a reason other than being absent is a
@@ -298,7 +324,20 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			metadata:    &fakeMetadataGetter{err: errBoom},
 			wantErr:     errBoom,
 			wantCalls:   midBackupGapConfirmations + 1,
-			notWantLogs: []string{logBackupDone},
+			notWantLogs: []string{msgBackupComplete},
+		},
+		{
+			// COMMITTING is the last stage before COMPLETE, so a job that stops
+			// reporting from it has finished just as much as one that was draining.
+			name:  "treats a job vanished while committing as a completed backup",
+			watch: true,
+			answers: append(
+				[]statusAnswer{{status: testStatus(infomodels.BackupStateCommitting, 99)}},
+				repeatNotFound(vanishedJobConfirmations)...,
+			),
+			wantCalls:   vanishedJobConfirmations + 1,
+			wantLogs:    []string{msgBackupComplete, logBackupEntry},
+			notWantLogs: []string{logNoRunningJob},
 		},
 		{
 			name:      "fails on a failed backup",
@@ -306,6 +345,38 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateFailed, 42)}},
 			wantErr:   errBackupFailed,
 			wantCalls: 1,
+		},
+		{
+			// The reason is the only thing that says why the job died, so it belongs in
+			// the error rather than in a log line the caller may never see.
+			name:       "names the reason the cluster gave for a failure",
+			watch:      true,
+			answers:    []statusAnswer{{status: testFailedStatus(infomodels.BackupStateFailed)}},
+			wantErr:    errBackupFailed,
+			wantErrMsg: testErrorReason,
+			wantCalls:  1,
+		},
+		{
+			// An aborted job stopped on request and left no usable backup behind, so it
+			// must not be reported as a completion.
+			name:        "fails on an aborted backup",
+			watch:       true,
+			answers:     []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 42)}},
+			wantErr:     errBackupAborted,
+			wantCalls:   1,
+			notWantLogs: []string{msgBackupComplete},
+		},
+		{
+			// ABORTING is not terminal: the job is still winding down, and the watch has
+			// to stay on it until it reports the abort.
+			name:  "keeps watching a job that is still aborting",
+			watch: true,
+			answers: []statusAnswer{
+				{status: testStatus(infomodels.BackupStateAborting, 42)},
+				{status: testFinishedStatus(infomodels.BackupStateAborted, 42)},
+			},
+			wantErr:   errBackupAborted,
+			wantCalls: 2,
 		},
 		{
 			name:      "propagates an unexpected status error",
@@ -320,7 +391,7 @@ func TestServiceReportBackupProgress(t *testing.T) {
 			answers:     []statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 5)}},
 			wantCalls:   1,
 			wantLogs:    []string{"backup progress"},
-			notWantLogs: []string{logBackupDone, logBackupEntry},
+			notWantLogs: []string{msgBackupComplete, logBackupEntry},
 		},
 	}
 
@@ -338,13 +409,16 @@ func TestServiceReportBackupProgress(t *testing.T) {
 
 			err := svc.reportBackupProgress(t.Context(), status, metadata, testJobID, tt.watch)
 
-			switch {
-			case tt.wantErr != nil:
-				require.ErrorIs(t, err, tt.wantErr)
-			case tt.wantErrMsg != "":
-				require.ErrorContains(t, err, tt.wantErrMsg)
-			default:
+			if tt.wantErr == nil && tt.wantErrMsg == "" {
 				require.NoError(t, err)
+			}
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			}
+
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
 			}
 
 			assert.Equal(t, tt.wantCalls, status.calls)
@@ -425,6 +499,13 @@ func TestServiceJobVanished(t *testing.T) {
 			name:         "final draining",
 			watch:        true,
 			lastState:    infomodels.BackupStateFinalDraining,
+			wantAfter:    vanishedJobConfirmations,
+			wantNotAfter: vanishedJobConfirmations - 1,
+		},
+		{
+			name:         "committing",
+			watch:        true,
+			lastState:    infomodels.BackupStateCommitting,
 			wantAfter:    vanishedJobConfirmations,
 			wantNotAfter: vanishedJobConfirmations - 1,
 		},
@@ -541,7 +622,14 @@ func TestServiceAbortBackup(t *testing.T) {
 		notWantLogs []string
 	}{
 		{
-			// The server fails a job that it aborted, so a failed state confirms it.
+			name:      "confirms the abort through the aborted state",
+			answers:   []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 12)}},
+			wantCalls: 1,
+			wantLogs:  []string{logAborting, logAborted},
+		},
+		{
+			// A job that hit a failure on its way out reports that instead of the abort,
+			// and is just as stopped.
 			name:      "confirms the abort through the failed state",
 			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateFailed, 12)}},
 			wantCalls: 1,
@@ -561,8 +649,8 @@ func TestServiceAbortBackup(t *testing.T) {
 			name: "waits for a job that is still winding down",
 			answers: []statusAnswer{
 				{status: testStatus(infomodels.BackupStateBaseScanActive, 12)},
-				{status: testStatus(infomodels.BackupStateIncrScanActive, 91)},
-				{status: testStatus(infomodels.BackupStateFailed, 91)},
+				{status: testStatus(infomodels.BackupStateAborting, 91)},
+				{status: testFinishedStatus(infomodels.BackupStateAborted, 91)},
 			},
 			wantCalls: 3,
 			wantLogs:  []string{logAborted},

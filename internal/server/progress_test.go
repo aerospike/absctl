@@ -29,6 +29,9 @@ import (
 const (
 	testJobID     = "527069025"
 	testNamespace = "source-ns1"
+
+	// logBackupProgress is the message every progress line is logged under.
+	logBackupProgress = "backup progress"
 )
 
 func TestProgressPrinterShouldPrint(t *testing.T) {
@@ -137,7 +140,7 @@ func TestProgressPrinterSample(t *testing.T) {
 		name       string
 		printer    *progressPrinter
 		state      infomodels.BackupState
-		recs       int
+		recs       uint64
 		sampleTime time.Time
 		want       float64
 	}{
@@ -188,7 +191,9 @@ func TestProgressPrinterSample(t *testing.T) {
 			want:       0,
 		},
 		{
-			name: "counter going backwards is clamped to zero",
+			// RecsBackedUp sums the base, incremental and change lines, so it is not
+			// monotonic. Unsigned arithmetic would wrap a drop into a huge rate.
+			name: "counter going backwards is read as no progress",
 			printer: &progressPrinter{
 				state:       infomodels.BackupStateBaseScanActive,
 				sampledAt:   now.Add(-10 * time.Second),
@@ -300,7 +305,110 @@ func TestNextPoll(t *testing.T) {
 	}
 }
 
+// TestProgressPrinterPrint pins down the progress line itself. It carries the same
+// fields as the client side backup progress - completion, estimate and speed - so that a
+// server side backup reads the same way.
 func TestProgressPrinterPrint(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+
+	tests := []struct {
+		name        string
+		printer     *progressPrinter
+		status      *infomodels.ResponseBackupState
+		wantLogs    []string
+		notWantLogs []string
+	}{
+		{
+			name: "reports the progress of a running backup",
+			status: &infomodels.ResponseBackupState{
+				JobID:        testJobID,
+				Namespace:    testNamespace,
+				State:        infomodels.BackupStateBaseScanActive,
+				ProgressPct:  50,
+				RecsBackedUp: 1000,
+				RecsBase:     1000,
+				StartTime:    now.Add(-time.Hour),
+			},
+			wantLogs: []string{
+				logBackupProgress,
+				"backup-id=" + testJobID,
+				"pct=50",
+				"rec/s=0",
+				"remaining=1h0m0s",
+			},
+		},
+		{
+			name: "rounds the percentage to two decimals",
+			status: &infomodels.ResponseBackupState{
+				JobID:       testJobID,
+				State:       infomodels.BackupStateBaseScanActive,
+				ProgressPct: 33.33333,
+				StartTime:   now.Add(-time.Hour),
+			},
+			wantLogs: []string{"pct=33.33"},
+		},
+		{
+			// Without a start time there is nothing to project the estimate from, and a
+			// made up one is worse than none.
+			name: "omits the estimate when the cluster reported no start time",
+			status: &infomodels.ResponseBackupState{
+				JobID:       testJobID,
+				State:       infomodels.BackupStateInit,
+				ProgressPct: 0,
+			},
+			wantLogs:    []string{logBackupProgress},
+			notWantLogs: []string{"remaining="},
+		},
+		{
+			name: "reports the speed measured since the previous sample",
+			printer: &progressPrinter{
+				state:       infomodels.BackupStateBaseScanActive,
+				sampledAt:   now.Add(-10 * time.Second),
+				sampledRecs: 1000,
+			},
+			status: &infomodels.ResponseBackupState{
+				JobID:        testJobID,
+				State:        infomodels.BackupStateBaseScanActive,
+				ProgressPct:  50,
+				RecsBackedUp: 3000,
+				StartTime:    now.Add(-time.Hour),
+			},
+			wantLogs: []string{"rec/s=200"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			printer := tt.printer
+			if printer == nil {
+				printer = &progressPrinter{}
+			}
+
+			printer.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+			require.True(t, printer.Print(tt.status, now))
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
+		})
+	}
+}
+
+// TestProgressPrinterPrintSkipsRepeatedStatus covers the state the printer keeps between
+// calls, which a single table case cannot reach: a status that repeats the last one
+// carries nothing new and must not produce a second line.
+func TestProgressPrinterPrintSkipsRepeatedStatus(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
@@ -311,29 +419,76 @@ func TestProgressPrinterPrint(t *testing.T) {
 	now := time.Now()
 
 	status := &infomodels.ResponseBackupState{
-		JobID:             testJobID,
-		Namespace:         testNamespace,
-		State:             infomodels.BackupStateBaseScanActive,
-		ProgressPct:       50,
-		RecsBackedUp:      1000,
-		PartitionsOwned:   64,
-		PartitionsScanned: 32,
-		StartTime:         now.Add(-time.Hour),
+		JobID:        testJobID,
+		Namespace:    testNamespace,
+		State:        infomodels.BackupStateBaseScanActive,
+		ProgressPct:  50,
+		RecsBackedUp: 1000,
+		StartTime:    now.Add(-time.Hour),
 	}
 
 	require.True(t, printer.Print(status, now))
 
-	logged := buf.String()
-	assert.Contains(t, logged, "backup progress")
-	assert.Contains(t, logged, "backup-id="+testJobID)
-	assert.Contains(t, logged, "pct=50.0%")
-	assert.Contains(t, logged, "records=1000")
-	assert.Contains(t, logged, "partitions=32/64")
-	assert.Contains(t, logged, "remaining=1h0m0s")
-
 	buf.Reset()
 
-	// The same status a second later carries nothing new.
 	assert.False(t, printer.Print(status, now.Add(time.Second)))
 	assert.Empty(t, buf.String())
+}
+
+func TestBackupDuration(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 9, 22, 10, 36, 53, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		startTime  time.Time
+		finishTime time.Time
+		want       time.Duration
+		wantOK     bool
+	}{
+		{
+			name:       "both ends reported",
+			startTime:  start,
+			finishTime: start.Add(90 * time.Second),
+			want:       90 * time.Second,
+			wantOK:     true,
+		},
+		{
+			// The server reports "-" for the finish time of a job that is still running.
+			name:      "running job has no finish time",
+			startTime: start,
+			wantOK:    false,
+		},
+		{
+			name:       "job that never started",
+			finishTime: start,
+			wantOK:     false,
+		},
+		{
+			// Merging per node statuses takes the earliest start and the latest finish,
+			// but a clock skew between nodes can still invert them.
+			name:       "finish time before start time",
+			startTime:  start,
+			finishTime: start.Add(-time.Second),
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			status := &infomodels.ResponseBackupState{
+				JobID:      testJobID,
+				StartTime:  tt.startTime,
+				FinishTime: tt.finishTime,
+			}
+
+			got, ok := backupDuration(status)
+
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -15,7 +15,6 @@
 package server
 
 import (
-	"fmt"
 	"log/slog"
 	"math"
 	"time"
@@ -40,6 +39,9 @@ const (
 	speedSmoothing = 0.3
 	// percentScale converts a server reported percentage into a [0, 1] ratio.
 	percentScale = 100
+	// pctPrecision rounds the reported percentage to two decimals, the same precision
+	// the client side backup progress is printed with.
+	pctPrecision = 100
 )
 
 // progressPrinter decides whether a backup status update carries enough new information
@@ -55,7 +57,7 @@ type progressPrinter struct {
 
 	// sampledAt, sampledRecs and recsPerSec hold the speed measurement.
 	sampledAt   time.Time
-	sampledRecs int
+	sampledRecs uint64
 	recsPerSec  float64
 }
 
@@ -79,10 +81,8 @@ func (p *progressPrinter) Print(status *infomodels.ResponseBackupState, now time
 	attrs := []any{
 		slog.String("backup-id", status.JobID),
 		slog.String("state", status.State.Describe()),
-		slog.String("pct", fmt.Sprintf("%.1f%%", status.ProgressPct)),
-		slog.Int("records", status.RecsBackedUp),
-		slog.String("partitions", fmt.Sprintf("%d/%d", status.PartitionsScanned, status.PartitionsOwned)),
-		slog.Uint64("records-per-second", uint64(math.Round(p.recsPerSec))),
+		slog.Float64("pct", math.Round(status.ProgressPct*pctPrecision)/pctPrecision),
+		slog.Uint64("rec/s", uint64(math.Round(p.recsPerSec))),
 	}
 
 	if remaining := estimates.RemainingTime(elapsed, ratio); remaining > 0 {
@@ -137,8 +137,14 @@ func (p *progressPrinter) sample(status *infomodels.ResponseBackupState, now tim
 		return
 	}
 
-	// A counter can go backwards when a node drops out of the merged status.
-	instant := max(float64(status.RecsBackedUp-p.sampledRecs)/seconds, 0)
+	// The counter can go backwards: it sums the base, incremental and change lines
+	// instead of counting distinct records, and a node dropping out of the merged
+	// status takes its share with it. Subtracting unsigned counters would wrap around,
+	// so a drop is read as no progress at all.
+	var instant float64
+	if status.RecsBackedUp > p.sampledRecs {
+		instant = float64(status.RecsBackedUp-p.sampledRecs) / seconds
+	}
 
 	if p.recsPerSec == 0 {
 		p.recsPerSec = instant
@@ -181,4 +187,14 @@ func elapsedSince(startTime, now time.Time) time.Duration {
 	}
 
 	return now.Sub(startTime)
+}
+
+// backupDuration returns how long the job took, and whether the cluster reported both
+// ends of it: the finish time is only set once the job reaches a terminal state.
+func backupDuration(status *infomodels.ResponseBackupState) (time.Duration, bool) {
+	if status.StartTime.IsZero() || status.FinishTime.IsZero() || status.FinishTime.Before(status.StartTime) {
+		return 0, false
+	}
+
+	return status.FinishTime.Sub(status.StartTime), true
 }
