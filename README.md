@@ -9,7 +9,7 @@
 - **Scan-based backup and restore** — client-side scan of the cluster, writing `.asb` files to local disk or object storage.
 - **Server-integrated snapshot backup and restore** — backup and restore work executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
 
-The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. Pre-built binaries for multiple platforms are available on [GitHub Releases](https://github.com/aerospike/absctl/releases).
+The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
 
 ## Table of Contents
 
@@ -39,38 +39,41 @@ Run `absctl <command> --help` for flags and usage details.
 
 ## Installation
 
-### From Releases
+`absctl` ships as DEB and RPM packages, attached to each
+[GitHub Release](https://github.com/aerospike/absctl/releases), and as a Docker image. Every package is
+built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
+`ubuntu24.04`, `ubuntu26.04`, `debian11`, `debian12` or `debian13` for DEB, and `el8`, `el9`, `el10` or
+`amzn2023` for RPM.
 
-Download pre-built binaries from [GitHub Releases](https://github.com/aerospike/absctl/releases):
-
-```bash
-# Linux x64
-wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.tar.gz
-
-# Extract
-tar -xzvf absctl-<version>-<arch>.tar.gz
-
-# Make executable
-chmod +x absctl
-```
-
-#### Linux packages
+### Linux packages
 
 **deb:**
 
 ```bash
-wget https://github.com/aerospike/absctl/releases/download/<version>/absctl_<version>_<arch>.deb
-sudo dpkg -i absctl_<version>_<arch>.deb
+wget https://github.com/aerospike/absctl/releases/download/v<version>/absctl_<version>_<arch>_<distro>.deb
+sudo dpkg -i absctl_<version>_<arch>_<distro>.deb
+
+# for example
+wget https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl_1.2.0_amd64_ubuntu24.04.deb
+sudo dpkg -i absctl_1.2.0_amd64_ubuntu24.04.deb
 ```
 
 **rpm:**
 
 ```bash
-wget https://github.com/aerospike/absctl/releases/download/<version>/absctl-<version>-<arch>.rpm
-sudo rpm -i absctl-<version>-<arch>.rpm
+wget https://github.com/aerospike/absctl/releases/download/v<version>/absctl-<version>-1.<distro>.<arch>.rpm
+sudo rpm -i absctl-<version>-1.<distro>.<arch>.rpm
+
+# for example
+wget https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl-1.2.0-1.el9.x86_64.rpm
+sudo rpm -i absctl-1.2.0-1.el9.x86_64.rpm
 ```
 
-#### Docker
+Each package is published with a `.sha256` checksum and a detached `.asc` GPG signature next to it.
+
+### Docker
+
+Image tags carry no leading `v` (for example `1.2.0` for release `v1.2.0`):
 
 ```bash
 docker pull aerospike/absctl:<version>
@@ -300,6 +303,87 @@ Configuration can be supplied via command-line flags or a YAML file using `--con
 - Server-integrated commands: see [docs/server/backup.md](docs/server/backup.md) and [docs/server/restore.md](docs/server/restore.md)
 
 Run `absctl <command> --help` for the complete flag list.
+
+## Cutting a release
+
+Releases move through JFrog's promotion stages (`DEV -> TEST -> STAGE -> PREVIEW -> PROD`) before anything is made public. The
+GitHub Actions side is split into two workflows:
+[`pre-release.yml`](.github/workflows/pre-release.yml) (developer owned, builds and promotes up to `TEST`) and
+[`release.yml`](.github/workflows/release.yml) (run once the release is fully approved; publishes a GitHub pre-release
+for final validation, then a PM/EM promotes it to GA manually).
+
+The **tag is the only source of truth for the release version**: `pre-release.yml` triggers on `v*` tags
+and derives the bundle version, package versions and image tags from `github.ref_name`, while the
+`Makefile` stamps the binary from `git describe --tags`. There is no `VERSION` file to bump.
+
+### Regular release
+1. Create a release branch from `dev` (e.g. `release/1.1.0`).
+2. Open a pull request from your release branch into `main` and merge it.
+3. After the PR is merged, tag the release on `main`:
+   ```bash
+   git checkout main && git pull origin main
+   git tag v<version>
+   git push origin main --tags
+   ```
+
+### Hotfix
+1. Create a hotfix branch from `main` (e.g. `hotfix/1.0.1`) and land the fix on it.
+2. Choose the hotfix version by bumping the **third digit** (e.g. `1.0.0` -> `1.0.1`).
+3. **Do not merge** the hotfix branch into `main`. Tag and push the hotfix directly from the branch:
+   ```bash
+   git tag v<version>
+   git push origin hotfix/1.0.1 --tags
+   ```
+
+### Promotion and publication
+The following steps apply to both regular releases and hotfixes:
+
+1. Tagging the release commit triggers `pre-release.yml`, which:
+   1. Runs GoReleaser (`goreleaser build`) as a cross-platform compile check only. `.goreleaser.yaml` sets
+      `release.disable`, so this job archives, signs and publishes nothing — every artifact that ships comes
+      from the JFrog legs below.
+   2. Refuses to run at all if the version already has a published (non-draft, non-prerelease) GitHub Release,
+      so a deleted-and-re-pushed tag cannot rebuild over artifacts customers already have.
+   3. Builds the DEB/RPM packages and Docker image.
+   4. Signs the packages, then verifies every artifact carries both a valid detached `.asc` and a valid
+      embedded deb/rpm signature before anything is deployed, and deploys everything to JFrog `DEV`.
+   5. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
+2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
+   promoted from `TEST` to `STAGE`, either by dispatching
+   [`promote-to-preview.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-preview.yml) with `environment: STAGE` or manually via the
+   [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2).
+3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PREVIEW`, either by dispatching
+   [`promote-to-preview.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-preview.yml) with `environment: PREVIEW` or manually via the same
+   [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2)
+   link.
+4. A PM or EM promotes the release bundle from `PREVIEW` to `PROD`, either by dispatching
+   [`promote-to-prod.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-prod.yml) or manually via the same JFrog UI link. This is
+   the gate that makes a release public.
+5. Once the bundle is on `PROD`:
+   - Docker Hub and every other public registry are published automatically and externally by the central
+     `artifact-publisher` repository, off JFrog's `release_bundle_v2_promotion_completed` webhook — nothing
+     to trigger here, and nothing in this repository ever pushes to an external registry
+     ([strategy](https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799)).
+   - A dev or PM/EM manually runs [`release.yml`](https://github.com/aerospike/absctl/actions/workflows/release.yml)
+     (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
+     `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
+     publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or
+     re-checksummed at this point.
+6. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release** only.
+   The GitHub **Set as the latest release** checkbox is unrelated to any registry tag and can be left
+   unchecked. Until the pre-release flag is cleared, the release does not appear as GA on GitHub.
+7. Post-release actions (after step 6):
+   1. **Snyk**:
+      - Add the new version to the `aerospike-applications` Snyk org.
+      - Remove the oldest maintenance version from the same org if no longer supported.
+   2. **Slack**:
+      - Post the release announcement to the internal **`#releases`** channel.
+      - Use the link to the GitHub Release.
+      - **Important**: Remove link previews before sending to keep the channel clean (hover over the preview and click the **'x'** in the top-right corner). See [this guide](https://aerospike.atlassian.net/wiki/spaces/RE/pages/2540339350/Message+Slack+releases+Internal+Channel) for more info.
+   3. **Email**: Send the release announcement email. See [this guide](https://aerospike.atlassian.net/wiki/spaces/RE/pages/2543124552/Send+email+of+the+Release+Notes+to+the+releases+aerospike.com+distribution+list) for more info.
+8. Back-merge anything that is not yet on `dev`: `main` after a regular release, or the hotfix branch itself
+   after a hotfix (a hotfix is tagged from its own branch and never merged into `main`, so `main` does not
+   carry those commits).
 
 ## License
 

@@ -1,0 +1,679 @@
+name: Create Aerospike Backup Tools Pre Release (Shared Workflows)
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+# NOTE: every aerospike/shared-workflows `uses: ...@<sha>` below is pinned to v5.0.0.
+# The `env` context isn't available in `with:` for reusable-workflow-call jobs, so gh-workflows-ref
+# can't be centralized here — bump the sha and the "v5.0.0" gh-workflows-ref value together by hand.
+#
+# NOTE: this targets the `database` JFrog project (vars.JF_PROJECT) and the `absctl`
+# package name, per https://aerospike.slack.com/archives/C021FHS23HD/p1786135856448879. A possible
+# rename to `aerospike-absctl` (to match other CLI tools' naming) is unconfirmed as of writing.
+#
+# All `vars.JF_*` used below are dedicated to this pipeline (targets the "database" JFrog
+# project) and are independent of the unprefixed `vars.*` used by pre-release-legacy.yaml
+# (targets "ecosystem") — never share values between the two.
+
+jobs:
+  go-releaser:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+
+      - name: Import GPG key
+        id: import-gpg
+        uses: step-security/ghaction-import-gpg@c0b4a334b9b72bfaaebec86ef022a78a5b17f828 # v7.0.0
+        with:
+          gpg_private_key: ${{ secrets.GPG_SECRET_KEY }}
+          passphrase: ${{ secrets.GPG_PASS }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          # Build-only: .goreleaser.yaml sets release.disable, and release.yml owns the GitHub
+          # pre-release (and eventual GA promotion) once JFrog PROD promotion is done.
+          args: build --clean
+        env:
+          GPG_FINGERPRINT: ${{ steps.import-gpg.outputs.fingerprint }}
+
+  # ---------------------------------------------------------------------------
+  # Resolve version/build-id metadata shared by every downstream job.
+  # ---------------------------------------------------------------------------
+
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      package_version: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
+      go_version: ${{ steps.metadata.outputs.GO_VERSION }}
+      packages_build_id: ${{ steps.metadata.outputs.PACKAGES_BUILD_ID }}
+      docker_versions_override: ${{ steps.docker-tags.outputs.VERSIONS_OVERRIDE }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+
+      - name: Get Metadata
+        id: metadata
+        run: |
+          set -x
+          echo "Resolving package version from git tag..."
+          PACKAGE_VERSION="${{ github.ref_name }}"
+          if [ -z "$PACKAGE_VERSION" ]; then
+            echo "Could not resolve package version from github.ref_name." >&2
+            exit 1
+          fi
+
+          echo "Resolving Go toolchain version for Docker build-args..."
+          GO_MINOR="go$(go mod edit -json | jq -r '.Go' | cut -d. -f1-2)"
+          GO_CANDIDATES="$(curl -s 'https://go.dev/dl/?mode=json&include=all' | \
+            jq -r --arg ver "$GO_MINOR" '.[] | select(.version | startswith($ver)) | .version' | \
+            sort -rV)"
+          if [ -z "$GO_CANDIDATES" ]; then
+            echo "Failed to resolve any Go version candidates for $GO_MINOR." >&2
+            exit 1
+          fi
+
+          # go.dev lists a new patch release before the official `golang` Docker image is
+          # published for it (real-world lag of hours to days), so the newest go.dev version
+          # doesn't always have a matching docker.io/library/golang tag yet. Walk candidates
+          # newest-first and use the first one that's actually published, instead of trusting
+          # go.dev's list blindly (which previously caused `golang:X.Y.Z: not found` build failures).
+          GO_VERSION=""
+          while IFS= read -r candidate; do
+            candidate_version="${candidate#go}"
+            status="$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://hub.docker.com/v2/repositories/library/golang/tags/${candidate_version}")"
+            if [ "$status" = "200" ]; then
+              GO_VERSION="$candidate_version"
+              break
+            fi
+            echo "  golang:${candidate_version} not published on Docker Hub yet (HTTP $status), trying older patch..."
+          done <<< "$GO_CANDIDATES"
+
+          if [ -z "$GO_VERSION" ]; then
+            echo "Failed to resolve a Go version with a published Docker Hub image." >&2
+            exit 1
+          fi
+
+          BUILD_ID_BASE="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          echo "Resolved metadata:"
+          echo "  PACKAGE_VERSION: $PACKAGE_VERSION"
+          echo "  GO_VERSION: $GO_VERSION"
+          echo "  BUILD_ID_BASE: $BUILD_ID_BASE"
+
+          {
+            echo "PACKAGE_VERSION=$PACKAGE_VERSION"
+            echo "GO_VERSION=$GO_VERSION"
+            echo "PACKAGES_BUILD_ID=${BUILD_ID_BASE}-packages"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Resolved release metadata"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package version | \`$PACKAGE_VERSION\` |"
+            echo "| Go toolchain version | \`$GO_VERSION\` |"
+            echo "| Packages build ID | \`${BUILD_ID_BASE}-packages\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Deleting and re-pushing a tag that already shipped sends this whole pipeline back over
+      # artifacts customers already have, since everything below is addressed by version rather
+      # than by build ID. A published GitHub Release is the marker that the version went GA, so
+      # refuse before anything is built. Draft and prerelease entries do not count.
+      - name: Reject re-release of a published version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
+        run: |
+          set -euo pipefail
+          # Only an explicit HTTP 404 means "no release exists". Any other gh failure (rate
+          # limit, outage, bad token) must fail the build, not fall through to "safe": this
+          # step is the sole guard keyed on the published GitHub Release, and treating an
+          # outage as a green light would let a re-run rebuild over shipped artifacts.
+          set +e
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${PACKAGE_VERSION}" 2>gh-error.log)"
+          gh_status=$?
+          set -e
+          if [ "$gh_status" -ne 0 ]; then
+            if grep -q "HTTP 404" gh-error.log; then
+              echo "No GitHub Release for ${PACKAGE_VERSION}; safe to build."
+              exit 0
+            fi
+            echo "::error::Could not determine whether ${PACKAGE_VERSION} already shipped (gh api failed with something other than 404):"
+            cat gh-error.log
+            exit 1
+          fi
+
+          is_draft="$(printf '%s' "$release_json" | jq -r '.draft // false')"
+          is_prerelease="$(printf '%s' "$release_json" | jq -r '.prerelease // false')"
+          if [ "$is_draft" = "false" ] && [ "$is_prerelease" = "false" ]; then
+            echo "::error::${PACKAGE_VERSION} already has a published GitHub Release, so it has shipped. Cut a new version instead of re-tagging; re-running this pipeline would overwrite the released artifacts."
+            exit 1
+          fi
+          echo "GitHub Release for ${PACKAGE_VERSION} exists but is draft=${is_draft} prerelease=${is_prerelease}; not yet GA, safe to build."
+
+      # Since shared-workflows v5.0.0, reusable_docker-build-deploy.yaml publishes only the
+      # immutable tag and `{version}` by default -- `{major}` and `latest` are no longer emitted
+      # unless versions-override asks for them. Both of those are moving tags, and a hotfix off an
+      # older line must not drag them backwards, so compute the ones this release has actually
+      # earned at build time and pass them explicitly. Major only: `latest` is never published
+      # from this repository -- public registries are served by the central artifact-publisher
+      # off the PROD promotion webhook, per
+      # https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799.
+      - name: Resolve Docker moving tags
+        id: docker-tags
+        env:
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.PACKAGE_VERSION }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current="${PACKAGE_VERSION#v}"
+          major="${current%%.*}"
+
+          # One-off test/pre-release tags publish only their immutable tag; they must not
+          # participate in major/latest moving-tag decisions.
+          if ! echo "$current" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "VERSIONS_OVERRIDE=$current" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Docker moving tags"
+              echo "| Field | Value |"
+              echo "| --- | --- |"
+              echo "| Releasing | \`$current\` |"
+              echo "| Tags published (besides the immutable tag) | \`$current\` |"
+              echo ""
+              echo "Pre-release/test tag; \`latest\` and major moving tags are withheld."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Final releases only. Pre-release tags (v1.2.0-rc1) and one-off test tags must not
+          # get a say in which release owns the moving tags. Compare against versions that
+          # actually shipped (a non-draft GitHub Release exists -- release.yml publishes one
+          # only after a verified PROD promotion), not against all git tags: a tag whose
+          # pipeline was abandoned before release would otherwise withhold the major tag
+          # forever. The version being built is folded in since it has no Release yet.
+          versions="$(
+            { gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+                --jq '.[] | select(.draft == false) | .tag_name'; echo "v${current}"; } \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sed 's/^v//' \
+              | sort -uV
+          )"
+
+          highest_overall="$(echo "$versions" | tail -n1)"
+          highest_in_major="$(echo "$versions" | grep -E "^${major}\." | tail -n1)"
+
+          overrides="$current"
+          if [ "$current" = "$highest_in_major" ]; then
+            overrides="${overrides},${major}"
+          fi
+
+          echo "VERSIONS_OVERRIDE=$overrides" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Docker moving tags (at build time)"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Releasing | \`$current\` |"
+            echo "| Highest release overall | \`$highest_overall\` |"
+            echo "| Highest release in \`$major.x\` | \`$highest_in_major\` |"
+            echo "| Tags published now (besides the immutable tag) | \`$overrides\` |"
+            echo ""
+            echo "Docker \`latest\` is not published by this repository at all — public registries are served by artifact-publisher off the PROD promotion webhook."
+            if [ "$current" = "$highest_in_major" ]; then
+              echo "This is the newest release in its major line, so major tag \`${major}\` moves to it."
+            else
+              echo "Newer releases exist in this major line, so major tag \`${major}\` is withheld from this build."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Clear the DEV bundle so a re-run cannot quietly overwrite a released version
+  # ---------------------------------------------------------------------------
+  #
+  # Every artifact below is addressed by version, not by build ID, so re-running this workflow
+  # for a tag that already shipped redeploys over the previous bits. A promoted bundle also
+  # locks the dev-local artifacts it references, which turns that re-run into an opaque
+  # permission failure part-way through deploy.
+  #
+  # Deleting the DEV bundle first makes re-running an un-promoted release safe. The action's own
+  # guard refuses to delete a bundle already promoted to TEST, STAGE, PREVIEW, INTERNAL or PROD,
+  # so the job fails fast in exactly the case where a re-run must not replace what QE or
+  # customers already have.
+
+  delete-existing-bundle:
+    needs: [prepare]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Login to JFrog
+        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        env:
+          JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
+          JF_PROJECT: ${{ vars.JF_PROJECT }}
+        with:
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+          oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
+
+      - name: Delete existing DEV release bundle
+        id: delete-bundle
+        uses: aerospike/shared-workflows/.github/actions/delete-release-bundle@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+        with:
+          bundle-name: absctl
+          version: ${{ needs.prepare.outputs.package_version }}
+          jf-project: ${{ vars.JF_PROJECT }}
+
+      - name: Summarize
+        if: always()
+        env:
+          EXISTED: ${{ steps.delete-bundle.outputs.existed }}
+          BUNDLE_VERSION: ${{ needs.prepare.outputs.package_version }}
+        run: |
+          {
+            echo "### DEV release bundle pre-flight"
+            if [ "$EXISTED" = "true" ]; then
+              echo "Removed the existing DEV bundle for \`${BUNDLE_VERSION}\` so this run can redeploy it."
+            else
+              echo "No existing bundle for \`${BUNDLE_VERSION}\`; nothing to clear."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # DEB/RPM packages: build -> sign -> deploy
+  # ---------------------------------------------------------------------------
+
+  build-packages:
+    needs: [prepare]
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_execute-build.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      gh-workflows-ref: v5.0.0
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-build-name: absctl-packages
+      jf-build-id: ${{ needs.prepare.outputs.packages_build_id }}
+      # reusable_execute-build.yaml checks the source repo out under gh-source-path
+      # (default: local), not at the workspace root, so build-script must cd there.
+      working-directory: local
+      build-script: |
+        set -x
+        echo "Working directory: $(pwd)"
+        ls -la
+        # Pin nfpm to a known version and verify it against nfpm's published checksums
+        # instead of trusting `go install ...@latest` (an unreviewed, unpinned moving target).
+        NFPM_VERSION="2.47.0"
+        NFPM_DEB="nfpm_${NFPM_VERSION}_amd64.deb"
+        curl -sSLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/${NFPM_DEB}"
+        curl -sSLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
+        grep " ${NFPM_DEB}\$" checksums.txt | sha256sum -c -
+        sudo apt-get install -y "./${NFPM_DEB}"
+        make packages BUILD_MODE=release
+
+        # shared-workflows classifies a .deb into a distro pool (jammy/noble/bookworm/...)
+        # by pattern-matching a token like "ubuntu22.04"/"debian12" in the FILENAME itself
+        # (see get_codename_for_deb in deploy-artifacts/package_utils.sh) -- it assumes
+        # distro-specific builds. Our binary is a statically-linked Go build (CGO_ENABLED=0)
+        # with no distro-specific dependencies, so the same .deb is valid everywhere. Publish
+        # one renamed copy per Linux target officially listed at
+        # https://aerospike.com/download/tools/ so the codename match succeeds and
+        # `apt-get install` works regardless of the reader's distro.
+        for deb in dist/*.deb; do
+          [ -e "$deb" ] || continue
+          base="${deb%.deb}"
+          for dist_tag in ubuntu22.04 ubuntu24.04 ubuntu26.04 debian11 debian12 debian13; do
+            cp -v "$deb" "${base}_${dist_tag}.deb"
+          done
+          rm -v "$deb"
+        done
+
+        # Same problem for RPM: get_rpm_metadata parses the distribution from the filename's
+        # second-to-last dot-separated component (the standard rpmbuild %{?dist} convention,
+        # e.g. name-version-release.el9.x86_64.rpm). nfpm doesn't embed a dist tag by default,
+        # so it parses to garbage (e.g. "1-1"). Insert a real dist tag before the arch component,
+        # publishing under every RPM-family target officially listed at
+        # https://aerospike.com/download/tools/ (Red Hat 8/9/10, Amazon 2023).
+        for rpm in dist/*.rpm; do
+          [ -e "$rpm" ] || continue
+          noext="${rpm%.rpm}"
+          arch="${noext##*.}"
+          base="${noext%.*}"
+          for dist_tag in el8 el9 el10 amzn2023; do
+            cp -v "$rpm" "${base}.${dist_tag}.${arch}.rpm"
+          done
+          rm -v "$rpm"
+        done
+
+        echo "Packaged artifacts:"
+        ls -la dist
+      gh-artifact-directory: dist
+      gh-artifact-name: packages-unsigned
+      gh-retention-days: 1
+
+  sign-packages:
+    needs: [build-packages]
+    # reusable_sign-artifacts.yaml declares id-token: write at its own workflow level;
+    # GitHub requires the caller to grant at least that, even though this job's steps
+    # don't use OIDC themselves (see: https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/5060460576).
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      gh-workflows-ref: v5.0.0
+      gh-unsigned-artifacts: packages-unsigned
+      gh-artifact-name: packages-signed
+      gh-retention-days: 7
+    secrets:
+      gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
+      gpg-public-key: ${{ secrets.GPG_PUBLIC_KEY }}
+      gpg-key-pass: ${{ secrets.GPG_PASS }}
+
+  # ---------------------------------------------------------------------------
+  # Enforce the sign-or-fail invariant before anything is deployed
+  # ---------------------------------------------------------------------------
+  #
+  # reusable_sign-artifacts.yaml deliberately fails OPEN: when the gpg-private-key secret
+  # resolves empty (renamed, environment-scoped, Dependabot -- GitHub passes an empty string
+  # for a missing secret) it stages the UNSIGNED artifacts under the signed artifact name and
+  # exits 0 ("Determine GPG signing eligibility" -> reason=missing-secrets), so nothing
+  # downstream would notice. It also never verifies its own output (rpm --addsign runs with
+  # stderr discarded and no --checksig afterwards). The legacy pipeline hard-failed on an
+  # empty key and verified every signature right after signing; this job restores both
+  # guarantees on the consumer side, and deploy-packages depends on it so unsigned or
+  # mis-signed artifacts can never reach JFrog.
+
+  verify-signatures:
+    needs: [sign-packages]
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Download signed packages
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: packages-signed
+          path: signed/packages
+
+      - name: Install verification tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # dpkg-sig is absent here on purpose: it was dropped from the archive after jammy
+          # and has no 24.04 package. The deb check below runs it in a pinned container.
+          sudo apt-get install -y rpm
+
+      - name: Import GPG public key
+        env:
+          GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GPG_PUBLIC_KEY" ]; then
+            echo "::error::GPG_PUBLIC_KEY secret is empty; cannot verify signatures."
+            exit 1
+          fi
+          echo "$GPG_PUBLIC_KEY" | gpg --import
+          # rpm --checksig reads its own keyring, not GnuPG's, so the key goes in twice.
+          #
+          # Via a real file, not a pipe: rpm --import sizes its read buffer from the fstat
+          # of the argument, which is 0 for a pipe, so `rpm --import /dev/stdin` reads
+          # nothing and dies with "import read failed(0)".
+          #
+          # And WITHOUT sudo: Debian/Ubuntu's rpm keeps a per-user database (%_dbpath is
+          # ~/.rpmdb, not /var/lib/rpm), so `sudo rpm --import` files the key under
+          # /root/.rpmdb while the verification below reads /home/runner/.rpmdb. The import
+          # succeeds, then every package reports NOKEY as "digests SIGNATURES NOT OK".
+          printf '%s\n' "$GPG_PUBLIC_KEY" > "${RUNNER_TEMP}/gpg-public-key.asc"
+          rpm --import "${RUNNER_TEMP}/gpg-public-key.asc"
+
+      - name: Verify every artifact carries a valid signature
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          fail=0
+
+          debs=(signed/packages/**/*.deb)
+          rpms=(signed/packages/**/*.rpm)
+          if [ "${#debs[@]}" -eq 0 ] || [ "${#rpms[@]}" -eq 0 ]; then
+            echo "::error::Expected signed .deb and .rpm artifacts, got deb=${#debs[@]} rpm=${#rpms[@]}. Was a build or sign leg skipped?"
+            exit 1
+          fi
+
+          check_detached() {
+            if [ -f "$1.asc" ] && gpg --verify "$1.asc" "$1" 2>&1; then
+              echo "Detached signature OK: $1"
+            else
+              echo "::error::Missing or invalid detached signature for $1 -- was GPG signing skipped (empty gpg-private-key)?"
+              fail=1
+            fi
+          }
+
+          for pkg in "${debs[@]}"; do
+            check_detached "$pkg"
+          done
+
+          # `apt` checks the signature embedded by dpkg-sig as the ar member `_gpgbuilder`,
+          # and dpkg-sig itself is the only tool that reads that format -- but it was dropped
+          # from the archive after jammy, so a 24.04 runner cannot install it. Run the real
+          # tool in a pinned jammy container rather than reimplementing its manifest checks
+          # here, where a subtly incomplete reimplementation would quietly weaken this gate.
+          # -i is required: without it the container gets no stdin, so `bash -s` reads an
+          # empty script, verifies nothing and exits 0.
+          if ! docker run --rm -i \
+              -v "$PWD:/w" -w /w \
+              -v "${RUNNER_TEMP}/gpg-public-key.asc:/key.asc:ro" \
+              ubuntu:22.04 bash -s -- "${debs[@]}" <<'CONTAINER'
+          set -euo pipefail
+          apt-get update -qq >/dev/null
+          apt-get install -y -qq dpkg-sig >/dev/null
+          gpg --quiet --import /key.asc
+          rc=0
+          for pkg in "$@"; do
+            out="$(dpkg-sig --verify "$pkg" || true)"
+            echo "$out"
+            if ! grep -q 'GOODSIG' <<< "$out"; then
+              echo "::error::dpkg-sig reports no GOODSIG for ${pkg}."
+              rc=1
+            fi
+          done
+          exit $rc
+          CONTAINER
+          then
+            fail=1
+          fi
+
+          for pkg in "${rpms[@]}"; do
+            check_detached "$pkg"
+            out="$(rpm --checksig "$pkg" || true)"
+            echo "$out"
+            if ! grep -q 'digests signatures OK' <<< "$out"; then
+              echo "::error::rpm --checksig does not report 'digests signatures OK' for ${pkg}."
+              fail=1
+            fi
+          done
+
+          exit $fail
+
+  deploy-packages:
+    needs: [prepare, sign-packages, verify-signatures, delete-existing-bundle]
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_deploy-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      gh-workflows-ref: v5.0.0
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-build-name: absctl-packages
+      jf-build-id: ${{ needs.prepare.outputs.packages_build_id }}
+      version: ${{ needs.prepare.outputs.package_version }}
+      gh-artifact-name: packages-signed
+
+  # ---------------------------------------------------------------------------
+  # Docker image: build, attest, and push to JFrog in one call
+  # ---------------------------------------------------------------------------
+
+  build-docker-image:
+    needs: [prepare, delete-existing-bundle]
+    # reusable_docker-build-deploy.yaml declares no top-level permissions, but its nested
+    # `build` and `merge` jobs request packages: write (build+merge) and attestations: write
+    # (merge, for SLSA provenance) at job scope. GitHub validates these nested requests too.
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      attestations: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-registry: ${{ vars.JF_ARTIFACTORY_REGISTRY_URL }}/${{ vars.JF_ARTIFACTORY_CONTAINER_DEV }}
+      # repo-scope defaults to "-docker-dev-local", but our actual repo naming convention
+      # (JF_ARTIFACTORY_CONTAINER_DEV) uses "-container-dev-local". Without this override, the
+      # image gets pushed to .../container-dev-local correctly, but the build-info creation
+      # step searches for it under .../docker-dev-local and fails with "Could not find docker
+      # image in Artifactory" since that's a different (likely nonexistent) repo.
+      repo-scope: -container-dev-local
+      jf-build-name: absctl-container
+      image-name: absctl
+      app-name: Aerospike Backup CLI
+      app-version: ${{ needs.prepare.outputs.package_version }}
+      versions-override: ${{ needs.prepare.outputs.docker_versions_override }}
+      context: .
+      file: Dockerfile
+      build-args-json: >-
+        {"GO_VERSION":"${{ needs.prepare.outputs.go_version }}","REGISTRY":"docker.io","BUILD_MODE":"release","VERSION":"${{ needs.prepare.outputs.package_version }}"}
+      labels-json: >-
+        {"org.opencontainers.image.title":"Aerospike Backup CLI",
+        "org.opencontainers.image.description":"Command-line tool for backing up and restoring Aerospike data",
+        "org.opencontainers.image.documentation":"https://github.com/aerospike/absctl?tab=readme-ov-file#absctl",
+        "org.opencontainers.image.base.name":"docker.io/alpine:3.23",
+        "org.opencontainers.image.vendor":"Aerospike",
+        "org.opencontainers.image.licenses":"Apache-2.0"}
+
+  # ---------------------------------------------------------------------------
+  # Unified release bundle
+  # ---------------------------------------------------------------------------
+
+  create-release-bundle:
+    needs: [prepare, deploy-packages, build-docker-image]
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_create-release-bundle.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      gh-workflows-ref: v5.0.0
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-bundle-name: absctl
+      version: ${{ needs.prepare.outputs.package_version }}
+      # single unbroken line: a YAML folded/quoted scalar wrapped across lines here would inject
+      # a stray space after each comma, which a naive `IFS=','` split downstream would not trim.
+      # NOTE: each build-name here must reference the JFrog build-info's actual build NUMBER,
+      # not the app version. packages publishes build-info under jf-build-id (packages_build_id,
+      # e.g. "<run>-<attempt>-packages"), matching what build-packages/deploy-packages were given
+      # as jf-build-id. The container build's build-NUMBER is github.run_number (the
+      # setup-jfrog-cli default), since reusable_docker-build-deploy.yaml has no jf-build-id input.
+      jf-build-names: absctl-packages:${{ needs.prepare.outputs.packages_build_id }},absctl-container:${{ github.run_number }}
+
+  # ---------------------------------------------------------------------------
+  # Promote to TEST (Gate 1: DEV -> TEST, developer-owned)
+  # ---------------------------------------------------------------------------
+  #
+  # Per DevOps policy (https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4577493063),
+  # automated promotion stops here. TEST -> STAGE and STAGE -> PROD are manual steps done
+  # via the JFrog UI by QE and a PM/EM respectively -- see the "Releasing" section in README.md.
+
+  promote-bundle-to-test:
+    needs: [prepare, create-release-bundle]
+    # reusable-action equivalent of the id-token: write note on sign-packages above:
+    # promote-release-bundle needs OIDC to authenticate to JFrog.
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    env:
+      BUNDLE_NAME: absctl
+      BUNDLE_VERSION: ${{ needs.prepare.outputs.package_version }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Login to JFrog
+        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        env:
+          JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
+          JF_PROJECT: ${{ vars.JF_PROJECT }}
+        with:
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+          oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
+
+      - name: Promote release bundle to TEST
+        uses: aerospike/shared-workflows/.github/actions/promote-release-bundle@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+        with:
+          bundle-name: ${{ env.BUNDLE_NAME }}
+          version: ${{ env.BUNDLE_VERSION }}
+          environment: TEST
+          jf-project: ${{ vars.JF_PROJECT }}
+
+      - name: Summarize promotion
+        if: always()
+        run: |
+          {
+            echo "### Promoted to JFrog TEST"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Bundle name | \`${BUNDLE_NAME}\` |"
+            echo "| Bundle version | \`${BUNDLE_VERSION}\` |"
+            echo "| JFrog project | \`${{ vars.JF_PROJECT }}\` |"
+            echo ""
+            echo "Next: QE validates the artifacts from JFrog TEST, then promotes to STAGE via promote-to-preview.yml (environment STAGE) or the JFrog UI."
+          } >> "$GITHUB_STEP_SUMMARY"

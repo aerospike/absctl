@@ -1,8 +1,13 @@
-name: Promote Images to DockerHub
+# Transitional scaffolding: the proven JFrog-direct DockerHub-promotion pipeline (targets the "ecosystem"
+# JFrog project), kept only as a safety-net/comparison run alongside the new shared-workflows pipeline in
+# release.yml while that one is being trusted. Exists only on switch-to-sharedworkflows — delete this file
+# outright (do not merge it) once the new pipeline is trusted and this branch merges into main.
+#
+# Manual trigger only (workflow_dispatch) -- no longer auto-fires on GitHub release publication,
+# so it doesn't double-promote to DockerHub alongside the new pipeline's release.yml. Dispatch it
+# explicitly when you want a comparison run against the old "ecosystem"-project path.
+name: Legacy Release - promote to JFrog PROD and DockerHub (ecosystem)
 on:
-  release:
-    types:
-      - released
   workflow_dispatch:
 
 permissions:
@@ -13,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
 
