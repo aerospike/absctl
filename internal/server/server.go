@@ -168,9 +168,24 @@ func (s *Service) clientPolicy() *models.ClientPolicy {
 	return s.restoreCfg.ClientPolicy
 }
 
-// newInfoClient separate function for a lazy load.
-func (s *Service) newInfoClient() (*asinfo.Client, error) {
-	aerospikeClient, err := storage.NewAerospikeClient(
+// infoClient is an asinfo client bundled with the Aerospike client that owns the
+// cluster it talks through.
+type infoClient struct {
+	*asinfo.Client
+	// We keep the Aerospike client so GC won't try to clean it.
+	// Which caused errors on asinfo.Client.
+	asClient *aerospike.Client
+}
+
+// Close shuts down the Aerospike connections behind the info client.
+func (c *infoClient) Close() {
+	c.asClient.Close()
+}
+
+// newInfoClient separate function for a lazy load. The caller owns the returned client
+// and must close it.
+func (s *Service) newInfoClient() (*infoClient, error) {
+	asClient, err := storage.NewAerospikeClient(
 		s.clientConfig(),
 		s.clientPolicy(),
 		nil,
@@ -180,17 +195,19 @@ func (s *Service) newInfoClient() (*asinfo.Client, error) {
 		return nil, fmt.Errorf("failed to create aerospike client: %w", err)
 	}
 
-	infoClient, err := asinfo.NewClient(
-		aerospikeClient.Cluster(),
+	client, err := asinfo.NewClient(
+		asClient.Cluster(),
 		aerospike.NewInfoPolicy(),
 		backupmodels.NewDefaultRetryPolicy(),
 		s.logger,
 	)
 	if err != nil {
+		asClient.Close()
+
 		return nil, fmt.Errorf("failed to create info client: %w", err)
 	}
 
-	return infoClient, nil
+	return &infoClient{Client: client, asClient: asClient}, nil
 }
 
 // ListBackups lists all backups from the configured storage.
@@ -244,6 +261,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
 	if err = s.checkServerStatus(ctx, client, s.backupCfg.Start.Namespace); err != nil {
 		return fmt.Errorf("failed to check server status: %w", err)
@@ -318,12 +336,13 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
 func (s *Service) StartRestore(ctx context.Context) error {
-	infoClient, err := s.newInfoClient()
+	client, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
-	if err = s.checkServerStatus(ctx, infoClient, s.restoreCfg.Start.Namespace); err != nil {
+	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
 		return fmt.Errorf("failed to check server status: %w", err)
 	}
 
@@ -351,7 +370,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
 	}
 
-	err = infoClient.StartRestore(ctx, rReq)
+	err = client.StartRestore(ctx, rReq)
 	if err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
 	}
@@ -368,6 +387,7 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
 	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
 		return fmt.Errorf("failed to check server status: %w", err)
@@ -390,10 +410,11 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 
 // BackupProgress returns the progress of the currently running backup.
 func (s *Service) BackupProgress(ctx context.Context) error {
-	infoClient, err := s.newInfoClient()
+	client, err := s.newInfoClient()
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
 	// The storage client is created before the watch loop on purpose: a wrong endpoint
 	// or wrong credentials must fail now, not after hours of watching a backup.
@@ -402,7 +423,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return err
 	}
 
-	return s.reportBackupProgress(ctx, infoClient, l,
+	return s.reportBackupProgress(ctx, client, l,
 		s.backupCfg.Progress.JobID, s.backupCfg.Progress.Watch)
 }
 
@@ -659,6 +680,7 @@ func (s *Service) RestoreProgress(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
 	result, err := client.GetRestoreStatus(ctx, s.restoreCfg.Progress.Namespace)
 	if err != nil {
@@ -708,7 +730,7 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 }
 
 // checkServerStatus validates the server status.
-func (s *Service) checkServerStatus(ctx context.Context, client *asinfo.Client, namespace string) error {
+func (s *Service) checkServerStatus(ctx context.Context, client *infoClient, namespace string) error {
 	lowestVersion, err := client.GetVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get server version: %w", err)
@@ -754,6 +776,7 @@ func (s *Service) AbortBackup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
 	return s.abortBackup(ctx, client)
 }
