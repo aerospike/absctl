@@ -46,6 +46,7 @@ const (
 	ShortRestorePrepare  = "Prepare a server-integrated restore"
 	ShortRestoreProgress = "Show the progress of a restore"
 	ShortBackupAbort     = "Abort a server-integrated backup"
+	ShortRestoreAbort    = "Abort a server-integrated restore"
 )
 
 // Long descriptions (cobra "Long" values).
@@ -62,4 +63,9 @@ const (
 	LongRestorePrepare  = "Prepare a server-integrated restore on the Aerospike cluster."
 	LongRestoreProgress = "Show the status of a currently running server-integrated restore."
 	LongBackupAbort     = "Abort a server-integrated backup on the Aerospike cluster."
+	LongRestoreAbort    = "Abort a server-integrated restore on the Aerospike cluster.\n" +
+		"A restore job is identified by the namespace it restores into and\n" +
+		"by its backup id, so both are required. A restore that was only\n" +
+		"prepared blocks writes to the namespace until it ends; aborting it\n" +
+		"releases that block."
 )

@@ -24,6 +24,7 @@ type ServerRestoreServiceConfig struct {
 	Start    *models.ServerRestore
 	Prepare  *models.ServerRestorePrepare
 	Progress *models.ServerRestoreProgress
+	Abort    *models.ServerRestoreAbort
 
 	ServiceConfigCommon
 }
@@ -33,6 +34,7 @@ func NewServerRestoreServiceConfig(
 	start *models.ServerRestore,
 	prepare *models.ServerRestorePrepare,
 	progress *models.ServerRestoreProgress,
+	abort *models.ServerRestoreAbort,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -43,6 +45,7 @@ func NewServerRestoreServiceConfig(
 		Start:        start,
 		Prepare:      prepare,
 		Progress:     progress,
+		Abort:        abort,
 		App:          app,
 		ClientConfig: clientConfig,
 		ClientPolicy: clientPolicy,
@@ -65,8 +68,12 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
-	// Only "snapshot-restore start" talks to object storage; prepare and
-	// progress are served by the cluster alone.
+	if err := s.Abort.Validate(); err != nil {
+		return err
+	}
+
+	// Only "snapshot-restore start" talks to object storage; prepare, progress
+	// and abort are served by the cluster alone.
 	if s.Start != nil {
 		if err := validateServerObjectStorage(s.AwsS3); err != nil {
 			return err

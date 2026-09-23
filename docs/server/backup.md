@@ -411,6 +411,23 @@ Aerospike Client Flags:
 
 Backup Flags:
       --backup-id string   Backup id
+
+Secret Agent Flags:
+Options pertaining to the Aerospike Secret Agent.
+See documentation here: https://aerospike.com/docs/tools/secret-agent.
+Both backup and restore commands support getting all the cloud configuration parameters
+from the Aerospike Secret Agent.
+To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
+Example: absctl snapshot-backup --azure-account-name secret:resource1:azaccount
+      --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
+      --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
+      --sa-port int                 Secret Agent port (only for TCP connection).
+      --sa-timeout int              Secret Agent connection and reading timeout. (default 10000)
+      --sa-ca-file string           Path to ca file for encrypted connections.
+      --sa-tls-name string          TLS name (SNI) for encrypted connections.
+      --sa-cert-file string         Path to a client certificate file for mutual TLS authentication.
+      --sa-key-file string          Path to a client private key file for mutual TLS authentication.
+      --sa-is-base64                Whether Secret Agent responses are Base64 encoded.
 ```
 
 ## Configuration file schema with example values
