@@ -43,6 +43,9 @@ const (
 	logAborted      = "backup was successfully aborted"
 	logAbortTooLate = "backup finished before it could be aborted"
 
+	logAbortingRestore = "aborting restore"
+	logRestoreAborted  = "restore was successfully aborted"
+
 	// testAbortTimeout bounds the abort wait in the tests. It has to outlast a handful
 	// of one-millisecond polls, and still expire quickly when a test wants it to.
 	testAbortTimeout = 50 * time.Millisecond
@@ -110,6 +113,52 @@ func (f *fakeInfoClient) AbortBackup(_ context.Context, jobID string) error {
 	return f.abortErr
 }
 
+// restoreAnswer is a single canned answer of fakeRestoreInfoClient.
+type restoreAnswer struct {
+	state string
+	err   error
+}
+
+// fakeRestoreInfoClient is the restore counterpart of fakeInfoClient: it replays canned
+// restore status answers, one per call, and reports the namespace as carrying no restore
+// state once they run out - unless repeatLast is set, which makes the last answer stand
+// forever, for the loops that only a timeout can end.
+type fakeRestoreInfoClient struct {
+	mocks.MockServerBackupInfo
+
+	answers    []restoreAnswer
+	repeatLast bool
+	calls      int
+
+	abortErr       error
+	abortNamespace string
+	abortJobID     string
+	abortCalls     int
+}
+
+func (f *fakeRestoreInfoClient) GetRestoreStatus(_ context.Context, _ string) (string, error) {
+	call := f.calls
+	f.calls++
+
+	if call >= len(f.answers) {
+		if !f.repeatLast || len(f.answers) == 0 {
+			return "", asinfo.ErrNotFound
+		}
+
+		call = len(f.answers) - 1
+	}
+
+	return f.answers[call].state, f.answers[call].err
+}
+
+func (f *fakeRestoreInfoClient) AbortRestore(_ context.Context, namespace, jobID string) error {
+	f.abortCalls++
+	f.abortNamespace = namespace
+	f.abortJobID = jobID
+
+	return f.abortErr
+}
+
 // fakeMetadataGetter answers "not found" a given number of times before it either
 // returns the manifest or fails permanently.
 type fakeMetadataGetter struct {
@@ -145,6 +194,9 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 			Abort: &models.ServerBackupAbort{JobID: testJobID},
 			App:   &models.App{LogJSON: true},
 			AwsS3: &models.AwsS3{BucketName: testBucket},
+		},
+		restoreCfg: &config.ServerRestoreServiceConfig{
+			Abort: &models.ServerRestoreAbort{Namespace: testNamespace, JobID: testJobID},
 		},
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
@@ -609,75 +661,151 @@ func TestServiceFetchMetadata(t *testing.T) {
 // TestServiceAbortBackup covers the outcomes the abort reaches within a few polls. The
 // two that only time can produce - the bounded wait and a canceled command - are driven
 // separately below.
+//
+// The first status lookup is the pre-abort check, so every case that gets as far as
+// requesting the abort opens with a status that reports the job as running.
 func TestServiceAbortBackup(t *testing.T) {
 	t.Parallel()
 
+	// runningStatus is the answer the pre-abort check needs to let the abort through.
+	runningStatus := statusAnswer{status: testStatus(infomodels.BackupStateBaseScanActive, 12)}
+
 	tests := []struct {
-		name        string
-		abortErr    error
-		answers     []statusAnswer
-		wantErr     error
-		wantCalls   int
-		wantLogs    []string
-		notWantLogs []string
+		name           string
+		abortErr       error
+		answers        []statusAnswer
+		wantErr        error
+		wantCalls      int
+		wantAbortCalls int
+		wantLogs       []string
+		notWantLogs    []string
 	}{
 		{
-			name:      "confirms the abort through the aborted state",
-			answers:   []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 12)}},
-			wantCalls: 1,
-			wantLogs:  []string{logAborting, logAborted},
+			name: "confirms the abort through the aborted state",
+			answers: []statusAnswer{
+				runningStatus,
+				{status: testFinishedStatus(infomodels.BackupStateAborted, 12)},
+			},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborting, logAborted},
 		},
 		{
 			// A job that hit a failure on its way out reports that instead of the abort,
 			// and is just as stopped.
-			name:      "confirms the abort through the failed state",
-			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateFailed, 12)}},
-			wantCalls: 1,
-			wantLogs:  []string{logAborting, logAborted},
+			name: "confirms the abort through the failed state",
+			answers: []statusAnswer{
+				runningStatus,
+				{status: testStatus(infomodels.BackupStateFailed, 12)},
+			},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborting, logAborted},
 		},
 		{
 			// The cluster drops the state of a job that is no longer running, so a job
-			// missing from the status has stopped too.
-			name:      "confirms the abort for a job the cluster no longer reports",
-			answers:   []statusAnswer{{err: asinfo.ErrNotFound}},
-			wantCalls: 1,
-			wantLogs:  []string{logAborted},
+			// that goes missing from the status after the abort has stopped too.
+			name:           "confirms the abort for a job the cluster no longer reports",
+			answers:        []statusAnswer{runningStatus},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborted},
 		},
 		{
 			// The cluster keeps reporting the job while it winds down, so the state that
 			// confirms the abort only arrives a few polls later.
 			name: "waits for a job that is still winding down",
 			answers: []statusAnswer{
+				runningStatus,
 				{status: testStatus(infomodels.BackupStateBaseScanActive, 12)},
 				{status: testStatus(infomodels.BackupStateAborting, 91)},
 				{status: testFinishedStatus(infomodels.BackupStateAborted, 91)},
 			},
-			wantCalls: 3,
-			wantLogs:  []string{logAborted},
+			wantCalls:      4,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborted},
 		},
 		{
-			// A backup that reached the end before the abort landed was not aborted, and
-			// announcing it as aborted would hide a backup that is in storage.
-			name:        "reports a backup that finished before the abort landed",
-			answers:     []statusAnswer{{status: testStatus(infomodels.BackupStateComplete, 100)}},
-			wantCalls:   1,
-			wantLogs:    []string{logAbortTooLate},
-			notWantLogs: []string{logAborted},
+			// A job winding down from an earlier abort is still running, so a repeated
+			// abort goes through and waits for it the same way.
+			name: "aborts a job that is already winding down from an earlier abort",
+			answers: []statusAnswer{
+				{status: testStatus(infomodels.BackupStateAborting, 91)},
+				{status: testFinishedStatus(infomodels.BackupStateAborted, 91)},
+			},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborted},
+		},
+		{
+			// A backup that reached the end between the check and the confirmation was
+			// not aborted, and announcing it as aborted would hide a backup that is in
+			// storage.
+			name: "reports a backup that finished before the abort landed",
+			answers: []statusAnswer{
+				runningStatus,
+				{status: testStatus(infomodels.BackupStateComplete, 100)},
+			},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAbortTooLate},
+			notWantLogs:    []string{logAborted},
+		},
+		{
+			// The cluster answers an abort for a job it knows nothing about without
+			// complaining, so a job it does not report must not be asked to stop: the
+			// status right after such a request looks just like a job that was aborted.
+			name:           "does not abort a job the cluster does not report",
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningBackup},
+			notWantLogs:    []string{logAborting, logAborted},
+		},
+		{
+			// The state of a finished job is kept for a while, and there is nothing left
+			// in it to abort.
+			name:           "does not abort a job that already completed",
+			answers:        []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateComplete, 100)}},
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningBackup},
+			notWantLogs:    []string{logAborting, logAborted},
+		},
+		{
+			name:           "does not abort a job that already stopped on an earlier abort",
+			answers:        []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 12)}},
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningBackup},
+			notWantLogs:    []string{logAborting, logAborted},
 		},
 		{
 			// Nothing was aborted, so there is nothing to confirm.
-			name:        "propagates a rejected abort request without polling",
-			abortErr:    errBoom,
-			wantErr:     errBoom,
-			wantCalls:   0,
-			notWantLogs: []string{logAborting, logAborted},
+			name:           "propagates a rejected abort request without polling",
+			answers:        []statusAnswer{runningStatus},
+			abortErr:       errBoom,
+			wantErr:        errBoom,
+			wantCalls:      1,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logAborting, logAborted},
 		},
 		{
-			name:        "propagates an unexpected status error",
-			answers:     []statusAnswer{{err: errBoom}},
-			wantErr:     errBoom,
-			wantCalls:   1,
-			notWantLogs: []string{logAborted},
+			// A check that cannot tell whether the job runs must not guess, and must not
+			// send the abort either.
+			name:           "propagates an unexpected error from the pre-abort check",
+			answers:        []statusAnswer{{err: errBoom}},
+			wantErr:        errBoom,
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			notWantLogs:    []string{logAborting, logAborted},
+		},
+		{
+			name:           "propagates an unexpected status error",
+			answers:        []statusAnswer{runningStatus, {err: errBoom}},
+			wantErr:        errBoom,
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logAborted},
 		},
 	}
 
@@ -696,10 +824,13 @@ func TestServiceAbortBackup(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			// The abort is requested once, for the configured job, whatever follows.
-			assert.Equal(t, 1, client.abortCalls)
-			assert.Equal(t, testJobID, client.abortJobID)
+			// The abort is requested at most once, and only for the configured job.
+			assert.Equal(t, tt.wantAbortCalls, client.abortCalls)
 			assert.Equal(t, tt.wantCalls, client.calls)
+
+			if tt.wantAbortCalls > 0 {
+				assert.Equal(t, testJobID, client.abortJobID)
+			}
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)
@@ -760,6 +891,236 @@ func TestServiceAbortBackupCanceled(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, errAbortStatusTimeout)
 	assert.NotContains(t, buf.String(), logAborted)
+}
+
+// TestServiceAbortRestore covers the outcomes the restore abort reaches within a few
+// polls. The two that only time can produce are driven separately below.
+//
+// The first status lookup is the pre-abort check, so every case that gets as far as
+// requesting the abort opens with a state that reports the namespace as restoring.
+func TestServiceAbortRestore(t *testing.T) {
+	t.Parallel()
+
+	// restoringState is the answer the pre-abort check needs to let the abort through.
+	restoringState := restoreAnswer{state: infomodels.RestoreStateRestoring}
+
+	tests := []struct {
+		name           string
+		abortErr       error
+		answers        []restoreAnswer
+		wantErr        error
+		wantCalls      int
+		wantAbortCalls int
+		wantLogs       []string
+		notWantLogs    []string
+	}{
+		{
+			// Nothing restores into the namespace anymore, so the abort has landed.
+			name:           "confirms the abort through the none state",
+			answers:        []restoreAnswer{restoringState, {state: infomodels.RestoreStateNone}},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			// A restore that hit a failure on its way out is just as stopped.
+			name:           "confirms the abort through the failed state",
+			answers:        []restoreAnswer{restoringState, {state: infomodels.RestoreStateFailed}},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
+		},
+		{
+			// The cluster answers with no state at all for a namespace nothing restores
+			// into, which says the same thing as the NONE state.
+			name:           "confirms the abort for a namespace with no restore state",
+			answers:        []restoreAnswer{restoringState},
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
+		},
+		{
+			// The cluster keeps reporting the namespace as restoring while the job winds
+			// down, so the state that confirms the abort only arrives a few polls later.
+			name: "waits for a restore that is still winding down",
+			answers: []restoreAnswer{
+				restoringState,
+				{state: infomodels.RestoreStateRestoring},
+				{state: infomodels.RestoreStateRestoring},
+				{state: infomodels.RestoreStateNone},
+			},
+			wantCalls:      4,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
+		},
+		{
+			// A job aborted before it started writing records is still preparing, which
+			// is something to abort and not a stopped restore.
+			name: "waits for a restore that is still preparing",
+			answers: []restoreAnswer{
+				{state: infomodels.RestoreStatePreparing},
+				{state: infomodels.RestoreStatePreparing},
+				{state: infomodels.RestoreStateNone},
+			},
+			wantCalls:      3,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
+		},
+		{
+			// A prepared namespace blocks writes until the restore ends, so the abort has
+			// to release that block - and only the state that follows says it did. Until
+			// then the namespace keeps reporting itself as prepared.
+			name: "aborts a namespace that is only prepared and waits for the block to lift",
+			answers: []restoreAnswer{
+				{state: infomodels.RestoreStateReady},
+				{state: infomodels.RestoreStateReady},
+				{state: infomodels.RestoreStateNone},
+			},
+			wantCalls:      3,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			// The cluster accepts the abort of a namespace nothing restores into, and the
+			// idle status that follows would announce a restore that never ran as
+			// aborted. This is what a wrong backup id used to look like.
+			name:           "does not abort a namespace that carries no restore state",
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningRestore},
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			name:           "does not abort a namespace nothing restores into",
+			answers:        []restoreAnswer{{state: infomodels.RestoreStateNone}},
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningRestore},
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			// A restore that ended in a failure holds nothing anymore.
+			name:           "does not abort a namespace whose restore failed",
+			answers:        []restoreAnswer{{state: infomodels.RestoreStateFailed}},
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningRestore},
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			// Nothing was aborted, so there is nothing to confirm.
+			name:           "propagates a rejected abort request without polling",
+			answers:        []restoreAnswer{restoringState},
+			abortErr:       errBoom,
+			wantErr:        errBoom,
+			wantCalls:      1,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			// A check that cannot tell whether a restore runs must not guess, and must
+			// not send the abort either.
+			name:           "propagates an unexpected error from the pre-abort check",
+			answers:        []restoreAnswer{{err: errBoom}},
+			wantErr:        errBoom,
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
+		},
+		{
+			name:           "propagates an unexpected status error",
+			answers:        []restoreAnswer{restoringState, {err: errBoom}},
+			wantErr:        errBoom,
+			wantCalls:      2,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logRestoreAborted},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, buf := newTestService(t)
+			client := &fakeRestoreInfoClient{answers: tt.answers, abortErr: tt.abortErr}
+
+			err := svc.abortRestore(t.Context(), client)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.wantAbortCalls, client.abortCalls)
+			assert.Equal(t, tt.wantCalls, client.calls)
+
+			// A restore job is named by its namespace as well as by its id, so both have
+			// to reach the cluster.
+			if tt.wantAbortCalls > 0 {
+				assert.Equal(t, testNamespace, client.abortNamespace)
+				assert.Equal(t, testJobID, client.abortJobID)
+			}
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
+		})
+	}
+}
+
+// TestServiceAbortRestoreTimesOut pins down the bound on the wait: a namespace that never
+// stops reporting a running restore has to end the command instead of being polled
+// forever, and the failure has to say so rather than claim the restore stopped.
+func TestServiceAbortRestoreTimesOut(t *testing.T) {
+	t.Parallel()
+
+	svc, buf := newTestService(t)
+
+	client := &fakeRestoreInfoClient{
+		answers:    []restoreAnswer{{state: infomodels.RestoreStateRestoring}},
+		repeatLast: true,
+	}
+
+	err := svc.abortRestore(t.Context(), client)
+
+	require.ErrorIs(t, err, errAbortRestoreStatusTimeout)
+	// The last state the cluster reported belongs in the error: it is the only clue
+	// about what the namespace was still doing.
+	require.ErrorContains(t, err, infomodels.RestoreStateRestoring)
+	require.Greater(t, client.calls, 1, "the abort must keep polling until the wait runs out")
+	require.NotContains(t, buf.String(), logRestoreAborted)
+}
+
+// TestServiceAbortRestoreCanceled makes sure a command the user interrupted is reported
+// as canceled and not as a timeout, and that the wait ends at once instead of sitting out
+// the poll interval.
+func TestServiceAbortRestoreCanceled(t *testing.T) {
+	t.Parallel()
+
+	svc, buf := newTestService(t)
+	// A poll interval longer than the test would tolerate: only the cancellation can
+	// end this wait.
+	svc.abortPollInterval = time.Minute
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	client := &fakeRestoreInfoClient{
+		answers:    []restoreAnswer{{state: infomodels.RestoreStateRestoring}},
+		repeatLast: true,
+	}
+
+	cancel()
+
+	err := svc.abortRestore(ctx, client)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, errAbortRestoreStatusTimeout)
+	assert.NotContains(t, buf.String(), logRestoreAborted)
 }
 
 func TestServiceMetadataS3Config(t *testing.T) {

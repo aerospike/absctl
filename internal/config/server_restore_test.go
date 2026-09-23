@@ -50,6 +50,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 		restore      = &models.ServerRestore{}
 		prepare      = &models.ServerRestorePrepare{}
 		progress     = &models.ServerRestoreProgress{}
+		abort        = &models.ServerRestoreAbort{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -62,6 +63,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 		restore   *models.ServerRestore
 		prepare   *models.ServerRestorePrepare
 		progress  *models.ServerRestoreProgress
+		abort     *models.ServerRestoreAbort
 		app       *models.App
 		clientCfg *client.AerospikeConfig
 		clientPol *models.ClientPolicy
@@ -73,6 +75,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			restore:   restore,
 			prepare:   prepare,
 			progress:  progress,
+			abort:     abort,
 			app:       app,
 			clientCfg: clientCfg,
 			clientPol: clientPolicy,
@@ -102,6 +105,7 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 				tt.restore,
 				tt.prepare,
 				tt.progress,
+				tt.abort,
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,
@@ -113,6 +117,8 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 
 			assert.Same(t, tt.restore, got.Start)
 			assert.Same(t, tt.prepare, got.Prepare)
+			assert.Same(t, tt.progress, got.Progress)
+			assert.Same(t, tt.abort, got.Abort)
 			assert.Same(t, tt.app, got.App)
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)
@@ -218,6 +224,46 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			isBackup:   false,
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "valid abort config without object storage",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					Abort: &models.ServerRestoreAbort{
+						Namespace: testServerNamespace,
+						JobID:     testServerJobID,
+					},
+					App:          &models.App{},
+					ClientConfig: &client.AerospikeConfig{},
+					ClientPolicy: &models.ClientPolicy{},
+				}
+			},
+			isBackup: false,
+			wantErr:  false,
+		},
+		{
+			name: "missing abort backup id",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					Abort: &models.ServerRestoreAbort{Namespace: testServerNamespace},
+					App:   &models.App{},
+				}
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "missing abort namespace",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					Abort: &models.ServerRestoreAbort{JobID: testServerJobID},
+					App:   &models.App{},
+				}
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: "namespace is required",
 		},
 		{
 			name: "multiple cloud providers configured",

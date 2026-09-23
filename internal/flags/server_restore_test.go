@@ -96,3 +96,61 @@ func TestServerRestorePrepare_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
 }
+
+func TestServerRestoreAbort_NewFlagSet(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testNamespace = "test-ns"
+		testJobID     = "backup-job-1"
+	)
+
+	tests := []struct {
+		name          string
+		args          []string
+		wantNamespace string
+		wantJobID     string
+	}{
+		{
+			name:          "no arguments keeps the defaults",
+			args:          []string{},
+			wantNamespace: models.DefaultCommonNamespace,
+			wantJobID:     models.DefaultServerBackupJobID,
+		},
+		{
+			// A restore job is named by both, so both flags have to reach the model.
+			name:          "namespace and backup id",
+			args:          []string{"--namespace", testNamespace, "--backup-id", testJobID},
+			wantNamespace: testNamespace,
+			wantJobID:     testJobID,
+		},
+		{
+			name:          "only namespace",
+			args:          []string{"--namespace", testNamespace},
+			wantNamespace: testNamespace,
+			wantJobID:     models.DefaultServerBackupJobID,
+		},
+		{
+			name:          "only backup id",
+			args:          []string{"--backup-id", testJobID},
+			wantNamespace: models.DefaultCommonNamespace,
+			wantJobID:     testJobID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			abort := NewServerRestoreAbort()
+			flagSet := abort.NewFlagSet()
+
+			require.NoError(t, flagSet.Parse(tt.args))
+
+			result := abort.GetServerRestoreAbort()
+
+			assert.Equal(t, tt.wantNamespace, result.Namespace)
+			assert.Equal(t, tt.wantJobID, result.JobID)
+		})
+	}
+}

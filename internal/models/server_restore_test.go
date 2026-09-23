@@ -36,6 +36,13 @@ func validServerRestorePrepare() *ServerRestorePrepare {
 	}
 }
 
+func validServerRestoreAbort() *ServerRestoreAbort {
+	return &ServerRestoreAbort{
+		Namespace: testServerNamespace,
+		JobID:     testServerJobID,
+	}
+}
+
 func TestServerRestore_Validate(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +111,81 @@ func TestServerRestore_Validate(t *testing.T) {
 			t.Parallel()
 
 			err := tt.restore().Validate()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerRestoreAbort_Validate(t *testing.T) {
+	t.Parallel()
+
+	const (
+		errMsgBackupIDRequired  = "backup-id is required"
+		errMsgNamespaceRequired = "namespace is required"
+	)
+
+	tests := []struct {
+		name       string
+		abort      func() *ServerRestoreAbort
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name:    "valid abort",
+			abort:   validServerRestoreAbort,
+			wantErr: false,
+		},
+		{
+			name: "nil abort",
+			abort: func() *ServerRestoreAbort {
+				return nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing backup id",
+			abort: func() *ServerRestoreAbort {
+				abort := validServerRestoreAbort()
+				abort.JobID = ""
+				return abort
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgBackupIDRequired,
+		},
+		{
+			name: "missing namespace",
+			abort: func() *ServerRestoreAbort {
+				abort := validServerRestoreAbort()
+				abort.Namespace = ""
+				return abort
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgNamespaceRequired,
+		},
+		{
+			// Both fields name the job, and the missing id is reported first.
+			name: "missing namespace and backup id",
+			abort: func() *ServerRestoreAbort {
+				return &ServerRestoreAbort{}
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgBackupIDRequired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.abort().Validate()
 
 			if tt.wantErr {
 				require.Error(t, err)

@@ -31,6 +31,7 @@ func TestDefaultServerRestore(t *testing.T) {
 	require.NotNil(t, restore.Restore)
 	require.NotNil(t, restore.Prepare)
 	require.NotNil(t, restore.Progress)
+	require.NotNil(t, restore.Abort)
 	require.NotNil(t, restore.SecretAgent)
 	require.NotNil(t, restore.Aws.S3)
 }
@@ -50,6 +51,10 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 
 	progress := defaultServerRestoreProgressConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(progress.Namespace))
+
+	abort := defaultServerRestoreAbortConfig()
+	assert.Equal(t, models.DefaultCommonNamespace, derefString(abort.Namespace))
+	assert.Equal(t, models.DefaultServerBackupJobID, derefString(abort.JobID))
 }
 
 func TestServerRestoreToModels(t *testing.T) {
@@ -62,6 +67,7 @@ func TestServerRestoreToModels(t *testing.T) {
 	fuzzy := true
 	prepareNamespace := "ns2"
 	progressNamespace := "ns3"
+	abortNamespace := "ns4"
 
 	restore := &ServerRestore{
 		Restore: ServerRestoreConfig{
@@ -73,6 +79,7 @@ func TestServerRestoreToModels(t *testing.T) {
 		},
 		Prepare:  ServerRestorePrepareConfig{Namespace: &prepareNamespace, JobID: &jobID},
 		Progress: ServerRestoreProgressConfig{Namespace: &progressNamespace},
+		Abort:    ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID},
 	}
 
 	start := restore.ToModelServerRestore()
@@ -91,6 +98,11 @@ func TestServerRestoreToModels(t *testing.T) {
 	progress := restore.ToModelServerRestoreProgress()
 	require.NotNil(t, progress)
 	assert.Equal(t, progressNamespace, progress.Namespace)
+
+	abort := restore.ToModelServerRestoreAbort()
+	require.NotNil(t, abort)
+	assert.Equal(t, abortNamespace, abort.Namespace)
+	assert.Equal(t, jobID, abort.JobID)
 }
 
 func TestServerRestoreToModelsNil(t *testing.T) {
@@ -101,6 +113,7 @@ func TestServerRestoreToModelsNil(t *testing.T) {
 	assert.Nil(t, restore.ToModelServerRestore())
 	assert.Nil(t, restore.ToModelServerRestorePrepare())
 	assert.Nil(t, restore.ToModelServerRestoreProgress())
+	assert.Nil(t, restore.ToModelServerRestoreAbort())
 }
 
 func TestServerRestoreLoadSecretsNoAgent(t *testing.T) {

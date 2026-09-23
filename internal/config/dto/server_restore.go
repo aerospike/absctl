@@ -29,6 +29,7 @@ type ServerRestore struct {
 	Restore     ServerRestoreConfig         `yaml:"restore"`
 	Prepare     ServerRestorePrepareConfig  `yaml:"prepare"`
 	Progress    ServerRestoreProgressConfig `yaml:"progress"`
+	Abort       ServerRestoreAbortConfig    `yaml:"abort"`
 	SecretAgent SecretAgent                 `yaml:"secret-agent"`
 	Aws         struct {
 		S3 ObjectStorageS3 `yaml:"s3"`
@@ -43,6 +44,7 @@ func DefaultServerRestore() *ServerRestore {
 		Restore:     defaultServerRestoreConfig(),
 		Prepare:     defaultServerRestorePrepareConfig(),
 		Progress:    defaultServerRestoreProgressConfig(),
+		Abort:       defaultServerRestoreAbortConfig(),
 		SecretAgent: defaultSecretAgent(),
 		Aws: struct {
 			S3 ObjectStorageS3 `yaml:"s3"`
@@ -145,5 +147,31 @@ func (r *ServerRestore) ToModelServerRestoreProgress() *models.ServerRestoreProg
 
 	return &models.ServerRestoreProgress{
 		Namespace: derefString(r.Progress.Namespace),
+	}
+}
+
+// ServerRestoreAbortConfig maps the "abort" section, used by
+// "snapshot-restore abort".
+type ServerRestoreAbortConfig struct {
+	Namespace *string `yaml:"namespace"`
+	JobID     *string `yaml:"backup-id"`
+}
+
+func defaultServerRestoreAbortConfig() ServerRestoreAbortConfig {
+	return ServerRestoreAbortConfig{
+		Namespace: new(models.DefaultCommonNamespace),
+		JobID:     new(models.DefaultServerBackupJobID),
+	}
+}
+
+// ToModelServerRestoreAbort maps the "abort" section onto its model.
+func (r *ServerRestore) ToModelServerRestoreAbort() *models.ServerRestoreAbort {
+	if r == nil {
+		return nil
+	}
+
+	return &models.ServerRestoreAbort{
+		Namespace: derefString(r.Abort.Namespace),
+		JobID:     derefString(r.Abort.JobID),
 	}
 }
