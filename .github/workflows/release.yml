@@ -94,9 +94,10 @@ jobs:
           fi
           jq . response.json
 
-          COMPLETED_PROD=$(jq '[.promotions[]? | select(.environment == "PROD" and .status == "COMPLETED")] | length' response.json)
+          # TEMP(v0.0.0-test-dgerchikov.9): TEST instead of PROD for pipeline testing. REVERT.
+          COMPLETED_PROD=$(jq '[.promotions[]? | select(.environment == "TEST" and .status == "COMPLETED")] | length' response.json)
           if [ "$COMPLETED_PROD" -lt 1 ]; then
-            echo "::error::Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} has no COMPLETED promotion to PROD. Have a PM/EM promote it via the JFrog UI, then re-run this workflow."
+            echo "::error::Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} has no COMPLETED promotion to TEST. Have a PM/EM promote it via the JFrog UI, then re-run this workflow."
             exit 1
           fi
 
@@ -140,8 +141,15 @@ jobs:
 
       - name: Download signed artifacts from JFrog PROD
         env:
-          DEB_REPO: ${{ vars.JF_ARTIFACTORY_DEB_PROD }}
-          RPM_REPO: ${{ vars.JF_ARTIFACTORY_RPM_PROD }}
+          # TEMP(v0.0.0-test-dgerchikov.9): hardcoded TEST-stage repos for pipeline
+          # testing -- there are no JF_*_TEST repo variables. REVERT to
+          # vars.JF_ARTIFACTORY_{DEB,RPM,GENERIC}_PROD.
+          DEB_REPO: database-deb-test-local
+          RPM_REPO: database-rpm-test-local
+          # macOS .pkg installers have no dedicated artifact type in
+          # shared-workflows' deploy type registry, so they are published as
+          # generic artifacts.
+          GENERIC_REPO: database-generic-test-local
         run: |
           set -euxo pipefail
           # jf rt search's --bundle filter turned out not to reliably list release-bundle
@@ -156,8 +164,16 @@ jobs:
           jf rt search "${DEB_REPO}/**" --props "version=${BUNDLE_VERSION}" > deb-artifacts.json
           echo "Searching ${RPM_REPO} for version=${BUNDLE_VERSION}..."
           jf rt search "${RPM_REPO}/**" --props "version=${BUNDLE_VERSION}" > rpm-artifacts.json
+          echo "Searching ${GENERIC_REPO} for version=${BUNDLE_VERSION}..."
+          jf rt search "${GENERIC_REPO}/**" --props "version=${BUNDLE_VERSION}" > generic-all.json
+          # The generic repo is not macOS-only: the Linux `make packages` build
+          # leaves its raw binaries (absctl_linux_amd64/arm64) in dist/, and
+          # they are deployed as generic artifacts too. They are build output,
+          # not release assets, and the product-name filter below would accept
+          # them ("absctl_..."), so select the installers by extension here.
+          jq '[ .[] | select(.path | endswith(".pkg")) ]' generic-all.json > generic-artifacts.json
 
-          jq -s 'add' deb-artifacts.json rpm-artifacts.json > all-artifacts.json
+          jq -s 'add' deb-artifacts.json rpm-artifacts.json generic-artifacts.json > all-artifacts.json
 
           # Those repos are shared by every product in the JFrog project and the only filter
           # above is the `version` property, so another product carrying the same version
@@ -174,7 +190,7 @@ jobs:
 
           jq -r '.[].path' bundle-artifacts.json > artifact-paths.txt
           if [ ! -s artifact-paths.txt ]; then
-            echo "::error::No ${BUNDLE_NAME} package artifacts found for ${BUNDLE_NAME}:${BUNDLE_VERSION} in ${DEB_REPO} or ${RPM_REPO} (searched $(jq 'length' all-artifacts.json) artifact(s) at that version, none of them ${BUNDLE_NAME}'s)." >&2
+            echo "::error::No ${BUNDLE_NAME} package artifacts found for ${BUNDLE_NAME}:${BUNDLE_VERSION} in ${DEB_REPO}, ${RPM_REPO} or ${GENERIC_REPO} (searched $(jq 'length' all-artifacts.json) artifact(s) at that version, none of them ${BUNDLE_NAME}'s)." >&2
             exit 1
           fi
 
@@ -196,7 +212,7 @@ jobs:
           # bundle-artifacts.json above) -- write out that recorded checksum instead of
           # re-hashing the downloaded file locally, so the .sha256 we publish is JFrog's own
           # recorded value for this immutable artifact, not something recomputed here.
-          jq -r '.[] | select(.path | test("\\.(deb|rpm)$")) | "\(.path)\t\(.sha256)"' bundle-artifacts.json |
+          jq -r '.[] | select(.path | test("\\.(deb|rpm|pkg)$")) | "\(.path)\t\(.sha256)"' bundle-artifacts.json |
           while IFS=$'\t' read -r artifact_path sha256; do
             filename="$(basename "$artifact_path")"
             echo "$sha256" > "release-assets/${filename}.sha256"
@@ -216,8 +232,10 @@ jobs:
           files: |
             release-assets/**/*.rpm
             release-assets/**/*.deb
+            release-assets/**/*.pkg
             release-assets/**/*.deb.asc
             release-assets/**/*.rpm.asc
+            release-assets/**/*.pkg.asc
             release-assets/**/*.sha256
 
       - name: Summarize published release

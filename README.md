@@ -39,9 +39,9 @@ Run `absctl <command> --help` for flags and usage details.
 
 ## Installation
 
-`absctl` ships as DEB and RPM packages, attached to each
-[GitHub Release](https://github.com/aerospike/absctl/releases), and as a Docker image. Every package is
-built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
+`absctl` ships as DEB and RPM packages for Linux, a `.pkg` installer for macOS -- all attached to each
+[GitHub Release](https://github.com/aerospike/absctl/releases) -- and as a Docker image. Every Linux
+package is built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
 `ubuntu24.04`, `ubuntu26.04`, `debian11`, `debian12` or `debian13` for DEB, and `el8`, `el9`, `el10` or
 `amzn2023` for RPM.
 
@@ -70,6 +70,39 @@ sudo rpm -i absctl-1.2.0-1.el9.x86_64.rpm
 ```
 
 Each package is published with a `.sha256` checksum and a detached `.asc` GPG signature next to it.
+
+### macOS
+
+The installer is signed with Aerospike's Developer ID, notarized by Apple and stapled, so it installs
+without a Gatekeeper prompt. It places `absctl` at `/usr/local/bin/absctl`.
+
+Pick the package matching your architecture -- `arm64` for Apple Silicon, `x86_64` for Intel. There is
+one package per architecture and it works on every supported macOS release, so the filename carries no
+macOS version:
+
+```bash
+curl -LO https://github.com/aerospike/absctl/releases/download/v<version>/absctl-<version>-macos-<arch>.pkg
+sudo installer -pkg absctl-<version>-macos-<arch>.pkg -target /
+
+# for example, on Apple Silicon
+curl -LO https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl-1.2.0-macos-arm64.pkg
+sudo installer -pkg absctl-1.2.0-macos-arm64.pkg -target /
+```
+
+Run `uname -m` if you are unsure which to download; it prints exactly the architecture token used in the
+filename. To confirm the package is genuine before installing:
+
+```bash
+pkgutil --check-signature absctl-1.2.0-macos-arm64.pkg
+xcrun stapler validate absctl-1.2.0-macos-arm64.pkg
+```
+
+To uninstall, remove the binary and forget the package receipt:
+
+```bash
+sudo rm /usr/local/bin/absctl
+sudo pkgutil --forget com.aerospike.absctl
+```
 
 ### Docker
 
@@ -268,6 +301,19 @@ make packages
 
 The generated packages and their `sha256` checksum files are written to the `target/` directory.
 
+### macOS Package
+
+To build the macOS `.pkg` installers (requires macOS, for `pkgbuild`):
+
+```bash
+make mac-packages VERSION=v1.2.0
+```
+
+That produces one package per architecture in `dist/`. `make mac-pkg ARCH=arm64` builds a single one.
+Both architectures are cross-compiled from whichever Mac you are on -- `absctl` is a pure-Go,
+`CGO_ENABLED=0` binary, and `pkgbuild` only stages files. Locally built packages are unsigned; signing
+and notarization happen in CI.
+
 ### Running Tests
 
 ```bash
@@ -344,10 +390,15 @@ The following steps apply to both regular releases and hotfixes:
       from the JFrog legs below.
    2. Refuses to run at all if the version already has a published (non-draft, non-prerelease) GitHub Release,
       so a deleted-and-re-pushed tag cannot rebuild over artifacts customers already have.
-   3. Builds the DEB/RPM packages and Docker image.
-   4. Signs the packages, then verifies every artifact carries both a valid detached `.asc` and a valid
-      embedded deb/rpm signature before anything is deployed, and deploys everything to JFrog `DEV`.
-   5. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
+   3. Builds the DEB/RPM packages, the macOS `.pkg` installers (one per architecture, on a `macos-15`
+      runner) and the Docker image.
+   4. Apple-signs and notarizes the macOS packages, then GPG-signs everything. Apple signing runs first
+      because `productsign` rewrites the `.pkg` in place, which would invalidate a detached `.asc` created
+      beforehand.
+   5. Verifies every artifact carries both a valid detached `.asc` and a valid embedded deb/rpm signature,
+      and that each `.pkg` is signed by the expected Developer ID, accepted by Gatekeeper and carries a
+      stapled notarization ticket — before anything is deployed. Then deploys everything to JFrog `DEV`.
+   6. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
 2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
    promoted from `TEST` to `STAGE`, either by dispatching
    [`promote-to-preview.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-preview.yml) with `environment: STAGE` or manually via the
@@ -366,9 +417,10 @@ The following steps apply to both regular releases and hotfixes:
      ([strategy](https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799)).
    - A dev or PM/EM manually runs [`release.yml`](https://github.com/aerospike/absctl/actions/workflows/release.yml)
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
-     `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
-     publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or
-     re-checksummed at this point.
+     `PROD`, then downloads the already-signed DEB/RPM/PKG artifacts straight from JFrog's `PROD`-public
+     repos and publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or
+     re-checksummed at this point. The macOS packages come from the generic repo, since `.pkg` has no
+     dedicated artifact type in shared-workflows' deploy type registry.
 6. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release** only.
    The GitHub **Set as the latest release** checkbox is unrelated to any registry tag and can be left
    unchecked. Until the pre-release flag is cleared, the release does not appear as GA on GitHub.

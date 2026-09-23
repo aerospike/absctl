@@ -4,7 +4,7 @@
 # pipeline this verifies. DockerHub checks are best-effort (see verify-dockerhub) since that
 # mirror is populated externally/asynchronously by artifact-publisher, outside this repo's
 # control. SBOM/attestation only exists for the container image today (confirmed by reading
-# aerospike/shared-workflows directly) -- .deb/.rpm have none, and this workflow says so
+# aerospike/shared-workflows directly) -- .deb/.rpm/.pkg have none, and this workflow says so
 # explicitly rather than silently skipping or faking that check. absctl has no Helm chart, so
 # there's no Helm-related check here (unlike aerospike-backup-service's equivalent workflow).
 
@@ -59,13 +59,13 @@ jobs:
           GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
         run: echo "$GPG_PUBLIC_KEY" | gpg --import
 
-      - name: Verify DEB/RPM checksums and signatures
+      - name: Verify DEB/RPM/PKG checksums and signatures
         run: |
           set -euo pipefail
           cd release-assets
           fail=0
           shopt -s nullglob
-          for pkg in *.deb *.rpm; do
+          for pkg in *.deb *.rpm *.pkg; do
             if [ ! -f "${pkg}.sha256" ]; then
               echo "::error::Missing ${pkg}.sha256"
               fail=1
@@ -99,7 +99,7 @@ jobs:
           python3 - <<'EOF'
           import glob, hashlib, json
           out = {}
-          for f in glob.glob("*.deb") + glob.glob("*.rpm"):
+          for f in glob.glob("*.deb") + glob.glob("*.rpm") + glob.glob("*.pkg"):
               h = hashlib.sha256()
               with open(f, "rb") as fh:
                   h.update(fh.read())
@@ -141,10 +141,12 @@ jobs:
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
           oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
 
-      - name: Verify DEB/RPM present in JFrog PROD with matching checksums
+      - name: Verify DEB/RPM/PKG present in JFrog PROD with matching checksums
         env:
           DEB_REPO: ${{ vars.JF_ARTIFACTORY_DEB_PROD }}
           RPM_REPO: ${{ vars.JF_ARTIFACTORY_RPM_PROD }}
+          # macOS .pkg installers are published as generic artifacts.
+          GENERIC_REPO: ${{ vars.JF_ARTIFACTORY_GENERIC_PROD }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -154,8 +156,16 @@ jobs:
           jf rt search "${DEB_REPO}/**" --props "version=${VERSION}" > deb.json
           echo "Searching ${RPM_REPO} for version=${VERSION}..."
           jf rt search "${RPM_REPO}/**" --props "version=${VERSION}" > rpm.json
+          echo "Searching ${GENERIC_REPO} for version=${VERSION}..."
+          jf rt search "${GENERIC_REPO}/**" --props "version=${VERSION}" > generic-all.json
+          # The generic repo is not macOS-only: the Linux `make packages` build
+          # leaves its raw binaries (absctl_linux_amd64/arm64) in dist/, and
+          # they are deployed as generic artifacts too. They are build output,
+          # not release assets, and the product-name filter below would accept
+          # them ("absctl_..."), so select the installers by extension here.
+          jq '[ .[] | select(.path | endswith(".pkg")) ]' generic-all.json > generic.json
 
-          for f in deb.json rpm.json; do
+          for f in deb.json rpm.json generic.json; do
             count="$(jq 'length' "$f")"
             if [ "$count" -eq 0 ]; then
               echo "::error::No artifacts found in JFrog PROD for $f"
@@ -165,7 +175,7 @@ jobs:
             fi
           done
 
-          jq -s 'add' deb.json rpm.json > all.json
+          jq -s 'add' deb.json rpm.json generic.json > all.json
           python3 - <<'EOF'
           import json, sys
           jfrog = json.load(open("all.json"))
@@ -274,14 +284,14 @@ jobs:
           fi
           echo "SBOM referrer present for ${IMAGE_REF}."
 
-      - name: Report N/A for RPM/DEB
+      - name: Report N/A for RPM/DEB/PKG
         run: |
           {
             echo "### SBOM / attestation coverage"
             echo "| Artifact | SBOM/attestation |"
             echo "| --- | --- |"
             echo "| Docker image | verified (SPDX SBOM + SLSA attestation) |"
-            echo "| .deb / .rpm | N/A -- no SBOM or attestation is produced anywhere in the build/sign/deploy pipeline for these artifact types (confirmed gap, not a bug in this check) |"
+            echo "| .deb / .rpm / .pkg | N/A -- no SBOM or attestation is produced anywhere in the build/sign/deploy pipeline for these artifact types (confirmed gap, not a bug in this check) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   verify-oci-labels:
@@ -412,6 +422,60 @@ jobs:
         if: always()
         run: docker rm -f target || true
 
+  # One .pkg per architecture serves every macOS generation -- macOS is forward
+  # compatible, so the package is selected by arch alone and the runner
+  # generations below exist purely to prove that. macos-14 is deliberately
+  # absent: it is deprecated, with brownouts from 2026-10-05 and full removal on
+  # 2026-11-02 (https://github.com/actions/runner-images/issues/13518).
+  mac-package-install:
+    needs: [verify-github-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26, macos-26-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Download verified assets
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: release-assets
+          path: release-assets
+
+      - name: Install and verify (one-shot CLI -- --version is sufficient)
+        run: |
+          set -euo pipefail
+          cd release-assets
+
+          # Match the arch token the package name carries, which is the `uname -m`
+          # spelling (arm64 / x86_64) rather than GitHub's ARM64 / X64.
+          arch="$(uname -m)"
+          pkg="$(ls -1 ./*-macos-"${arch}".pkg)"
+          echo "Testing package: ${pkg} on ${{ matrix.runner }} (${arch})"
+
+          # Gatekeeper's verdict on the real downloaded artifact. This is the
+          # check a user actually experiences, and it fails if notarization or
+          # stapling regressed even when the signature itself is intact.
+          spctl --assess --type install -vv "${pkg}"
+          xcrun stapler validate "${pkg}"
+
+          sudo installer -pkg "${pkg}" -target /
+
+          version_output="$(/usr/local/bin/absctl --version)"
+          echo "Reported version: ${version_output}"
+          case "$version_output" in
+            *"${{ inputs.version }}"*) echo "Version matches." ;;
+            *) echo "::warning::Reported version '${version_output}' does not obviously contain '${{ inputs.version }}' -- confirm the exact --version output format." ;;
+          esac
+
+          # The installed binary must match the runner it was selected for.
+          file /usr/local/bin/absctl | grep -q "${arch}" \
+            || { echo "::error::/usr/local/bin/absctl is not a ${arch} binary."; exit 1; }
+
   docker-image-install:
     needs: [verify-jfrog-prod]
     strategy:
@@ -456,7 +520,7 @@ jobs:
           docker run --rm --platform "linux/${{ matrix.arch }}" "${{ steps.pull.outputs.ref }}" --version
 
   summary:
-    needs: [verify-github-release, verify-jfrog-prod, verify-dockerhub, verify-sbom-attestation, verify-oci-labels, package-install, docker-image-install]
+    needs: [verify-github-release, verify-jfrog-prod, verify-dockerhub, verify-sbom-attestation, verify-oci-labels, package-install, mac-package-install, docker-image-install]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -472,5 +536,6 @@ jobs:
             echo "| verify-sbom-attestation | ${{ needs.verify-sbom-attestation.result }} |"
             echo "| verify-oci-labels | ${{ needs.verify-oci-labels.result }} |"
             echo "| package-install (matrix) | ${{ needs.package-install.result }} |"
+            echo "| mac-package-install (matrix) | ${{ needs.mac-package-install.result }} |"
             echo "| docker-image-install (matrix) | ${{ needs.docker-image-install.result }} |"
           } >> "$GITHUB_STEP_SUMMARY"

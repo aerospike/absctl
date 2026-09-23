@@ -49,6 +49,36 @@ PREFIX ?= /usr
 BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 
+# macOS .pkg installer. The naming convention follows aerospike-admin's
+# pkg/Makefile so a Homebrew cask can interpolate it: lower case, '-' separated,
+# and <arch> spelled the way `uname -m` reports it (the token a cask's `arch`
+# stanza emits). Deliberately no .dmg -- a CLI under /usr/local has nothing to
+# drag, and a disk image would be a second container to sign, notarize and
+# staple.
+#
+# One pkg per architecture, not per macOS generation: macOS is forward
+# compatible, so a single build serves every supported release.
+#
+#     absctl-<version>-macos-<arch>.pkg
+#
+# VERSION is the git tag (v1.2.0); the package carries it without the leading
+# 'v', matching what nfpm already does for the deb and rpm.
+PKG_VERSION = $(patsubst v%,%,$(VERSION))
+# Go spells the 64-bit Intel arch "amd64"; `uname -m` and the file name above
+# say "x86_64".
+MAC_ARCH = $(patsubst amd64,x86_64,$(ARCH))
+# pkgbuild --version rejects hyphens and underscores, so collapse both to dots
+# (1.2.0-rc1 -> 1.2.0.rc1). This is the CFBundleShortVersionString-style version
+# *inside* the pkg only; the file name keeps the canonical form.
+MAC_VERSION = $(subst _,.,$(subst -,.,$(PKG_VERSION)))
+MAC_PKG_ID = com.aerospike.absctl
+# Staged under TARGET_DIR so `clean` already removes it.
+MAC_ROOT = $(TARGET_DIR)/mac-root-$(MAC_ARCH)
+MAC_PKG = $(TARGET_DIR)/$(NAME)-$(PKG_VERSION)-macos-$(MAC_ARCH).pkg
+# Both macOS packages are produced from one runner: absctl is a single
+# CGO_ENABLED=0 binary, so GOARCH cross-compiles, and pkgbuild only stages
+# files -- it does not care about the payload's architecture.
+MAC_ARCHS ?= arm64 amd64
 
 # Runs the unit tests. Tests that need a live Aerospike cluster, MinIO, Azurite
 # or fake-gcs-server skip themselves; use test-integration to include them.
@@ -146,6 +176,36 @@ install: build
 .PHONY: uninstall
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_NAME)
+
+# Build the macOS installer for a single architecture (ARCH=arm64|amd64).
+# Guards first: a misnamed package is worse than a failed build, because the
+# name is the customer-facing contract and downstream jobs select on it.
+.PHONY: mac-pkg
+mac-pkg:
+	@test -n "$(PKG_VERSION)" \
+		|| { echo "ERROR: empty version -- refusing to build an unnamed pkg" >&2; exit 1; }
+	@echo '$(MAC_ARCH)' | grep -qE '^(arm64|x86_64)$$' \
+		|| { echo "ERROR: architecture token is '$(MAC_ARCH)', not arm64 or x86_64 -- refusing to build a misnamed pkg" >&2; exit 1; }
+	@command -v pkgbuild >/dev/null 2>&1 \
+		|| { echo "ERROR: pkgbuild not found -- mac-pkg must run on macOS" >&2; exit 1; }
+	$(MAKE) build OS=darwin ARCH=$(ARCH)
+	rm -rf $(MAC_ROOT)
+	install -d $(MAC_ROOT)/usr/local/bin
+	install -m 755 $(TARGET_DIR)/$(BINARY_NAME)_darwin_$(ARCH) $(MAC_ROOT)/usr/local/bin/$(BINARY_NAME)
+	pkgbuild \
+		--root $(MAC_ROOT) \
+		--identifier $(MAC_PKG_ID) \
+		--version $(MAC_VERSION) \
+		--install-location / \
+		$(MAC_PKG)
+	@echo "==> built $(MAC_PKG)"
+
+# Build the macOS installer for every architecture in MAC_ARCHS.
+.PHONY: mac-packages
+mac-packages:
+	@for arch in $(MAC_ARCHS); do \
+		$(MAKE) mac-pkg ARCH=$$arch || exit 1; \
+	done
 
 .PHONY: packages
 packages: buildx
