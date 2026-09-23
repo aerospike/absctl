@@ -74,3 +74,27 @@ func (s *ServerRestoreProgress) Validate() error {
 
 	return nil
 }
+
+// ServerRestoreAbort contains flags that will be mapped to ServerRestoreAbort.
+// Unlike a backup job, a restore job is named by the namespace it restores into
+// as well as by its id, so both are required.
+type ServerRestoreAbort struct {
+	Namespace string
+	JobID     string
+}
+
+func (s *ServerRestoreAbort) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	if s.Namespace == "" {
+		return fmt.Errorf("namespace is required")
+	}
+
+	return nil
+}

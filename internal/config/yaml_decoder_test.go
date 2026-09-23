@@ -118,6 +118,9 @@ prepare:
   backup-id: bkp-1
 progress:
   namespace: test
+abort:
+  namespace: test
+  backup-id: bkp-1
 aws:
   s3:
     bucket-name: my-bucket
@@ -569,6 +572,7 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				require.NotNil(t, cfg.Start)
 				assert.Nil(t, cfg.Prepare)
 				assert.Nil(t, cfg.Progress)
+				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
@@ -586,6 +590,7 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				require.NotNil(t, cfg.Prepare)
 				assert.Nil(t, cfg.Start)
 				assert.Nil(t, cfg.Progress)
+				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Prepare.Namespace)
 				assert.Equal(t, "bkp-1", cfg.Prepare.JobID)
@@ -600,8 +605,24 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				require.NotNil(t, cfg.Progress)
 				assert.Nil(t, cfg.Start)
 				assert.Nil(t, cfg.Prepare)
+				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Progress.Namespace)
+			},
+		},
+		{
+			name:    "abort reads the abort section",
+			command: ServerRestoreCommandAbort,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Abort)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Prepare)
+				assert.Nil(t, cfg.Progress)
+
+				assert.Equal(t, "test", cfg.Abort.Namespace)
+				assert.Equal(t, "bkp-1", cfg.Abort.JobID)
 			},
 		},
 	}

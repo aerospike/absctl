@@ -101,3 +101,30 @@ func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
 func (f *ServerRestoreProgress) GetServerRestoreProgress() *models.ServerRestoreProgress {
 	return &f.ServerRestoreProgress
 }
+
+// ServerRestoreAbort holds flags for the server restore abort command.
+type ServerRestoreAbort struct {
+	models.ServerRestoreAbort
+}
+
+// NewServerRestoreAbort initializes and returns a new instance of ServerRestoreAbort.
+func NewServerRestoreAbort() *ServerRestoreAbort {
+	return &ServerRestoreAbort{}
+}
+
+func (f *ServerRestoreAbort) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace the restore is aborted for.")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Job id of the restore to abort.")
+
+	return flagSet
+}
+
+func (f *ServerRestoreAbort) GetServerRestoreAbort() *models.ServerRestoreAbort {
+	return &f.ServerRestoreAbort
+}

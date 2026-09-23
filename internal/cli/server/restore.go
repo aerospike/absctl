@@ -30,6 +30,7 @@ type restoreCtx struct {
 	start    *flags.ServerRestore
 	prepare  *flags.ServerRestorePrepare
 	progress *flags.ServerRestoreProgress
+	abort    *flags.ServerRestoreAbort
 	// objectStorageS3 is the restore read source (start, prepare).
 	objectStorageS3 *flags.ObjectStorageS3
 }
@@ -39,6 +40,7 @@ func newRestoreCtx() *restoreCtx {
 		start:           flags.NewServerRestore(),
 		prepare:         flags.NewServerRestorePrepare(),
 		progress:        flags.NewServerRestoreProgress(),
+		abort:           flags.NewServerRestoreAbort(),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
 }
@@ -83,6 +85,7 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 		newRestoreStartCmd(rc, rf),
 		newRestorePrepareCmd(rc, rf),
 		newRestoreProgressCmd(rc, rf),
+		newRestoreAbortCmd(rc, rf),
 	)
 
 	applyRootPersistent(cmd, rc)
@@ -113,8 +116,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 				func() *config.ServerRestoreServiceConfig {
 					return config.NewServerRestoreServiceConfig(
 						rf.start.GetServerRestore(),
-						nil,
-						nil,
+						nil, nil, nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -178,7 +180,7 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 					return config.NewServerRestoreServiceConfig(
 						nil,
 						rf.prepare.GetServerRestorePrepare(),
-						nil,
+						nil, nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -235,9 +237,9 @@ func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandProgress,
 				func() *config.ServerRestoreServiceConfig {
 					return config.NewServerRestoreServiceConfig(
-						nil,
-						nil,
+						nil, nil,
 						rf.progress.GetServerRestoreProgress(),
+						nil,
 						rc.app.GetApp(),
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
@@ -274,6 +276,66 @@ func setHelpRestoreProgress(cmd *cobra.Command, prepareFS *pflag.FlagSet, common
 	doc := SubcommandDoc{
 		Usage:    flags.SectionTextUsageRestoreProgress,
 		Sections: restoreProgressHelpSections(prepareFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestoreAbortCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	abortFlags := rf.abort.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseAbort,
+		Short: ShortRestoreAbort,
+		Long:  LongRestoreAbort,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandAbort,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil, nil, nil,
+						rf.abort.GetServerRestoreAbort(),
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						nil,
+					)
+				})
+			if err != nil {
+				return err
+			}
+
+			svc, err := newService(rc, nil, cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize restore abort: %w", err)
+			}
+
+			// The service already reports what went wrong and for which job, so the
+			// error is passed through instead of being prefixed again.
+			if err := svc.AbortRestore(cmd.Context()); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(abortFlags)
+
+	setHelpRestoreAbort(cmd, abortFlags, common)
+
+	return cmd
+}
+
+func setHelpRestoreAbort(cmd *cobra.Command, abortFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreAbort,
+		Sections: restoreAbortHelpSections(abortFS, common),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {

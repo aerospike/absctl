@@ -88,6 +88,7 @@ func backupAbortHelpSections(common commonFlagSets, abortFS *pflag.FlagSet) []He
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextBackup, FlagSets: []*pflag.FlagSet{abortFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotBackup, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
 
@@ -115,6 +116,15 @@ func restoreProgressHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
 		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
+func restoreAbortHelpSections(abortFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{abortFS}},
 		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
@@ -182,6 +192,7 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 	objectStoreFS := rf.objectStorageS3.NewFlagSet()
 	prepareFS := rf.prepare.NewFlagSet()
 	progressFS := rf.progress.NewFlagSet()
+	abortFS := rf.abort.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -204,6 +215,13 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestoreProgress,
 			Usage:    flags.SectionTextUsageRestoreProgress,
 			Sections: restoreProgressHelpSections(progressFS, common),
+		},
+		{
+			Name:     UseAbort,
+			Short:    ShortRestoreAbort,
+			Long:     LongRestoreAbort,
+			Usage:    flags.SectionTextUsageRestoreAbort,
+			Sections: restoreAbortHelpSections(abortFS, common),
 		},
 	}
 }

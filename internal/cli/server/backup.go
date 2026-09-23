@@ -385,8 +385,10 @@ func newBackupAbortCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 				return fmt.Errorf("failed to initialize backup abort: %w", err)
 			}
 
+			// The service already reports what went wrong and for which job, so the
+			// error is passed through instead of being prefixed again.
 			if err := svc.AbortBackup(cmd.Context()); err != nil {
-				return fmt.Errorf("failed to abort backup: %w", err)
+				return err
 			}
 
 			return nil

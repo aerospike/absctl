@@ -450,6 +450,7 @@ func buildServerSections(operation string) []docSection {
 			docSection{FS: flags.NewServerRestore().NewFlagSet(), YAMLPrefix: "restore"},
 			docSection{FS: flags.NewServerRestorePrepare().NewFlagSet(), YAMLPrefix: "prepare"},
 			docSection{FS: flags.NewServerRestoreProgress().NewFlagSet(), YAMLPrefix: "progress"},
+			docSection{FS: flags.NewServerRestoreAbort().NewFlagSet(), YAMLPrefix: "abort"},
 		)
 	}
 
@@ -534,6 +535,9 @@ func serverRestoreExampleDTO() *dto.ServerRestore {
 	r.Prepare.JobID = &jobID
 
 	r.Progress.Namespace = &ns
+
+	r.Abort.Namespace = &ns
+	r.Abort.JobID = &jobID
 
 	applyServerClusterExample(&r.Cluster)
 	applyServerS3Example(&r.Aws.S3)

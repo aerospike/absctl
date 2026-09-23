@@ -153,7 +153,10 @@ func TestInfoClientSurvivesGarbageCollection(t *testing.T) {
 	// One client is shared by the cases on purpose: the collection that would have
 	// closed its cluster happens once, before any of them run, and every case then
 	// asks the same client whether it survived.
-	ic, err := newLiveService(t).newInfoClient()
+	//
+	// openInfoClient is used rather than newInfoClient because these tests are about the
+	// lifetime of the client and not about what the cluster it talks to supports.
+	ic, err := newLiveService(t).openInfoClient()
 	require.NoError(t, err)
 
 	t.Cleanup(ic.Close)
@@ -194,7 +197,7 @@ func TestInfoClientClose(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ic, err := newLiveService(t).newInfoClient()
+			ic, err := newLiveService(t).openInfoClient()
 			require.NoError(t, err)
 
 			require.NotEmpty(t, ic.GetNodesNames(),

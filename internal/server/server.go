@@ -77,6 +77,11 @@ const (
 	// msgBackupComplete announces a finished backup, whether the completion came from
 	// the job status or from the manifest of a job the cluster no longer reports.
 	msgBackupComplete = "backup complete"
+
+	// msgNoRunningBackup and msgNoRunningRestore are reported by an abort that found
+	// nothing running to abort.
+	msgNoRunningBackup  = "no running backup found, nothing to abort"
+	msgNoRunningRestore = "no running restore found, nothing to abort"
 )
 
 var (
@@ -94,7 +99,38 @@ var (
 	// errAbortStatusTimeout is returned when the cluster accepted an abort request but
 	// kept reporting the job as running until the wait ran out.
 	errAbortStatusTimeout = errors.New("checking backup status after abortion timed out")
+
+	// errAbortRestoreStatusTimeout is the same for a restore whose namespace kept
+	// reporting an unfinished restore until the wait ran out.
+	errAbortRestoreStatusTimeout = errors.New("checking restore status after abortion timed out")
 )
+
+// restoreActiveStates are the namespace restore states an abort has something to do in.
+// Besides the two states a job works in, this covers a namespace that only got as far as
+// "snapshot-restore prepare": a prepared namespace blocks writes until the restore ends,
+// and the abort is what releases that block, so it is neither a namespace to refuse the
+// abort for nor one to accept the abort as landed in.
+//
+// The remaining states - and a namespace the cluster reports no state for - mean that
+// nothing is restoring into it and nothing is held on its behalf.
+var restoreActiveStates = map[string]bool{
+	infomodels.RestoreStatePreparing: true,
+	infomodels.RestoreStateReady:     true,
+	infomodels.RestoreStateRestoring: true,
+}
+
+// terminalBackupStates are the states of a backup job that has already ended. The cluster
+// keeps the state of a finished job for a while after it stops working on it, so a job
+// reporting one of these is not running and holds nothing left to abort.
+//
+// BackupStateUnknown is deliberately not one of them: a state that could not be read says
+// nothing about whether the job runs, and refusing the abort on it would leave a running
+// backup with no way to stop it.
+var terminalBackupStates = map[infomodels.BackupState]bool{
+	infomodels.BackupStateComplete: true,
+	infomodels.BackupStateFailed:   true,
+	infomodels.BackupStateAborted:  true,
+}
 
 // completionStates are the stages a backup job can be in when the cluster drops its
 // status because the job is done: the state of a finished job is kept for a while and
@@ -191,9 +227,33 @@ func (c *infoClient) Close() {
 	c.asClient.Close()
 }
 
-// newInfoClient separate function for a lazy load. The caller owns the returned client
-// and must close it.
-func (s *Service) newInfoClient() (*infoClient, error) {
+// newInfoClient opens the info client every command that talks to the cluster works
+// through, and makes sure that cluster supports server-integrated backup and restore
+// before handing it over. The check lives here rather than in the commands so that it
+// cannot be forgotten by a new one, and so that an unsupported cluster is named as such
+// instead of failing later on an info command it does not know. The caller owns the
+// returned client and must close it.
+//
+// The commands served entirely from object storage - "snapshot-backup list" and
+// "snapshot-backup validate" - need no cluster and never get here.
+func (s *Service) newInfoClient(ctx context.Context) (*infoClient, error) {
+	client, err := s.openInfoClient()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkServerVersion(ctx, client); err != nil {
+		client.Close()
+
+		return nil, err
+	}
+
+	return client, nil
+}
+
+// openInfoClient builds the info client without asking the cluster anything about itself.
+// The caller owns the returned client and must close it.
+func (s *Service) openInfoClient() (*infoClient, error) {
 	asClient, err := storage.NewAerospikeClient(
 		s.clientConfig(),
 		s.clientPolicy(),
@@ -266,14 +326,14 @@ func findBackupByPath(ctx context.Context, l *lister.Lister, path string) ([]ser
 // then follows the job it started until the backup reaches a terminal state. With Async
 // set it returns as soon as the cluster accepts the job.
 func (s *Service) StartBackup(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	if err = s.checkServerStatus(ctx, client, s.backupCfg.Start.Namespace); err != nil {
-		return fmt.Errorf("failed to check server status: %w", err)
+	if err := s.checkClusterStable(ctx, client, s.backupCfg.Start.Namespace); err != nil {
+		return err
 	}
 
 	var mb, ma string
@@ -345,14 +405,14 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
 func (s *Service) StartRestore(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
-		return fmt.Errorf("failed to check server status: %w", err)
+	if err := s.checkClusterStable(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
+		return err
 	}
 
 	s3Client, err := storage.NewS3Client(ctx, s.restoreCfg.AwsS3)
@@ -392,14 +452,14 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 // PrepareRestore initiates a restore preparation process for the specified job ID.
 func (s *Service) PrepareRestore(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	if err = s.checkServerStatus(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
-		return fmt.Errorf("failed to check server status: %w", err)
+	if err := s.checkClusterStable(ctx, client, s.restoreCfg.Prepare.Namespace); err != nil {
+		return err
 	}
 
 	err = client.PrepareRestore(
@@ -419,7 +479,7 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 
 // BackupProgress returns the progress of the currently running backup.
 func (s *Service) BackupProgress(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -711,7 +771,7 @@ func (s *Service) metadataS3Config() *models.AwsS3 {
 
 // RestoreProgress returns the progress of the currently running restore.
 func (s *Service) RestoreProgress(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -719,7 +779,7 @@ func (s *Service) RestoreProgress(ctx context.Context) error {
 
 	result, err := client.GetRestoreStatus(ctx, s.restoreCfg.Progress.Namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get backup status: %w", err)
+		return fmt.Errorf("failed to get restore status: %w", err)
 	}
 
 	s.logger.Info("restore progress",
@@ -764,8 +824,9 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 	return nil
 }
 
-// checkServerStatus validates the server status.
-func (s *Service) checkServerStatus(ctx context.Context, client *infoClient, namespace string) error {
+// checkServerVersion makes sure the oldest node in the cluster is new enough to serve
+// server-integrated backup and restore.
+func (s *Service) checkServerVersion(ctx context.Context, client *infoClient) error {
 	lowestVersion, err := client.GetVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get server version: %w", err)
@@ -775,6 +836,17 @@ func (s *Service) checkServerStatus(ctx context.Context, client *infoClient, nam
 		return fmt.Errorf("server version %s does not support integrated backup", lowestVersion)
 	}
 
+	return nil
+}
+
+// checkClusterStable makes sure namespace has no migrations in flight, which is what a
+// job that reads or writes the whole namespace needs before it starts. The commands that
+// only ask the cluster to stop working - the aborts - do not need it: a job has to be
+// stoppable on an unstable cluster too.
+//
+// The server version is checked when the info client is opened, so it is not repeated
+// here.
+func (s *Service) checkClusterStable(ctx context.Context, client *infoClient, namespace string) error {
 	isStable, err := client.GetClusterStable(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to check cluster stability: %w", err)
@@ -804,10 +876,10 @@ func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, j
 	return nil
 }
 
-// AbortBackup asks the cluster to abort the configured backup job and waits for the job
-// to stop running.
+// AbortBackup asks the cluster to abort the configured backup job, once it has confirmed
+// there is a running job to abort, and waits for that job to stop.
 func (s *Service) AbortBackup(ctx context.Context) error {
-	client, err := s.newInfoClient()
+	client, err := s.newInfoClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -820,8 +892,19 @@ func (s *Service) AbortBackup(ctx context.Context) error {
 func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInfo) error {
 	jobID := s.backupCfg.Abort.JobID
 
+	running, err := s.backupIsRunning(ctx, client, jobID)
+	if err != nil {
+		return err
+	}
+
+	if !running {
+		return nil
+	}
+
+	// The error the cluster answers with already names the failed abort, so it is
+	// returned as it is: wrapping it here only repeats what the command line prints.
 	if err := client.AbortBackup(ctx, jobID); err != nil {
-		return fmt.Errorf("failed to abort backup: %w", err)
+		return err
 	}
 
 	s.logger.Info("aborting",
@@ -880,4 +963,161 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 	s.logger.Info("backup was successfully aborted")
 
 	return nil
+}
+
+// backupIsRunning reports whether the cluster is working on jobID, so that an abort is
+// only requested when there is a job to abort. The cluster accepts an abort for a job it
+// knows nothing about without complaining, and the status that follows such a request
+// looks exactly like the status of a job that stopped on request - which would announce a
+// backup that never ran, or one that ended hours ago, as successfully aborted.
+func (s *Service) backupIsRunning(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	jobID string,
+) (bool, error) {
+	status, err := client.GetBackupStatus(ctx, jobID)
+	if err != nil {
+		// The cluster reports only the jobs it still holds the state of, so an unknown
+		// job id and a backup that finished long ago are answered the same way.
+		if errors.Is(err, asinfo.ErrNotFound) {
+			s.logger.Info(msgNoRunningBackup, slog.String("backup-id", jobID))
+
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	// A job that already reached its end is still reported for a while. Naming the state
+	// it ended in says why the abort did nothing.
+	if terminalBackupStates[status.State] {
+		s.logger.Info(msgNoRunningBackup,
+			slog.String("backup-id", jobID),
+			slog.String("state", status.State.Describe()))
+
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// AbortRestore asks the cluster to abort the configured restore job, once it has
+// confirmed the namespace holds a restore to abort, and waits for the namespace to report
+// that it holds one no longer.
+func (s *Service) AbortRestore(ctx context.Context) error {
+	client, err := s.newInfoClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	return s.abortRestore(ctx, client)
+}
+
+// abortRestore checks that the namespace holds a restore to abort, requests the abort,
+// and then confirms it through the restore status.
+//
+// A restore job is addressed by its namespace as well as by its id, but the status the
+// cluster answers with is per namespace rather than per job: it says what the namespace
+// is doing, not which job is doing it. Neither the check before the abort nor the
+// confirmation after it can therefore tell the requested job apart from another restore
+// into the same namespace, and a job id that names neither ends the command with a
+// timeout instead of a success.
+func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupInfo) error {
+	namespace, jobID := s.restoreCfg.Abort.Namespace, s.restoreCfg.Abort.JobID
+
+	active, err := s.restoreIsActive(ctx, client, namespace)
+	if err != nil {
+		return err
+	}
+
+	if !active {
+		return nil
+	}
+
+	// The error the cluster answers with already names the failed abort, so it is
+	// returned as it is: wrapping it here only repeats what the command line prints.
+	if err := client.AbortRestore(ctx, namespace, jobID); err != nil {
+		return err
+	}
+
+	s.logger.Info("aborting restore",
+		slog.String("namespace", namespace),
+		slog.String("backup-id", jobID))
+
+	// The cluster accepts the abort request before the job actually winds down, so the
+	// abort is confirmed by the status that follows it. The wait is bounded: a job that
+	// never reacts to the abort has to end the command instead of being polled forever,
+	// and the deadline also cuts short a status request that is already in flight.
+	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
+	defer cancel()
+
+	for {
+		state, err := client.GetRestoreStatus(statusCtx, namespace)
+		if err != nil {
+			// The cluster reports no restore state for a namespace it holds nothing for.
+			if errors.Is(err, asinfo.ErrNotFound) {
+				break
+			}
+
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: namespace %s, backup-id %s",
+					errAbortRestoreStatusTimeout, namespace, jobID)
+			}
+
+			return fmt.Errorf("failed to get restore status: %w", err)
+		}
+
+		if !restoreActiveStates[state] {
+			break
+		}
+
+		// waitFor returns as soon as the command is canceled or the wait runs out, so
+		// the abort never keeps polling a job the caller stopped waiting for.
+		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("%w: namespace %s, backup-id %s, last reported state %q",
+					errAbortRestoreStatusTimeout, namespace, jobID, state)
+			}
+
+			return err
+		}
+	}
+
+	s.logger.Info("restore was successfully aborted")
+
+	return nil
+}
+
+// restoreIsActive reports whether namespace holds a restore the abort can act on, so that
+// an abort is only requested when there is something to abort. The cluster accepts the
+// abort of an idle namespace, and the status that follows such a request cannot be told
+// from a restore that stopped on request - which announces a restore that never ran as
+// aborted.
+func (s *Service) restoreIsActive(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	namespace string,
+) (bool, error) {
+	state, err := client.GetRestoreStatus(ctx, namespace)
+	if err != nil {
+		// A namespace no restore has ever touched carries no state at all.
+		if errors.Is(err, asinfo.ErrNotFound) {
+			s.logger.Info(msgNoRunningRestore, slog.String("namespace", namespace))
+
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get restore status: %w", err)
+	}
+
+	if !restoreActiveStates[state] {
+		s.logger.Info(msgNoRunningRestore,
+			slog.String("namespace", namespace),
+			slog.String("state", state))
+
+		return false, nil
+	}
+
+	return true, nil
 }
