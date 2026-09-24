@@ -43,7 +43,7 @@ func printMetadataToLog(md models.Metadata, logger *slog.Logger) {
 	attrs := []any{
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
-		slog.String("status", md.Status),
+		slog.String("status", string(md.Status)),
 	}
 
 	logger.Info("backup entry", attrs...)

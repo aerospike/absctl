@@ -868,6 +868,10 @@ func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, j
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
+	if md.Status != servermodels.MetadataStatusComplete {
+		return fmt.Errorf("backup %s is not complete, has status %s", jobID, md.Status)
+	}
+
 	s.logger.Info("backup found",
 		slog.String("backup-id", md.BackupID),
 		slog.String("namespace", md.Namespace),
