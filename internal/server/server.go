@@ -41,8 +41,8 @@ import (
 )
 
 const (
-	// metadataRequestTimeout bounds a single manifest request, in milliseconds.
-	metadataRequestTimeout = 10_000
+	// metadataRequestTimeoutMillis bounds a single manifest request.
+	metadataRequestTimeoutMillis = 10_000
 
 	// The server uploads the manifest shortly after a backup completes, so it is polled
 	// at a steady pace for about a minute instead of being backed off exponentially:
@@ -51,23 +51,35 @@ const (
 	metadataRetryMultiplier = 1.0
 	metadataRetryAttempts   = 30
 
-	// vanishedJobConfirmations is how many lookups in a row must miss a job that had
-	// reached its last stages before the watcher accepts that the cluster dropped the
-	// state of a finished backup. The status of a running job can be unavailable for a
-	// moment - between backup stages, or while a node is busy - and a single miss must
-	// not be reported as a finished backup. Together with vanishedJobPollInterval this
-	// tolerates a gap of about 15 seconds.
+	// startedJobConfirmations is how many lookups a job the cluster has just accepted is
+	// given to turn up in the cluster status. "backup start" follows the job the cluster
+	// handed it, so that job does exist, and reporting it as missing because the status
+	// does not list it yet would fail a command that has just succeeded. A job named on
+	// the command line gets no such grace: the first answer about it is final.
+	startedJobConfirmations = 5
+
+	// vanishedJobConfirmations is how many lookups in a row must miss a job that was
+	// being watched and had reached its last stages, before the watcher accepts that the
+	// cluster dropped the state of a finished backup. The status of a running job can be
+	// unavailable for a moment - between backup stages, or while a node is busy - and a
+	// single miss must not be reported as a finished backup.
+	//
+	// A job that has never been reported is not confirmed this way: it has no state to
+	// resolve, and startedJobConfirmations decides how long it is waited for.
 	vanishedJobConfirmations = 5
-	// vanishedJobPollInterval paces those confirmation lookups.
+	// vanishedJobPollInterval paces those confirmation lookups. A lookup also costs the
+	// retries the info client makes internally, so a confirmation takes longer than this
+	// interval alone: the client is built with the default retry policy, which backs off
+	// over about three seconds before it reports a job as missing.
 	vanishedJobPollInterval = 3 * time.Second
 	// midBackupGapConfirmations bounds the same wait for a job that stopped reporting
 	// before it reached its last stages. Such a gap cannot be a completion, so the job
-	// is given a much longer benefit of the doubt - about two minutes - before the watch
-	// gives up on it.
+	// is given a much longer benefit of the doubt before the watch gives up on it.
 	midBackupGapConfirmations = 40
-	// statusGapWarnEvery paces the reminders logged while a job is missing from the
-	// cluster status, so that a long wait does not look like a hung command.
-	statusGapWarnEvery = 20
+	// statusGapLogEvery paces the reminders logged while a job is missing from the
+	// cluster status, so that a long wait can be followed in a debug log without a
+	// line per lookup.
+	statusGapLogEvery = 20
 
 	// abortStatusTimeout bounds the wait for an aborted job to stop running, and
 	// abortStatusPollInterval paces the status lookups made while waiting.
@@ -85,6 +97,27 @@ const (
 )
 
 var (
+	// errServiceConfig is returned when a service is asked for with neither or both of
+	// the command configurations. A service serves either the backup commands or the
+	// restore commands, and it reads the cluster and storage settings from whichever of
+	// the two it was given.
+	errServiceConfig = errors.New("exactly one of the backup and restore configurations must be set")
+
+	// errBackupNotFound is returned when the cluster does not report the requested job
+	// at all: the id names no backup the cluster is working on, and none whose state it
+	// still holds.
+	errBackupNotFound = errors.New("no backup found")
+
+	// errEmptyBackupStatus stands for a status lookup that came back with neither a
+	// status nor a failure. It wraps asinfo.ErrNotFound because an empty answer says
+	// exactly as much about the job as one that did not find it, and every caller
+	// already knows what to do with a job the cluster does not report.
+	errEmptyBackupStatus = fmt.Errorf("empty backup status: %w", asinfo.ErrNotFound)
+
+	// errVersionUnsupported is returned when the oldest node in the cluster is too old
+	// to serve server-integrated backup and restore.
+	errVersionUnsupported = errors.New("does not support integrated backup")
+
 	// errBackupFailed is returned when the cluster reports a failed backup job.
 	errBackupFailed = errors.New("backup failed")
 
@@ -103,6 +136,10 @@ var (
 	// errAbortRestoreStatusTimeout is the same for a restore whose namespace kept
 	// reporting an unfinished restore until the wait ran out.
 	errAbortRestoreStatusTimeout = errors.New("checking restore status after abortion timed out")
+
+	// errClusterNotStable is returned when a namespace still has migrations in flight,
+	// which a job that reads or writes the whole namespace cannot start on.
+	errClusterNotStable = errors.New("cluster is not stable")
 )
 
 // restoreActiveStates are the namespace restore states an abort has something to do in.
@@ -145,18 +182,36 @@ var completionStates = map[infomodels.BackupState]bool{
 	infomodels.BackupStateComplete:             true,
 }
 
-// S3API is an interface for the S3 client.
-type S3API interface {
+// s3API is the part of the S3 client that reading a backup manifest needs: the calls the
+// lister built on top of it makes.
+type s3API interface {
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, opts ...func(*s3.Options),
 	) (*s3.ListObjectsV2Output, error)
 	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options),
 	) (*s3.GetObjectOutput, error)
-	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
 // metadataGetter is the part of lister.Lister that the progress watcher needs.
 type metadataGetter interface {
 	GetMetadata(ctx context.Context, backupID string) (servermodels.Metadata, error)
+}
+
+// backupLister is the part of lister.Lister that listing needs: the manifests under the
+// configured path, plus the one manifest a path naming a single backup holds.
+type backupLister interface {
+	metadataGetter
+	FetchAllMetadata(ctx context.Context) ([]servermodels.Metadata, error)
+}
+
+// versionGetter reports the version of the oldest node in the cluster, which is what
+// decides whether the cluster can serve these commands at all.
+type versionGetter interface {
+	GetVersion(ctx context.Context) (infomodels.AerospikeVersion, error)
+}
+
+// stabilityChecker reports whether a namespace has migrations in flight.
+type stabilityChecker interface {
+	GetClusterStable(ctx context.Context, namespace string) (bool, error)
 }
 
 // Service represents a server integrated backup and restore service.
@@ -176,12 +231,23 @@ type Service struct {
 	abortTimeout      time.Duration
 }
 
-// NewService initializes and returns a new Service instance.
+// NewService initializes and returns a new Service instance. Exactly one of backupCfg and
+// restoreCfg belongs to a service: the commands of the other one are served by a service
+// of their own, and everything the service reads about the cluster and its storage comes
+// from the configuration it was built with.
 func NewService(
 	backupCfg *config.ServerBackupServiceConfig,
 	restoreCfg *config.ServerRestoreServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
+	if backupCfg == nil && restoreCfg == nil {
+		return nil, fmt.Errorf("%w: neither is set", errServiceConfig)
+	}
+
+	if backupCfg != nil && restoreCfg != nil {
+		return nil, fmt.Errorf("%w: both are set", errServiceConfig)
+	}
+
 	return &Service{
 		backupCfg:  backupCfg,
 		restoreCfg: restoreCfg,
@@ -197,6 +263,9 @@ func NewService(
 	}, nil
 }
 
+// clientConfig returns the cluster to connect to, from whichever of the two command
+// configurations the service was built with. NewService accepts exactly one of them, so
+// the other one is nil here.
 func (s *Service) clientConfig() *commonclient.AerospikeConfig {
 	if s.backupCfg != nil {
 		return s.backupCfg.ClientConfig
@@ -205,6 +274,8 @@ func (s *Service) clientConfig() *commonclient.AerospikeConfig {
 	return s.restoreCfg.ClientConfig
 }
 
+// clientPolicy returns the client policy to connect with, from the same configuration as
+// clientConfig.
 func (s *Service) clientPolicy() *models.ClientPolicy {
 	if s.backupCfg != nil {
 		return s.backupCfg.ClientPolicy
@@ -288,38 +359,34 @@ func (s *Service) ListBackups(ctx context.Context) error {
 
 	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.List.Path, lister.WithLogger(s.logger))
 
+	return s.listBackups(ctx, l, s.backupCfg.List.Path)
+}
+
+// listBackups prints the manifests of the backups under path.
+func (s *Service) listBackups(ctx context.Context, l backupLister, path string) error {
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}
 
+	// Nothing under the path can also mean that the path names a single backup rather
+	// than a prefix holding several, so it is read as one before it is called empty.
 	if len(mds) == 0 {
-		// try to find metadata for a specific path.
-		mds, err = findBackupByPath(ctx, l, s.backupCfg.List.Path)
+		md, err := l.GetMetadata(ctx, path)
 		if err != nil {
-			if errors.Is(err, backup.ErrNotFound) {
+			if errors.Is(err, errclass.ErrNotFound) {
 				s.logger.Info("backups not found")
+
 				return nil
 			}
 
 			return fmt.Errorf("failed to list backups: %w", err)
 		}
+
+		mds = []servermodels.Metadata{md}
 	}
 
-	if err := logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func findBackupByPath(ctx context.Context, l *lister.Lister, path string) ([]servermodels.Metadata, error) {
-	md, err := l.GetMetadata(ctx, path)
-	if err != nil {
-		return nil, err
-	}
-
-	return []servermodels.Metadata{md}, nil
+	return logging.PrintMetadata(mds, s.backupCfg.App.LogJSON, s.logger)
 }
 
 // StartBackup initiates a backup process using the service's configured backup settings,
@@ -400,7 +467,7 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	// The backup runs in the cluster, so watching it only reads its status: leaving the
 	// watch, whether by an interrupt or by a failure here, does not stop the backup, and
 	// "backup abort" is the only thing that does.
-	return s.reportBackupProgress(ctx, client, l, jobID, true)
+	return s.reportBackupProgress(ctx, client, l, jobID, followStartedJob)
 }
 
 // StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
@@ -415,7 +482,10 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	s3Client, err := storage.NewS3Client(ctx, s.restoreCfg.AwsS3)
+	// The backup is looked for before the restore is requested, so the lookup gets the
+	// same bounded request timeout the other manifest reads use: an unreachable storage
+	// has to fail the command instead of holding it.
+	s3Client, err := storage.NewS3Client(ctx, metadataS3Config(s.restoreCfg.AwsS3))
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
@@ -492,13 +562,17 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 		return err
 	}
 
-	return s.reportBackupProgress(ctx, client, l,
-		s.backupCfg.Progress.JobID, s.backupCfg.Progress.Watch)
+	mode := reportOnce
+	if s.backupCfg.Progress.Watch {
+		mode = followJob
+	}
+
+	return s.reportBackupProgress(ctx, client, l, s.backupCfg.Progress.JobID, mode)
 }
 
 // newMetadataLister returns the reader of backup manifests in the configured bucket.
 func (s *Service) newMetadataLister(ctx context.Context) (*lister.Lister, error) {
-	s3Client, err := storage.NewS3Client(ctx, s.metadataS3Config())
+	s3Client, err := storage.NewS3Client(ctx, metadataS3Config(s.backupCfg.AwsS3))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create s3 client: %w", err)
 	}
@@ -506,16 +580,39 @@ func (s *Service) newMetadataLister(ctx context.Context) (*lister.Lister, error)
 	return lister.NewLister(s3Client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger)), nil
 }
 
+// progressMode says how long the watcher stays with a job, and how much it trusts the
+// cluster not reporting the job at all.
+type progressMode int
+
+const (
+	// reportOnce logs the status the cluster reports now and returns.
+	reportOnce progressMode = iota + 1
+	// followJob keeps reporting a job named on the command line until the backup reaches
+	// a terminal state.
+	followJob
+	// followStartedJob does the same for the job the cluster has just accepted, and is
+	// the only mode that waits for a job the status does not list yet.
+	followStartedJob
+)
+
 // reportBackupProgress polls the cluster for the status of jobID and logs it until the
-// backup reaches a terminal state, or once when watch is not set. The job is named by the
+// backup reaches a terminal state, or once in reportOnce mode. The job is named by the
 // caller rather than taken from the configuration, because the job that "backup start"
 // follows is the one the cluster just handed it and not one named on the command line.
+//
+// A job named on the command line that the cluster does not report ends the watch right
+// away: the id names no job the cluster holds, and there is nothing to wait for. The job
+// "backup start" follows is different - the cluster handed out its id, so it does exist -
+// and is given startedJobConfirmations lookups to turn up in the status.
+//
+// Only a job that was reported at least once can be missing for a reason worth waiting
+// out - see jobVanished.
 func (s *Service) reportBackupProgress(
 	ctx context.Context,
 	client backup.ServerBackupInfo,
 	l metadataGetter,
 	jobID string,
-	watch bool,
+	mode progressMode,
 ) error {
 	printer := newProgressPrinter(s.logger)
 
@@ -527,9 +624,7 @@ func (s *Service) reportBackupProgress(
 	var misses int
 
 	for {
-		now := time.Now()
-
-		status, err := client.GetBackupStatus(ctx, jobID)
+		status, err := backupStatus(ctx, client, jobID)
 
 		switch {
 		case err != nil && !errors.Is(err, asinfo.ErrNotFound):
@@ -537,7 +632,10 @@ func (s *Service) reportBackupProgress(
 		case err != nil:
 			misses++
 
-			if jobVanished(lastState, misses, watch) {
+			switch {
+			case lastState == "" && !startingJobPending(mode, misses):
+				return fmt.Errorf("%w: backup-id %s", errBackupNotFound, jobID)
+			case lastState != "" && jobVanished(lastState, misses):
 				return s.reportMissingBackup(ctx, l, jobID, lastState)
 			}
 
@@ -553,6 +651,11 @@ func (s *Service) reportBackupProgress(
 		lastState = status.State
 		misses = 0
 
+		// The clock is read after the lookup so that the speed and the estimate are
+		// measured against the status just read: a lookup that took seconds would
+		// otherwise stretch the interval the sample is divided by.
+		now := time.Now()
+
 		printer.Print(status, now)
 
 		// BackupStateAborting is not terminal: the job is still winding down and keeps
@@ -561,14 +664,14 @@ func (s *Service) reportBackupProgress(
 		case infomodels.BackupStateComplete:
 			s.logBackupComplete(status)
 
-			return s.printMetadata(ctx, l, jobID, true)
+			return s.printMetadata(ctx, l, jobID)
 		case infomodels.BackupStateFailed:
 			return terminalStateError(errBackupFailed, jobID, status.ErrorReason)
 		case infomodels.BackupStateAborted:
 			return terminalStateError(errBackupAborted, jobID, status.ErrorReason)
 		}
 
-		if !watch {
+		if mode == reportOnce {
 			return nil
 		}
 
@@ -600,27 +703,32 @@ func terminalStateError(err error, jobID, errorReason string) error {
 	return fmt.Errorf("%w: backup-id %s, reason %q", err, jobID, errorReason)
 }
 
-// jobVanished reports whether a lookup that did not find the job is final. A one-shot
-// lookup made without --watch is answered right away. A watched job has to be missing
-// several times in a row, so that a momentary gap in the cluster status is not mistaken
-// for a terminal outcome, and a job that was seen before it reached its last stages gets
-// the longer of the two waits: its status is the only thing that can end the watch.
-func jobVanished(lastState infomodels.BackupState, misses int, watch bool) bool {
-	switch {
-	case !watch:
-		return true
-	case lastState == "" || completionStates[lastState]:
-		return misses >= vanishedJobConfirmations
-	default:
-		return misses >= midBackupGapConfirmations
-	}
+// startingJobPending reports whether a job the cluster has not listed yet is still worth
+// waiting for. Only the job the cluster has just handed out is: it exists, and the status
+// it is missing from is the one that has to catch up. A job named on the command line is
+// not, however many times it is looked up.
+func startingJobPending(mode progressMode, misses int) bool {
+	return mode == followStartedJob && misses < startedJobConfirmations
 }
 
-// logStatusGap reports a job that is temporarily missing from the cluster status. The
-// first confirmations are routine and stay on the debug level, but a gap that outlives
-// them is worth telling the user about, and is repeated while it lasts: it is the only
-// sign that the watch is still waiting on a backup the cluster is no longer talking
-// about.
+// jobVanished reports whether a job that was reported before and is missing now has been
+// missing long enough to be accepted as gone. It has to be missing several times in a
+// row, so that a momentary gap in the cluster status is not mistaken for a terminal
+// outcome, and a job that was last seen before it reached its last stages gets the longer
+// of the two waits: its status is the only thing that can end the watch.
+func jobVanished(lastState infomodels.BackupState, misses int) bool {
+	if completionStates[lastState] {
+		return misses >= vanishedJobConfirmations
+	}
+
+	return misses >= midBackupGapConfirmations
+}
+
+// logStatusGap reports a job that is temporarily missing from the cluster status. A gap
+// is a normal part of watching a backup - the status is unavailable between stages, or
+// while a node is busy - so none of it reaches the user: both lines are logged on the
+// debug level, where a gap that outlives the routine confirmations says so, and is
+// repeated while it lasts.
 func (s *Service) logStatusGap(jobID string, lastState infomodels.BackupState, misses int) {
 	attrs := []any{
 		slog.String("backup-id", jobID),
@@ -631,13 +739,33 @@ func (s *Service) logStatusGap(jobID string, lastState infomodels.BackupState, m
 		attrs = append(attrs, slog.String("last-state", lastState.Describe()))
 	}
 
-	if misses == vanishedJobConfirmations || misses%statusGapWarnEvery == 0 {
+	if misses == vanishedJobConfirmations || misses%statusGapLogEvery == 0 {
 		s.logger.Debug("backup status is unavailable, still waiting for the job", attrs...)
 
 		return
 	}
 
 	s.logger.Debug("backup status is temporarily unavailable", attrs...)
+}
+
+// backupStatus reads the status of jobID, and reports an answer that carries no status at
+// all as a job the cluster does not report. The status is dereferenced by every caller,
+// so the one place that can hand out a nil is here.
+func backupStatus(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	jobID string,
+) (*infomodels.ResponseBackupState, error) {
+	status, err := client.GetBackupStatus(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+
+	if status == nil {
+		return nil, errEmptyBackupStatus
+	}
+
+	return status, nil
 }
 
 // waitFor sleeps for d and returns the context error if the watch is canceled first.
@@ -650,27 +778,22 @@ func waitFor(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// reportMissingBackup handles a job the cluster no longer reports, once the caller has
-// confirmed that it is really gone. The cluster drops the state of a job shortly after
-// finishing it, so a job last seen in one of the completionStates has completed, and its
-// manifest is worth waiting for. A job that was never seen either finished long ago or
-// does not exist, and is looked up only once. Anything else stopped reporting in the
-// middle of a backup, and only a manifest can turn that into a completion.
+// reportMissingBackup handles a job that was being watched and that the cluster no longer
+// reports, once the caller has confirmed that it is really gone. The cluster drops the
+// state of a job shortly after finishing it, so a job last seen in one of the
+// completionStates has completed, and its manifest is worth waiting for. Anything else
+// stopped reporting in the middle of a backup, and only a manifest can turn that into a
+// completion.
 func (s *Service) reportMissingBackup(
 	ctx context.Context,
 	l metadataGetter,
 	jobID string,
 	lastState infomodels.BackupState,
 ) error {
-	switch {
-	case lastState == "":
-		s.logger.Info("no running backup found")
-
-		return s.printMetadata(ctx, l, jobID, false)
-	case completionStates[lastState]:
+	if completionStates[lastState] {
 		s.logger.Info(msgBackupComplete)
 
-		return s.printMetadata(ctx, l, jobID, true)
+		return s.printMetadata(ctx, l, jobID)
 	}
 
 	// The watch may have been between polls while the job ran through its last stages,
@@ -693,9 +816,11 @@ func (s *Service) reportMissingBackup(
 	}
 }
 
-// printMetadata reads the manifest of a finished backup and prints it.
-func (s *Service) printMetadata(ctx context.Context, l metadataGetter, jobID string, wait bool) error {
-	md, err := s.fetchMetadata(ctx, l, jobID, wait)
+// printMetadata reads the manifest of a finished backup and prints it. The manifest is
+// waited for: every caller has seen the job reach its end, and the server uploads the
+// manifest shortly after that.
+func (s *Service) printMetadata(ctx context.Context, l metadataGetter, jobID string) error {
+	md, err := s.fetchMetadata(ctx, l, jobID, true)
 	if err != nil {
 		return err
 	}
@@ -760,13 +885,14 @@ func (s *Service) fetchMetadata(
 	return md, nil
 }
 
-// metadataS3Config returns a copy of the S3 configuration with a bounded request timeout,
-// so that reading a manifest never mutates the configuration shared with other commands.
-func (s *Service) metadataS3Config() *models.AwsS3 {
-	cfg := *s.backupCfg.AwsS3
-	cfg.RequestTimeout = metadataRequestTimeout
+// metadataS3Config returns a copy of cfg with a bounded request timeout, so that reading
+// a manifest never hangs on the storage and never mutates the configuration shared with
+// the rest of the command.
+func metadataS3Config(cfg *models.AwsS3) *models.AwsS3 {
+	bounded := *cfg
+	bounded.RequestTimeout = metadataRequestTimeoutMillis
 
-	return &cfg
+	return &bounded
 }
 
 // RestoreProgress returns the progress of the currently running restore.
@@ -826,14 +952,14 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 
 // checkServerVersion makes sure the oldest node in the cluster is new enough to serve
 // server-integrated backup and restore.
-func (s *Service) checkServerVersion(ctx context.Context, client *infoClient) error {
+func (s *Service) checkServerVersion(ctx context.Context, client versionGetter) error {
 	lowestVersion, err := client.GetVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get server version: %w", err)
 	}
 
 	if !lowestVersion.IsGreaterOrEqual(infomodels.AerospikeVersionSupportsIntegratedBackup) {
-		return fmt.Errorf("server version %s does not support integrated backup", lowestVersion)
+		return fmt.Errorf("server version %s %w", lowestVersion, errVersionUnsupported)
 	}
 
 	return nil
@@ -846,21 +972,21 @@ func (s *Service) checkServerVersion(ctx context.Context, client *infoClient) er
 //
 // The server version is checked when the info client is opened, so it is not repeated
 // here.
-func (s *Service) checkClusterStable(ctx context.Context, client *infoClient, namespace string) error {
+func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecker, namespace string) error {
 	isStable, err := client.GetClusterStable(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to check cluster stability: %w", err)
 	}
 
 	if !isStable {
-		return fmt.Errorf("cluster is not stable")
+		return fmt.Errorf("%w: namespace %s", errClusterNotStable, namespace)
 	}
 
 	return nil
 }
 
 // checkBackupExists validates the backup exists for RESTORE only.
-func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, jobID string) error {
+func (s *Service) checkBackupExists(ctx context.Context, client s3API, bucket, jobID string) error {
 	l := lister.NewLister(client, bucket, "", lister.WithLogger(s.logger))
 
 	md, err := l.GetMetadata(ctx, jobID)
@@ -878,6 +1004,63 @@ func (s *Service) checkBackupExists(ctx context.Context, client S3API, bucket, j
 	)
 
 	return nil
+}
+
+// abortOutcome is what a status read while waiting for an abort says about the job.
+type abortOutcome int
+
+const (
+	// abortPending means the job is still winding down, and the wait goes on.
+	abortPending abortOutcome = iota + 1
+	// abortStopped means the job is no longer running: the abort has landed.
+	abortStopped
+	// abortTooLate means the job reached the end of its work before the abort did, so
+	// there was nothing left to stop.
+	abortTooLate
+)
+
+// waitForAbort polls the state of an aborted job until it stops running, and reports how
+// it stopped. The cluster accepts an abort request before the job actually winds down, so
+// the abort is confirmed by the status that follows it.
+//
+// The wait is bounded: a job that never reacts to the abort has to end the command instead
+// of being polled forever, and the deadline also cuts short a status request that is
+// already in flight. timeoutErr is what a job that kept reporting itself as running until
+// the wait ran out is reported as; poll returns the state it read along with its meaning,
+// so that the failure can name what the job was last doing.
+func (s *Service) waitForAbort(
+	ctx context.Context,
+	timeoutErr error,
+	poll func(ctx context.Context) (abortOutcome, string, error),
+) (abortOutcome, error) {
+	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
+	defer cancel()
+
+	for {
+		outcome, state, err := poll(statusCtx)
+
+		// The terminal outcomes are named rather than taken as "anything but pending", so
+		// that an outcome no poll is supposed to return ends in the bounded wait running
+		// out instead of announcing a job that never stopped as stopped.
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			return 0, timeoutErr
+		case err != nil:
+			return 0, err
+		case outcome == abortStopped, outcome == abortTooLate:
+			return outcome, nil
+		}
+
+		// waitFor returns as soon as the command is canceled or the wait runs out, so
+		// the abort never keeps polling a job the caller stopped waiting for.
+		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return 0, fmt.Errorf("%w, last reported state %q", timeoutErr, state)
+			}
+
+			return 0, err
+		}
+	}
 }
 
 // AbortBackup asks the cluster to abort the configured backup job, once it has confirmed
@@ -914,59 +1097,57 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 	s.logger.Info("aborting",
 		slog.String("backup-id", jobID))
 
-	// The cluster accepts the abort request before the job actually winds down, so the
-	// abort is confirmed by the status that follows it. The wait is bounded: a job that
-	// never reacts to the abort has to end the command instead of being polled forever,
-	// and the deadline also cuts short a status request that is already in flight.
-	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
-	defer cancel()
+	outcome, err := s.waitForAbort(ctx,
+		fmt.Errorf("%w: backup-id %s", errAbortStatusTimeout, jobID),
+		func(ctx context.Context) (abortOutcome, string, error) {
+			return backupAbortState(ctx, client, jobID)
+		})
+	if err != nil {
+		return err
+	}
 
-	for {
-		state, err := client.GetBackupStatus(statusCtx, jobID)
-		if err != nil {
-			// The cluster drops the state of a job that is no longer running.
-			if errors.Is(err, asinfo.ErrNotFound) {
-				break
-			}
+	// A job that reached the end of the backup before the abort landed was not aborted:
+	// its data is in storage, and announcing it as aborted would hide a backup that
+	// finished.
+	if outcome == abortTooLate {
+		s.logger.Info("backup finished before it could be aborted",
+			slog.String("backup-id", jobID))
 
-			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%w: backup-id %s", errAbortStatusTimeout, jobID)
-			}
-
-			return fmt.Errorf("failed to get backup status: %w", err)
-		}
-
-		// The job is done winding down once it reports the abort. A job that hit a
-		// failure on the way out reports that instead, and is just as stopped.
-		if state.State == infomodels.BackupStateAborted || state.State == infomodels.BackupStateFailed {
-			break
-		}
-
-		// A job that reached the end of the backup before the abort landed was not
-		// aborted: its data is in storage, and waiting for it to stop would only end in
-		// the cluster dropping the state of a finished backup.
-		if state.State == infomodels.BackupStateComplete {
-			s.logger.Info("backup finished before it could be aborted",
-				slog.String("backup-id", jobID))
-
-			return nil
-		}
-
-		// waitFor returns as soon as the command is canceled or the wait runs out, so
-		// the abort never keeps polling a job the caller stopped waiting for.
-		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%w: backup-id %s, last reported state %q",
-					errAbortStatusTimeout, jobID, state.State.Describe())
-			}
-
-			return err
-		}
+		return nil
 	}
 
 	s.logger.Info("backup was successfully aborted")
 
 	return nil
+}
+
+// backupAbortState reads the state of a job that was asked to stop, and says what it
+// means for the abort.
+func backupAbortState(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	jobID string,
+) (abortOutcome, string, error) {
+	status, err := backupStatus(ctx, client, jobID)
+	if err != nil {
+		// The cluster drops the state of a job that is no longer running.
+		if errors.Is(err, asinfo.ErrNotFound) {
+			return abortStopped, "", nil
+		}
+
+		return 0, "", fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	switch status.State {
+	// The job is done winding down once it reports the abort. A job that hit a failure
+	// on the way out reports that instead, and is just as stopped.
+	case infomodels.BackupStateAborted, infomodels.BackupStateFailed:
+		return abortStopped, status.State.Describe(), nil
+	case infomodels.BackupStateComplete:
+		return abortTooLate, status.State.Describe(), nil
+	default:
+		return abortPending, status.State.Describe(), nil
+	}
 }
 
 // backupIsRunning reports whether the cluster is working on jobID, so that an abort is
@@ -979,7 +1160,7 @@ func (s *Service) backupIsRunning(
 	client backup.ServerBackupInfo,
 	jobID string,
 ) (bool, error) {
-	status, err := client.GetBackupStatus(ctx, jobID)
+	status, err := backupStatus(ctx, client, jobID)
 	if err != nil {
 		// The cluster reports only the jobs it still holds the state of, so an unknown
 		// job id and a backup that finished long ago are answered the same way.
@@ -1049,48 +1230,43 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 		slog.String("namespace", namespace),
 		slog.String("backup-id", jobID))
 
-	// The cluster accepts the abort request before the job actually winds down, so the
-	// abort is confirmed by the status that follows it. The wait is bounded: a job that
-	// never reacts to the abort has to end the command instead of being polled forever,
-	// and the deadline also cuts short a status request that is already in flight.
-	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
-	defer cancel()
-
-	for {
-		state, err := client.GetRestoreStatus(statusCtx, namespace)
-		if err != nil {
-			// The cluster reports no restore state for a namespace it holds nothing for.
-			if errors.Is(err, asinfo.ErrNotFound) {
-				break
-			}
-
-			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%w: namespace %s, backup-id %s",
-					errAbortRestoreStatusTimeout, namespace, jobID)
-			}
-
-			return fmt.Errorf("failed to get restore status: %w", err)
-		}
-
-		if !restoreActiveStates[state] {
-			break
-		}
-
-		// waitFor returns as soon as the command is canceled or the wait runs out, so
-		// the abort never keeps polling a job the caller stopped waiting for.
-		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%w: namespace %s, backup-id %s, last reported state %q",
-					errAbortRestoreStatusTimeout, namespace, jobID, state)
-			}
-
-			return err
-		}
+	if _, err := s.waitForAbort(ctx,
+		fmt.Errorf("%w: namespace %s, backup-id %s", errAbortRestoreStatusTimeout, namespace, jobID),
+		func(ctx context.Context) (abortOutcome, string, error) {
+			return restoreAbortState(ctx, client, namespace)
+		}); err != nil {
+		return err
 	}
 
 	s.logger.Info("restore was successfully aborted")
 
 	return nil
+}
+
+// restoreAbortState reads the state of a namespace whose restore was asked to stop, and
+// says what it means for the abort. A restore that is no longer held by the namespace has
+// stopped, however it ended: the namespace is what the state describes, so there is no
+// state of its own for a restore that reached the end before the abort landed.
+func restoreAbortState(
+	ctx context.Context,
+	client backup.ServerBackupInfo,
+	namespace string,
+) (abortOutcome, string, error) {
+	state, err := client.GetRestoreStatus(ctx, namespace)
+	if err != nil {
+		// The cluster reports no restore state for a namespace it holds nothing for.
+		if errors.Is(err, asinfo.ErrNotFound) {
+			return abortStopped, "", nil
+		}
+
+		return 0, "", fmt.Errorf("failed to get restore status: %w", err)
+	}
+
+	if !restoreActiveStates[state] {
+		return abortStopped, state, nil
+	}
+
+	return abortPending, state, nil
 }
 
 // restoreIsActive reports whether namespace holds a restore the abort can act on, so that
