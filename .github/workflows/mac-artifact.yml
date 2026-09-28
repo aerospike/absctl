@@ -68,7 +68,7 @@ jobs:
           check-latest: true
           cache: true
           cache-dependency-path: ${{ steps.working-dir.outputs.value }}/go.sum
-      - uses: kenchan0130/actions-system-info@59699597e84e80085a750998045983daa49274c4 # v1.4.0
+      - uses: kenchan0130/actions-system-info@ceae9371bdbf9ff80acc78f28f7824a39c9648b3 # v1.5.0
         id: system-info
       - name: Cache backup CLI binaries
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
