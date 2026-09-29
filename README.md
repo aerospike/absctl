@@ -9,7 +9,7 @@
 - **Scan-based backup and restore** — client-side scan of the cluster, writing `.asb` files to local disk or object storage.
 - **Server-integrated snapshot backup and restore** — backup and restore work executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
 
-The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages and macOS `.pkg` installers are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
+The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages and a macOS `.pkg` installer are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
 
 ## Table of Contents
 
@@ -39,7 +39,7 @@ Run `absctl <command> --help` for flags and usage details.
 
 ## Installation
 
-`absctl` ships as DEB and RPM packages and macOS `.pkg` installers, attached to each
+`absctl` ships as DEB and RPM packages and a macOS `.pkg` installer, attached to each
 [GitHub Release](https://github.com/aerospike/absctl/releases), and as a Docker image. Every Linux package
 is built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
 `ubuntu24.04`, `ubuntu26.04`, `debian11`, `debian12` or `debian13` for DEB, and `el8`, `el9`, `el10` or
@@ -71,20 +71,23 @@ sudo rpm -i absctl-1.2.0-1.el9.x86_64.rpm
 
 ### macOS
 
-The macOS installer is Apple-codesigned, notarized and stapled, so it installs without a Gatekeeper
-prompt and works offline. It installs `absctl` to `/usr/local/bin`.
+**Apple silicon only.** Intel Macs are not supported: Apple has wound Intel down (macOS 26 is the last
+release that runs on it), and an arm64 binary cannot run under Rosetta, which translates the other way.
+Intel users should build from source or use the container image.
+
+The installer is Apple-codesigned, notarized and stapled, so it installs without a Gatekeeper prompt and
+works offline. It installs `absctl` to `/usr/local/bin`.
 
 ```bash
-curl -LO https://github.com/aerospike/absctl/releases/download/v<version>/absctl-<version>-macos-<arch>.pkg
-sudo installer -pkg absctl-<version>-macos-<arch>.pkg -target /
+curl -LO https://github.com/aerospike/absctl/releases/download/v<version>/absctl-<version>-macos-arm64.pkg
+sudo installer -pkg absctl-<version>-macos-arm64.pkg -target /
 
-# for example, on Apple silicon
+# for example
 curl -LO https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl-1.2.0-macos-arm64.pkg
 sudo installer -pkg absctl-1.2.0-macos-arm64.pkg -target /
 ```
 
-`<arch>` is `arm64` on Apple silicon and `x86_64` on Intel. Note that the file name carries the version
-without the leading `v`, unlike the release tag in the URL.
+Note that the file name carries the version without the leading `v`, unlike the release tag in the URL.
 
 Each package is published with a `.sha256` checksum and a detached `.asc` GPG signature next to it.
 
@@ -291,8 +294,11 @@ Needs `pkgbuild`, so this only runs on macOS. `MAC_ARCH` defaults to the host ar
 
 ```bash
 make macos-pkg                      # host architecture
-make macos-pkg MAC_ARCH=amd64       # Intel, cross-compiled
+make macos-pkg MAC_ARCH=arm64       # explicit
 ```
+
+The release pipeline builds `arm64` only (see [Installation](#macos)). `MAC_ARCH=amd64` still works
+locally if you need an Intel build for something.
 
 The installer is written to `dist/`. It is unsigned: Apple codesigning, notarization and stapling only
 happen in CI (`pre-release.yml` -> `sign-mac-packages`), which is where the Apple certificates live.
@@ -373,7 +379,7 @@ The following steps apply to both regular releases and hotfixes:
       from the JFrog legs below.
    2. Refuses to run at all if the version already has a published (non-draft, non-prerelease) GitHub Release,
       so a deleted-and-re-pushed tag cannot rebuild over artifacts customers already have.
-   3. Builds the DEB/RPM packages, the macOS `.pkg` installers (one per architecture, on macOS runners)
+   3. Builds the DEB/RPM packages, the macOS `.pkg` installer (arm64 only, on a macOS runner)
       and the Docker image.
    4. Apple-signs, notarizes and staples the `.pkg` files **before** GPG signing — `productsign` rewrites
       the package in place, which would invalidate a detached `.asc` produced first — then GPG-signs

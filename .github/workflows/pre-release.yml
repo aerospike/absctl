@@ -414,14 +414,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Apple silicon only. Apple has wound Intel down -- macOS 26 is the last release
+          # that runs on it -- so absctl ships arm64 and nothing else. Note this leaves
+          # Intel Macs with no installer at all rather than a slow one: Rosetta translates
+          # x86_64 to arm64, not the reverse, so an arm64 binary simply will not run there.
+          # To restore Intel support, add `- runner: macos-15-intel / arch: amd64` here and
+          # bump the two expected-.pkg-count checks below back to 2.
+          #
           # One runner per architecture, and only one: every Apple-silicon image
           # (macos-14/15/26) builds a byte-identical CGO_ENABLED=0 binary, so a second
           # arm64 leg would just race the first one to the same artifact name.
-          # macos-15-intel is the last x86_64 image GitHub offers.
           - runner: macos-14
             arch: arm64
-          - runner: macos-15-intel
-            arch: amd64
     name: build-mac-packages (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     steps:
@@ -642,10 +646,11 @@ jobs:
             echo "::error::Expected signed .deb and .rpm artifacts, got deb=${#debs[@]} rpm=${#rpms[@]}. Was a build or sign leg skipped?"
             exit 1
           fi
-          # One per architecture. A count of 1 means a build-mac-packages leg failed while
-          # fail-fast: false let the rest of the pipeline carry on.
-          if [ "${#pkgs[@]}" -ne 2 ]; then
-            echo "::error::Expected 2 signed .pkg artifacts (arm64 + x86_64), got ${#pkgs[@]}. Did a build-mac-packages leg fail?"
+          # One per architecture, and macOS is arm64-only (see build-mac-packages). A count
+          # of 0 means the build-mac-packages leg failed while fail-fast: false let the rest
+          # of the pipeline carry on.
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::Expected 1 signed .pkg artifact (arm64), got ${#pkgs[@]}. Did build-mac-packages fail?"
             exit 1
           fi
 
@@ -746,8 +751,8 @@ jobs:
             pkgs+=("$line")
           done < <(find signed/packages -type f -name '*.pkg' | sort)
 
-          if [ "${#pkgs[@]}" -ne 2 ]; then
-            echo "::error::Expected 2 .pkg artifacts (arm64 + x86_64), got ${#pkgs[@]}."
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::Expected 1 .pkg artifact (arm64), got ${#pkgs[@]}."
             exit 1
           fi
 
