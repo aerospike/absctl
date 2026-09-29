@@ -25,6 +25,11 @@ jobs:
   hello:
     runs-on: ubuntu-24.04
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Hello world
         run: |
           echo "hello world"
