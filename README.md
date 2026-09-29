@@ -9,7 +9,7 @@
 - **Scan-based backup and restore** — client-side scan of the cluster, writing `.asb` files to local disk or object storage.
 - **Server-integrated snapshot backup and restore** — backup and restore work executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
 
-The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
+The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages and macOS `.pkg` installers are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
 
 ## Table of Contents
 
@@ -376,14 +376,22 @@ The following steps apply to both regular releases and hotfixes:
    3. Builds the DEB/RPM packages, the macOS `.pkg` installers (one per architecture, on macOS runners)
       and the Docker image.
    4. Apple-signs, notarizes and staples the `.pkg` files **before** GPG signing — `productsign` rewrites
-      the package in place, which would invalidate a detached `.asc` produced first. Then GPG-signs
-      everything, and verifies before anything is deployed that every artifact carries a valid detached
-      `.asc` plus a valid embedded deb/rpm signature, and that every `.pkg` is productsigned by Aerospike's
-      Developer ID, stapled, accepted by Gatekeeper, and contains a codesigned `absctl` binary. Only then
-      does it deploy everything to JFrog `DEV`.
-   5. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
-2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
-   promoted from `TEST` to `STAGE`, either by dispatching
+      the package in place, which would invalidate a detached `.asc` produced first — then GPG-signs
+      everything.
+   5. Verifies the signatures before anything is deployed, and fails the run rather than deploying if any
+      check does not hold:
+      - every artifact, `.pkg` included, carries a valid detached `.asc`;
+      - every `.deb` and `.rpm` carries a valid embedded signature (`dpkg-sig`, `rpm --checksig`);
+      - every `.pkg` is productsigned by Aerospike's Developer ID, has a stapled notarization ticket, is
+        accepted by Gatekeeper, and installs a codesigned `absctl` binary.
+
+      The Apple checks need macOS tooling, so they run in their own job on a macOS runner.
+   6. Deploys everything to JFrog `DEV`.
+   7. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
+2. QE/developers pull the artifacts from JFrog `TEST` and validate them. The macOS `.pkg` files live in the
+   *generic* repo under `<build-name>/<version>/`, not alongside the DEB/RPM ones — JFrog has no repository
+   type for macOS installers. Once they pass, the release bundle is promoted from `TEST` to `STAGE`,
+   either by dispatching
    [`promote-to-preview.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-preview.yml) with `environment: STAGE` or manually via the
    [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2).
 3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PREVIEW`, either by dispatching
@@ -402,8 +410,7 @@ The following steps apply to both regular releases and hotfixes:
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
      `PROD`, then downloads the already-signed DEB/RPM and macOS `.pkg` artifacts straight from JFrog's
      `PROD`-public repos and publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt,
-     re-signed, or re-checksummed at this point. (The `.pkg` files come from the generic repo: JFrog has no
-     dedicated repository type for macOS installers.)
+     re-signed, or re-checksummed at this point.
 6. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release** only.
    The GitHub **Set as the latest release** checkbox is unrelated to any registry tag and can be left
    unchecked. Until the pre-release flag is cleared, the release does not appear as GA on GitHub.
