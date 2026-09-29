@@ -391,11 +391,169 @@ jobs:
         echo "Packaged artifacts:"
         ls -la dist
       gh-artifact-directory: dist
-      gh-artifact-name: packages-unsigned
+      gh-artifact-name: packages-unsigned-linux
       gh-retention-days: 1
 
+  # ---------------------------------------------------------------------------
+  # macOS packages: build -> Apple sign/notarize (before GPG, see below)
+  # ---------------------------------------------------------------------------
+
+  # A plain job rather than reusable_execute-build.yaml, which the Linux packages use:
+  # that workflow can set up Java, .NET, Python and Helm but not Go, and the macOS runner
+  # images have no `go` on PATH, so the build script died with "go: command not found".
+  # actions/setup-go also pins the toolchain from go.mod instead of taking whatever the
+  # image happens to ship. The only thing given up is a per-leg JFrog metadata build-info,
+  # which nothing consumes: deploy-packages passes no jf-metadata-build-id, so those
+  # records are never aggregated into the parent build. The artifacts themselves still
+  # reach the release bundle, via packages-signed -> deploy-packages.
+  build-mac-packages:
+    needs: [prepare]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple silicon only. Apple has wound Intel down -- macOS 26 is the last release
+          # that runs on it -- so absctl ships arm64 and nothing else. Note this leaves
+          # Intel Macs with no installer at all rather than a slow one: Rosetta translates
+          # x86_64 to arm64, not the reverse, so an arm64 binary simply will not run there.
+          # To restore Intel support, add `- runner: macos-15-intel / arch: amd64` here and
+          # bump the two expected-.pkg-count checks below back to 2.
+          #
+          # One runner per architecture, and only one: every Apple-silicon image
+          # (macos-14/15/26) builds a byte-identical CGO_ENABLED=0 binary, so a second
+          # arm64 leg would just race the first one to the same artifact name.
+          - runner: macos-14
+            arch: arm64
+    name: build-mac-packages (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Shallow is enough: VERSION is passed in below, so the Makefile never falls
+          # back to `git describe`, and GIT_COMMIT only needs `rev-parse HEAD`.
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Build the macOS installer
+        env:
+          VERSION: ${{ needs.prepare.outputs.package_version }}
+          MAC_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euxo pipefail
+          make macos-pkg VERSION="$VERSION" MAC_ARCH="$MAC_ARCH"
+
+          # Publish the installer and nothing else: `make macos-pkg` also leaves the bare
+          # dist/absctl_darwin_<arch> binary behind, and anything sitting in the uploaded
+          # directory is deployed to JFrog as a generic artifact. Assert there is exactly
+          # one .pkg so a stale dist/ can never ship silently.
+          shopt -s nullglob
+          pkgs=(dist/*.pkg)
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::expected exactly 1 .pkg under dist, found ${#pkgs[@]}: ${pkgs[*]-}" >&2
+            exit 1
+          fi
+          mkdir -p macos-dist
+          mv "${pkgs[0]}" macos-dist/
+          echo "Packaged artifacts:"
+          ls -la macos-dist
+
+      - name: Upload unsigned macOS installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages-unsigned-macos-${{ matrix.arch }}
+          path: macos-dist
+          if-no-files-found: error
+          retention-days: 1
+
+  # reusable_sign-mac-artifacts.yaml and reusable_sign-artifacts.yaml each download ONE
+  # named artifact, so the per-platform uploads above have to be merged into the single
+  # `packages-unsigned` name the rest of the pipeline already expects.
+  collect-unsigned-packages:
+    needs: [build-packages, build-mac-packages]
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      # `signing-identity` is a required input but an empty string satisfies "required",
+      # and `codesign -s ""` does not fail -- it signs ad-hoc-ish against whatever the
+      # keychain offers. These are org-level variables that aerospike/absctl only became
+      # allowlisted for recently, so a repo that loses that allowlist entry would
+      # otherwise ship silently mis-signed packages. Fail here instead.
+      - name: Check the Apple signing identities are visible to this repo
+        env:
+          SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ vars.APPLE_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$SIGNING_IDENTITY" ] || missing+=("APPLE_SIGNING_IDENTITY")
+          [ -n "$INSTALLER_IDENTITY" ] || missing+=("APPLE_INSTALLER_IDENTITY")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Empty org variable(s): ${missing[*]}. aerospike/absctl must be on the allowlist for the APPLE_* variables and secrets -- ask #devops to restore it."
+            exit 1
+          fi
+          echo "Signing identity:   $SIGNING_IDENTITY"
+          echo "Installer identity: $INSTALLER_IDENTITY"
+
+      - name: Merge per-platform build artifacts
+        uses: aerospike/shared-workflows/.github/actions/collect-build-artifacts@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+        with:
+          pattern: packages-unsigned-*
+          output-name: packages-unsigned
+          retention-days: "1"
+
+  # Apple signing MUST run before GPG signing: productsign rewrites the .pkg in place,
+  # which would invalidate a detached .asc produced first. This job downloads
+  # `packages-unsigned`, signs only the .pkg files, and re-uploads the whole tree with
+  # overwrite: true, so sign-packages below needs no conditional logic -- see
+  # https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/5060460576 (Composable CI/CD).
+  sign-mac-packages:
+    needs: [collect-unsigned-packages]
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-mac-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      gh-workflows-ref: v5.0.0
+      gh-unsigned-artifacts: packages-unsigned
+      # NOT "**/*.pkg": matches_glob() in sign-mac-artifacts/entrypoint.sh is a bash `case`
+      # match rather than a globstar matcher, so a pattern containing "/" never matches our
+      # flat artifact tree -- every .pkg would be skipped and the job would still exit 0.
+      artifact-glob: "*.pkg"
+      signing-identity: ${{ vars.APPLE_SIGNING_IDENTITY }}
+      installer-identity: ${{ vars.APPLE_INSTALLER_IDENTITY }}
+      notarize: true
+      runs-on: macos-14
+      gh-retention-days: 1
+    secrets:
+      # apple-cert-password is deliberately absent: the org .p12 secrets are unencrypted
+      # and there is no APPLE_CERT_PASSWORD org secret to pass.
+      apple-application-cert: ${{ secrets.APPLE_APPLICATION_CERT }}
+      apple-installer-cert: ${{ secrets.APPLE_INSTALLER_CERT }}
+      apple-id: ${{ secrets.APPLE_ID }}
+      apple-notarization-password: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
+      apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
+
   sign-packages:
-    needs: [build-packages]
+    needs: [collect-unsigned-packages, sign-mac-packages]
     # reusable_sign-artifacts.yaml declares id-token: write at its own workflow level;
     # GitHub requires the caller to grant at least that, even though this job's steps
     # don't use OIDC themselves (see: https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/5060460576).
@@ -483,8 +641,16 @@ jobs:
 
           debs=(signed/packages/**/*.deb)
           rpms=(signed/packages/**/*.rpm)
+          pkgs=(signed/packages/**/*.pkg)
           if [ "${#debs[@]}" -eq 0 ] || [ "${#rpms[@]}" -eq 0 ]; then
             echo "::error::Expected signed .deb and .rpm artifacts, got deb=${#debs[@]} rpm=${#rpms[@]}. Was a build or sign leg skipped?"
+            exit 1
+          fi
+          # One per architecture, and macOS is arm64-only (see build-mac-packages). A count
+          # of 0 means the build-mac-packages leg failed while fail-fast: false let the rest
+          # of the pipeline carry on.
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::Expected 1 signed .pkg artifact (arm64), got ${#pkgs[@]}. Did build-mac-packages fail?"
             exit 1
           fi
 
@@ -498,6 +664,12 @@ jobs:
           }
 
           for pkg in "${debs[@]}"; do
+            check_detached "$pkg"
+          done
+
+          # Detached signature only. The .pkg's own Apple signature, its notarization and
+          # its stapled ticket need macOS tooling and are checked by verify-mac-signatures.
+          for pkg in "${pkgs[@]}"; do
             check_detached "$pkg"
           done
 
@@ -543,8 +715,130 @@ jobs:
 
           exit $fail
 
+  # The Apple side of the same sign-or-fail invariant. reusable_sign-mac-artifacts.yaml
+  # verifies each operation as it goes, but it also treats "no file matched artifact-glob"
+  # as success, so a glob or naming change upstream would sail through with unsigned
+  # packages. Re-check the shipped bytes here, on a real macOS runner, and gate the deploy
+  # on it. Everything below needs macOS tooling (pkgutil/spctl/stapler/codesign), which is
+  # why it cannot live in verify-signatures.
+  verify-mac-signatures:
+    needs: [sign-packages]
+    permissions:
+      contents: read
+    runs-on: macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Download signed packages
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: packages-signed
+          path: signed/packages
+
+      - name: Verify every .pkg is Apple-signed, notarized and stapled
+        env:
+          INSTALLER_IDENTITY: ${{ vars.APPLE_INSTALLER_IDENTITY }}
+          SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          # `find`, not `globstar`: the macOS images ship bash 3.2 as /bin/bash and it has
+          # no globstar, so signed/packages/**/*.pkg would silently expand to nothing.
+          pkgs=()
+          while IFS= read -r line; do
+            pkgs+=("$line")
+          done < <(find signed/packages -type f -name '*.pkg' | sort)
+
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::Expected 1 .pkg artifact (arm64), got ${#pkgs[@]}."
+            exit 1
+          fi
+
+          fail=0
+          for pkg in "${pkgs[@]}"; do
+            echo "=== $pkg ==="
+
+            # 1. productsign: signed by the Developer ID Installer certificate.
+            out="$(pkgutil --check-signature "$pkg" 2>&1 || true)"
+            echo "$out"
+            if ! grep -q 'Status: signed by a developer certificate issued by Apple' <<< "$out"; then
+              echo "::error::${pkg} is not productsigned -- check the sign-mac-packages job."
+              fail=1
+            fi
+            if ! grep -qF "$INSTALLER_IDENTITY" <<< "$out"; then
+              echo "::error::${pkg} is not signed by '${INSTALLER_IDENTITY}'."
+              fail=1
+            fi
+
+            # 2. Stapled ticket, so the package validates on a machine with no network.
+            #    `stapler validate` contacts Apple's CloudKit ticket-delivery endpoint and
+            #    returns the SAME exit 68 for "no ticket" and "the network timed out"
+            #    (aerospike-admin sees NSURLErrorDomain -1001 on macos-14 for packages that
+            #    validate fine elsewhere). Retry, then tell the two apart: sign-mac-packages
+            #    already staples with retries and validates the staple itself, so an
+            #    Apple-side blip must not fail a release whose signature, identity and
+            #    Gatekeeper assessment all passed -- while a missing ticket still must.
+            staple_out=""
+            staple_ok=0
+            for attempt in 1 2 3 4 5; do
+              if staple_out="$(xcrun stapler validate "$pkg" 2>&1)"; then
+                staple_ok=1
+                break
+              fi
+              echo "stapler validate attempt ${attempt}/5 failed, retrying in $((attempt * 5))s" >&2
+              sleep "$((attempt * 5))"
+            done
+            echo "$staple_out"
+            if [ "$staple_ok" -ne 1 ]; then
+              if grep -qE 'NSURLError|timed out|CloudKit|kCFErrorDomainCFNetwork' <<< "$staple_out"; then
+                echo "::warning::stapler validate could not reach Apple after 5 attempts for ${pkg} (network). Not failing on this -- the checks below still apply."
+              else
+                echo "::error::${pkg} has no stapled notarization ticket -- check the sign-mac-packages job."
+                fail=1
+              fi
+            fi
+
+            # 3. Gatekeeper's own verdict. A stapled ticket that Gatekeeper still rejects
+            #    (revoked cert, unsigned payload) only shows up here.
+            out="$(spctl --assess --type install -vv "$pkg" 2>&1 || true)"
+            echo "$out"
+            if ! grep -q 'source=Notarized Developer ID' <<< "$out"; then
+              echo "::error::${pkg} is rejected by Gatekeeper, or was accepted for some reason other than notarization."
+              fail=1
+            fi
+
+            # 4. The payload itself. A correctly productsigned .pkg says nothing about what
+            #    is inside it, and an unsigned binary is quarantined on first run.
+            work="$(mktemp -d)"
+            pkgutil --expand-full "$pkg" "$work/expanded"
+            binary="$work/expanded/Payload/usr/local/bin/absctl"
+            if [ ! -f "$binary" ]; then
+              echo "::error::${pkg} does not install /usr/local/bin/absctl."
+              find "$work/expanded/Payload" -type f | head -50
+              fail=1
+            else
+              out="$(codesign --verify --strict --verbose=2 "$binary" 2>&1 || true)"
+              echo "$out"
+              if ! grep -q 'satisfies its Designated Requirement' <<< "$out"; then
+                echo "::error::the absctl binary inside ${pkg} is not validly codesigned."
+                fail=1
+              fi
+              out="$(codesign --display --verbose=4 "$binary" 2>&1 || true)"
+              echo "$out"
+              if ! grep -qF "Authority=$SIGNING_IDENTITY" <<< "$out"; then
+                echo "::error::the absctl binary inside ${pkg} is not signed by '${SIGNING_IDENTITY}'."
+                fail=1
+              fi
+            fi
+            rm -rf "$work"
+          done
+
+          exit $fail
+
   deploy-packages:
-    needs: [prepare, sign-packages, verify-signatures, delete-existing-bundle]
+    needs: [prepare, sign-packages, verify-signatures, verify-mac-signatures, delete-existing-bundle]
     permissions:
       contents: read
       id-token: write

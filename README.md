@@ -9,7 +9,7 @@
 - **Scan-based backup and restore** — client-side scan of the cluster, writing `.asb` files to local disk or object storage.
 - **Server-integrated snapshot backup and restore** — backup and restore work executed inside Aerospike Server and written to configured object storage (for example, AWS S3).
 
-The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
+The tool is built on the [backup-go](https://github.com/aerospike/backup-go) library. DEB and RPM packages and a macOS `.pkg` installer are available on [GitHub Releases](https://github.com/aerospike/absctl/releases), and a container image on [Docker Hub](https://hub.docker.com/r/aerospike/absctl).
 
 ## Table of Contents
 
@@ -39,9 +39,9 @@ Run `absctl <command> --help` for flags and usage details.
 
 ## Installation
 
-`absctl` ships as DEB and RPM packages, attached to each
-[GitHub Release](https://github.com/aerospike/absctl/releases), and as a Docker image. Every package is
-built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
+`absctl` ships as DEB and RPM packages and a macOS `.pkg` installer, attached to each
+[GitHub Release](https://github.com/aerospike/absctl/releases), and as a Docker image. Every Linux package
+is built per distribution, so pick the file whose distro tag matches your system: `ubuntu22.04`,
 `ubuntu24.04`, `ubuntu26.04`, `debian11`, `debian12` or `debian13` for DEB, and `el8`, `el9`, `el10` or
 `amzn2023` for RPM.
 
@@ -68,6 +68,26 @@ sudo rpm -i absctl-<version>-1.<distro>.<arch>.rpm
 wget https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl-1.2.0-1.el9.x86_64.rpm
 sudo rpm -i absctl-1.2.0-1.el9.x86_64.rpm
 ```
+
+### macOS
+
+**Apple silicon only.** Intel Macs are not supported: Apple has wound Intel down (macOS 26 is the last
+release that runs on it), and an arm64 binary cannot run under Rosetta, which translates the other way.
+Intel users should build from source or use the container image.
+
+The installer is Apple-codesigned, notarized and stapled, so it installs without a Gatekeeper prompt and
+works offline. It installs `absctl` to `/usr/local/bin`.
+
+```bash
+curl -LO https://github.com/aerospike/absctl/releases/download/v<version>/absctl-<version>-macos-arm64.pkg
+sudo installer -pkg absctl-<version>-macos-arm64.pkg -target /
+
+# for example
+curl -LO https://github.com/aerospike/absctl/releases/download/v1.2.0/absctl-1.2.0-macos-arm64.pkg
+sudo installer -pkg absctl-1.2.0-macos-arm64.pkg -target /
+```
+
+Note that the file name carries the version without the leading `v`, unlike the release tag in the URL.
 
 Each package is published with a `.sha256` checksum and a detached `.asc` GPG signature next to it.
 
@@ -268,6 +288,21 @@ make packages
 
 The generated packages and their `sha256` checksum files are written to the `target/` directory.
 
+### macOS Installer
+
+Needs `pkgbuild`, so this only runs on macOS. `MAC_ARCH` defaults to the host architecture:
+
+```bash
+make macos-pkg                      # host architecture
+make macos-pkg MAC_ARCH=arm64       # explicit
+```
+
+The release pipeline builds `arm64` only (see [Installation](#macos)). `MAC_ARCH=amd64` still works
+locally if you need an Intel build for something.
+
+The installer is written to `dist/`. It is unsigned: Apple codesigning, notarization and stapling only
+happen in CI (`pre-release.yml` -> `sign-mac-packages`), which is where the Apple certificates live.
+
 ### Running Tests
 
 ```bash
@@ -344,12 +379,25 @@ The following steps apply to both regular releases and hotfixes:
       from the JFrog legs below.
    2. Refuses to run at all if the version already has a published (non-draft, non-prerelease) GitHub Release,
       so a deleted-and-re-pushed tag cannot rebuild over artifacts customers already have.
-   3. Builds the DEB/RPM packages and Docker image.
-   4. Signs the packages, then verifies every artifact carries both a valid detached `.asc` and a valid
-      embedded deb/rpm signature before anything is deployed, and deploys everything to JFrog `DEV`.
-   5. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
-2. QE/developers pull the artifacts from JFrog `TEST` and validate them. Once they pass, the release bundle is
-   promoted from `TEST` to `STAGE`, either by dispatching
+   3. Builds the DEB/RPM packages, the macOS `.pkg` installer (arm64 only, on a macOS runner)
+      and the Docker image.
+   4. Apple-signs, notarizes and staples the `.pkg` files **before** GPG signing — `productsign` rewrites
+      the package in place, which would invalidate a detached `.asc` produced first — then GPG-signs
+      everything.
+   5. Verifies the signatures before anything is deployed, and fails the run rather than deploying if any
+      check does not hold:
+      - every artifact, `.pkg` included, carries a valid detached `.asc`;
+      - every `.deb` and `.rpm` carries a valid embedded signature (`dpkg-sig`, `rpm --checksig`);
+      - every `.pkg` is productsigned by Aerospike's Developer ID, has a stapled notarization ticket, is
+        accepted by Gatekeeper, and installs a codesigned `absctl` binary.
+
+      The Apple checks need macOS tooling, so they run in their own job on a macOS runner.
+   6. Deploys everything to JFrog `DEV`.
+   7. Creates a unified release bundle and automatically promotes it from `DEV` to `TEST`.
+2. QE/developers pull the artifacts from JFrog `TEST` and validate them. The macOS `.pkg` files live in the
+   *generic* repo under `<build-name>/<version>/`, not alongside the DEB/RPM ones — JFrog has no repository
+   type for macOS installers. Once they pass, the release bundle is promoted from `TEST` to `STAGE`,
+   either by dispatching
    [`promote-to-preview.yml`](https://github.com/aerospike/absctl/actions/workflows/promote-to-preview.yml) with `environment: STAGE` or manually via the
    [JFrog UI](https://aerospike.jfrog.io/ui/artifactory/release-lifecycle/absctl?repoKey=database-release-bundles-v2).
 3. A PM or EM reviews the release and promotes the release bundle from `STAGE` to `PREVIEW`, either by dispatching
@@ -366,9 +414,9 @@ The following steps apply to both regular releases and hotfixes:
      ([strategy](https://aerospike.atlassian.net/wiki/spaces/DevOps/pages/4648566799)).
    - A dev or PM/EM manually runs [`release.yml`](https://github.com/aerospike/absctl/actions/workflows/release.yml)
      (`workflow_dispatch`, with the release version as input). It verifies the bundle was actually promoted to
-     `PROD`, then downloads the already-signed DEB/RPM artifacts straight from JFrog's `PROD`-public repos and
-     publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt, re-signed, or
-     re-checksummed at this point.
+     `PROD`, then downloads the already-signed DEB/RPM and macOS `.pkg` artifacts straight from JFrog's
+     `PROD`-public repos and publishes them as a new, immutable GitHub **pre-release** — nothing is rebuilt,
+     re-signed, or re-checksummed at this point.
 6. When ready to announce GA, a PM/EM edits that GitHub Release and clears **Set as a pre-release** only.
    The GitHub **Set as the latest release** checkbox is unrelated to any registry tag and can be left
    unchecked. Until the pre-release flag is cleared, the release does not appear as GA on GitHub.

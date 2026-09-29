@@ -142,6 +142,10 @@ jobs:
         env:
           DEB_REPO: ${{ vars.JF_ARTIFACTORY_DEB_PROD }}
           RPM_REPO: ${{ vars.JF_ARTIFACTORY_RPM_PROD }}
+          # macOS .pkg installers have no dedicated repo type: reusable_deploy-artifacts.yaml
+          # has no .pkg entry in its type registry, so they fall through to the generic repo
+          # (confirmed with DevOps).
+          GENERIC_REPO: ${{ vars.JF_ARTIFACTORY_GENERIC_PROD }}
         run: |
           set -euxo pipefail
           # jf rt search's --bundle filter turned out not to reliably list release-bundle
@@ -156,8 +160,10 @@ jobs:
           jf rt search "${DEB_REPO}/**" --props "version=${BUNDLE_VERSION}" > deb-artifacts.json
           echo "Searching ${RPM_REPO} for version=${BUNDLE_VERSION}..."
           jf rt search "${RPM_REPO}/**" --props "version=${BUNDLE_VERSION}" > rpm-artifacts.json
+          echo "Searching ${GENERIC_REPO} for version=${BUNDLE_VERSION}..."
+          jf rt search "${GENERIC_REPO}/**" --props "version=${BUNDLE_VERSION}" > generic-artifacts.json
 
-          jq -s 'add' deb-artifacts.json rpm-artifacts.json > all-artifacts.json
+          jq -s 'add' deb-artifacts.json rpm-artifacts.json generic-artifacts.json > all-artifacts.json
 
           # Those repos are shared by every product in the JFrog project and the only filter
           # above is the `version` property, so another product carrying the same version
@@ -174,7 +180,7 @@ jobs:
 
           jq -r '.[].path' bundle-artifacts.json > artifact-paths.txt
           if [ ! -s artifact-paths.txt ]; then
-            echo "::error::No ${BUNDLE_NAME} package artifacts found for ${BUNDLE_NAME}:${BUNDLE_VERSION} in ${DEB_REPO} or ${RPM_REPO} (searched $(jq 'length' all-artifacts.json) artifact(s) at that version, none of them ${BUNDLE_NAME}'s)." >&2
+            echo "::error::No ${BUNDLE_NAME} package artifacts found for ${BUNDLE_NAME}:${BUNDLE_VERSION} in ${DEB_REPO}, ${RPM_REPO} or ${GENERIC_REPO} (searched $(jq 'length' all-artifacts.json) artifact(s) at that version, none of them ${BUNDLE_NAME}'s)." >&2
             exit 1
           fi
 
@@ -196,7 +202,7 @@ jobs:
           # bundle-artifacts.json above) -- write out that recorded checksum instead of
           # re-hashing the downloaded file locally, so the .sha256 we publish is JFrog's own
           # recorded value for this immutable artifact, not something recomputed here.
-          jq -r '.[] | select(.path | test("\\.(deb|rpm)$")) | "\(.path)\t\(.sha256)"' bundle-artifacts.json |
+          jq -r '.[] | select(.path | test("\\.(deb|rpm|pkg)$")) | "\(.path)\t\(.sha256)"' bundle-artifacts.json |
           while IFS=$'\t' read -r artifact_path sha256; do
             filename="$(basename "$artifact_path")"
             echo "$sha256" > "release-assets/${filename}.sha256"
@@ -216,8 +222,10 @@ jobs:
           files: |
             release-assets/**/*.rpm
             release-assets/**/*.deb
+            release-assets/**/*.pkg
             release-assets/**/*.deb.asc
             release-assets/**/*.rpm.asc
+            release-assets/**/*.pkg.asc
             release-assets/**/*.sha256
 
       - name: Summarize published release
