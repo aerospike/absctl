@@ -11,6 +11,21 @@ on:
 permissions:
   contents: read
 
+# ============================================================================
+# TEMPORARY -- REVERT BEFORE MERGING (BKRS-427 dry run)
+#
+# This commit retargets the whole workflow from PROD to TEST so the macOS signing
+# pipeline can be exercised end to end against a throwaway tag, without waiting on
+# the QE -> Product -> PM/EM promotion chain that a real PROD bundle needs.
+#
+# Every line changed by this commit is tagged `# TEMP:`. To undo:
+#     git revert <this commit>
+# and confirm `grep -n 'TEMP:' .github/workflows/release.yml` comes back empty.
+#
+# A run of this workflow publishes a GitHub pre-release built from UNVERIFIED,
+# TEST-stage artifacts. Delete the release and its tag when the dry run is done.
+# ============================================================================
+
 # This workflow is run manually, once the release bundle has already been promoted all the way to
 # JFrog PROD via the JFrog UI by a PM/EM (see the "Cutting a release" section in README.md -- gates past
 # TEST are product-owned and intentionally not automated in CI). It never promotes anything itself;
@@ -61,7 +76,7 @@ jobs:
       # returns the promotion records, the /artifactory-prefixed one is Not Found). Call it
       # with plain curl and the OIDC token from setup-jfrog-cli instead. No `set -x`: the
       # bearer token must not land in the trace log.
-      - name: Check release bundle is promoted to PROD
+      - name: Check release bundle is promoted to TEST # TEMP: was PROD
         env:
           JF_PROJECT: ${{ vars.JF_PROJECT }}
           JF_PLATFORM_URL: ${{ vars.JF_ARTIFACTORY_URL }}
@@ -88,25 +103,27 @@ jobs:
             exit 1
           fi
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Promotion-records lookup failed with HTTP ${HTTP_CODE}; refusing to publish without proof of PROD promotion."
+            echo "::error::Promotion-records lookup failed with HTTP ${HTTP_CODE}; refusing to publish without proof of TEST promotion." # TEMP: was PROD
             cat response.json || true
             exit 1
           fi
           jq . response.json
 
-          COMPLETED_PROD=$(jq '[.promotions[]? | select(.environment == "PROD" and .status == "COMPLETED")] | length' response.json)
+          # TEMP: gate on TEST instead of PROD. pre-release.yml promotes DEV -> TEST
+          # automatically, so a dry-run tag satisfies this without any manual promotion.
+          COMPLETED_PROD=$(jq '[.promotions[]? | select(.environment == "TEST" and .status == "COMPLETED")] | length' response.json)
           if [ "$COMPLETED_PROD" -lt 1 ]; then
-            echo "::error::Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} has no COMPLETED promotion to PROD. Have a PM/EM promote it via the JFrog UI, then re-run this workflow."
+            echo "::error::Release bundle ${BUNDLE_NAME}:${BUNDLE_VERSION} has no COMPLETED promotion to TEST. Did pre-release.yml finish?" # TEMP: was PROD
             exit 1
           fi
 
-          echo "Confirmed: ${BUNDLE_NAME}:${BUNDLE_VERSION} is promoted to PROD."
+          echo "Confirmed: ${BUNDLE_NAME}:${BUNDLE_VERSION} is promoted to TEST." # TEMP: was PROD
 
       - name: Summarize verification
         if: always()
         run: |
           {
-            echo "### PROD promotion check"
+            echo "### :warning: TEMP DRY RUN -- TEST promotion check (not PROD)" # TEMP: was PROD
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| Bundle name | \`${BUNDLE_NAME}\` |"
@@ -138,14 +155,17 @@ jobs:
           oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
           oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
 
-      - name: Download signed artifacts from JFrog PROD
+      - name: Download signed artifacts from JFrog TEST # TEMP: was PROD
         env:
-          DEB_REPO: ${{ vars.JF_ARTIFACTORY_DEB_PROD }}
-          RPM_REPO: ${{ vars.JF_ARTIFACTORY_RPM_PROD }}
+          # TEMP: hardcoded TEST repos. There are no JF_ARTIFACTORY_*_TEST variables to
+          # point at -- only the *_PROD ones exist -- so these are spelled out here and
+          # go away with this commit rather than adding throwaway repo variables.
+          DEB_REPO: database-deb-test-local # TEMP: was vars.JF_ARTIFACTORY_DEB_PROD
+          RPM_REPO: database-rpm-test-local # TEMP: was vars.JF_ARTIFACTORY_RPM_PROD
           # macOS .pkg installers have no dedicated repo type: reusable_deploy-artifacts.yaml
           # has no .pkg entry in its type registry, so they fall through to the generic repo
           # (confirmed with DevOps).
-          GENERIC_REPO: ${{ vars.JF_ARTIFACTORY_GENERIC_PROD }}
+          GENERIC_REPO: database-generic-test-local # TEMP: was vars.JF_ARTIFACTORY_GENERIC_PROD
         run: |
           set -euxo pipefail
           # jf rt search's --bundle filter turned out not to reliably list release-bundle
@@ -232,6 +252,10 @@ jobs:
         if: always()
         run: |
           {
+            echo "### :warning: TEMP DRY RUN -- published from JFrog TEST, not PROD" # TEMP
+            echo "These artifacts have NOT been through QE, Product or PM/EM sign-off." # TEMP
+            echo "Delete this release and its tag when the dry run is finished." # TEMP
+            echo ""
             echo "### Published GitHub pre-release"
             echo "Tag: \`${BUNDLE_VERSION}\`"
             echo ""
