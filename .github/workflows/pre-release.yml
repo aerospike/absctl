@@ -398,11 +398,18 @@ jobs:
   # macOS packages: build -> Apple sign/notarize (before GPG, see below)
   # ---------------------------------------------------------------------------
 
+  # A plain job rather than reusable_execute-build.yaml, which the Linux packages use:
+  # that workflow can set up Java, .NET, Python and Helm but not Go, and the macOS runner
+  # images have no `go` on PATH, so the build script died with "go: command not found".
+  # actions/setup-go also pins the toolchain from go.mod instead of taking whatever the
+  # image happens to ship. The only thing given up is a per-leg JFrog metadata build-info,
+  # which nothing consumes: deploy-packages passes no jf-metadata-build-id, so those
+  # records are never aggregated into the parent build. The artifacts themselves still
+  # reach the release bundle, via packages-signed -> deploy-packages.
   build-mac-packages:
     needs: [prepare]
     permissions:
       contents: read
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -415,46 +422,57 @@ jobs:
             arch: arm64
           - runner: macos-15-intel
             arch: amd64
-    uses: aerospike/shared-workflows/.github/workflows/reusable_execute-build.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
-    with:
-      gh-workflows-ref: v5.0.0
-      runs-on: ${{ matrix.runner }}
-      job-name: build-mac-packages (${{ matrix.arch }})
-      jf-project: ${{ vars.JF_PROJECT }}
-      jf-build-name: absctl-packages
-      # A distinct build number per leg: build-info is keyed by name+number, so legs
-      # sharing packages_build_id with the Linux build would overwrite each other's record.
-      jf-build-id: ${{ needs.prepare.outputs.packages_build_id }}-macos-${{ matrix.arch }}
-      # Same as build-packages: the source is checked out under gh-source-path, not at
-      # the workspace root.
-      working-directory: local
-      build-env: VERSION=${{ needs.prepare.outputs.package_version }};MAC_ARCH=${{ matrix.arch }}
-      build-script: |
-        set -euxo pipefail
-        # reusable_execute-build.yaml has no setup-go input and the macOS images ship
-        # whatever Go was current when they were baked. GOTOOLCHAIN is 'auto' by default
-        # since Go 1.21, so the build fetches exactly the toolchain go.mod asks for
-        # instead of failing on an image that lags it.
-        go version
-        make macos-pkg VERSION="$VERSION" MAC_ARCH="$MAC_ARCH"
+    name: build-mac-packages (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
 
-        # Publish the installer and nothing else: `make macos-pkg` also leaves the bare
-        # dist/absctl_darwin_<arch> binary behind, and anything sitting in the uploaded
-        # directory is deployed to JFrog as a generic artifact. Assert there is exactly
-        # one .pkg so a stale dist/ can never ship silently.
-        shopt -s nullglob
-        pkgs=(dist/*.pkg)
-        if [ "${#pkgs[@]}" -ne 1 ]; then
-          echo "::error::expected exactly 1 .pkg under dist, found ${#pkgs[@]}: ${pkgs[*]-}" >&2
-          exit 1
-        fi
-        mkdir -p macos-dist
-        mv "${pkgs[0]}" macos-dist/
-        echo "Packaged artifacts:"
-        ls -la macos-dist
-      gh-artifact-directory: macos-dist
-      gh-artifact-name: packages-unsigned-macos-${{ matrix.arch }}
-      gh-retention-days: 1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Shallow is enough: VERSION is passed in below, so the Makefile never falls
+          # back to `git describe`, and GIT_COMMIT only needs `rev-parse HEAD`.
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Build the macOS installer
+        env:
+          VERSION: ${{ needs.prepare.outputs.package_version }}
+          MAC_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euxo pipefail
+          make macos-pkg VERSION="$VERSION" MAC_ARCH="$MAC_ARCH"
+
+          # Publish the installer and nothing else: `make macos-pkg` also leaves the bare
+          # dist/absctl_darwin_<arch> binary behind, and anything sitting in the uploaded
+          # directory is deployed to JFrog as a generic artifact. Assert there is exactly
+          # one .pkg so a stale dist/ can never ship silently.
+          shopt -s nullglob
+          pkgs=(dist/*.pkg)
+          if [ "${#pkgs[@]}" -ne 1 ]; then
+            echo "::error::expected exactly 1 .pkg under dist, found ${#pkgs[@]}: ${pkgs[*]-}" >&2
+            exit 1
+          fi
+          mkdir -p macos-dist
+          mv "${pkgs[0]}" macos-dist/
+          echo "Packaged artifacts:"
+          ls -la macos-dist
+
+      - name: Upload unsigned macOS installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages-unsigned-macos-${{ matrix.arch }}
+          path: macos-dist
+          if-no-files-found: error
+          retention-days: 1
 
   # reusable_sign-mac-artifacts.yaml and reusable_sign-artifacts.yaml each download ONE
   # named artifact, so the per-platform uploads above have to be merged into the single
