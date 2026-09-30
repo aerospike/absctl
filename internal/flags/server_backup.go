@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// ServerBackup holds flags for the server backup create command.
 type ServerBackup struct {
 	models.ServerBackup
 }
@@ -27,35 +28,147 @@ func NewServerBackup() *ServerBackup {
 	return &ServerBackup{}
 }
 
-func (f *ServerBackup) NewBackupCreateFlagSet() *pflag.FlagSet {
+func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to be backed up.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
-		"Example: aws-s3")
+	flagSet.StringVar(&f.Namespace, "namespace",
+		models.DefaultCommonNamespace,
+		"The namespace to be backed up.")
+	flagSet.StringVar(&f.StorageType, "object-storage-type",
+		models.DefaultServerBackupObjectStorageType,
+		"Type of object storage. "+
+			"Example: aws-s3")
+	flagSet.StringVarP(&f.ModifiedAfter, "modified-after", "a",
+		models.DefaultBackupModifiedAfter,
+		"<YYYY-MM-DD_HH:MM:SS>\n"+
+			"Perform an incremental backup; only include records \n"+
+			"that changed after the given date and time. The system's \n"+
+			"local timezone applies. If only HH:MM:SS is specified, then\n"+
+			"today's date is assumed as the date. If only YYYY-MM-DD is \n"+
+			"specified, then 00:00:00 (midnight) is assumed as the time.\n")
+
+	flagSet.StringVarP(&f.ModifiedBefore, "modified-before", "b",
+		models.DefaultBackupModifiedBefore,
+		"<YYYY-MM-DD_HH:MM:SS>\n"+
+			"Only include records that last changed before the given\n"+
+			"date and time. May combined with --modified-after to specify a range.")
+	flagSet.StringVarP(&f.SetList, "set-list", "s",
+		models.DefaultCommonSetList,
+		descSetListBackup)
+	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "i",
+		models.DefaultCommonNoIndexes,
+		"Exclude indexes from the backup.")
+	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
+		models.DefaultCommonNoUDFs,
+		"Exclude user-defined functions from the backup.")
+	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
+		models.DefaultBackupEnableChangeStream,
+		"Enable backup of change stream.")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerBackupAsync,
+		"Return as soon as the cluster accepts the backup, without\n"+
+			"following its progress. Use the progress command to follow\n"+
+			"the backup later.")
 
 	return flagSet
 }
 
-func (f *ServerBackup) NewBackupListFlagSet() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-
-	flagSet.StringVar(&f.ListPath, "path", "/", "Path to list backups from.")
-
-	return flagSet
-}
-
-func (f *ServerBackup) NewRestoreStartFlagSet() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-
-	flagSet.StringVar(&f.Namespace, "namespace", "", "The namespace to restore.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type", "", "Type of object storage. "+
-		"Example: aws-s3")
-	flagSet.StringVar(&f.JobID, "backup-id", "", "Job id used for restore.")
-
-	return flagSet
-}
-
-func (f *ServerBackup) GetIntegratedBackup() *models.ServerBackup {
+func (f *ServerBackup) GetServerBackup() *models.ServerBackup {
 	return &f.ServerBackup
+}
+
+// ServerBackupList holds flags for the server backup list command.
+type ServerBackupList struct {
+	models.ServerBackupList
+}
+
+func NewServerBackupList() *ServerBackupList {
+	return &ServerBackupList{}
+}
+
+func (f *ServerBackupList) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.Path, "path", models.DefaultServerBackupPath, "Path to list backups from.")
+
+	return flagSet
+}
+
+func (f *ServerBackupList) GetServerBackupList() *models.ServerBackupList {
+	return &f.ServerBackupList
+}
+
+// ServerBackupValidate holds flags for the server backup validate command.
+type ServerBackupValidate struct {
+	models.ServerBackupValidate
+}
+
+func NewServerBackupValidate() *ServerBackupValidate {
+	return &ServerBackupValidate{}
+}
+
+func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.IntVar(&f.SampleSize, "sample-size",
+		models.DefaultServerBackupValidateSampleSize,
+		"Number of segments for random validation. 0 means validate all segments.")
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+
+	return flagSet
+}
+
+func (f *ServerBackupValidate) GetServerBackupValidate() *models.ServerBackupValidate {
+	return &f.ServerBackupValidate
+}
+
+type ServerBackupProgress struct {
+	models.ServerBackupProgress
+}
+
+// NewServerBackupProgress initializes and returns a new instance of ServerBackupProgress.
+func NewServerBackupProgress() *ServerBackupProgress {
+	return &ServerBackupProgress{}
+}
+
+func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+	flagSet.BoolVar(&f.Watch, "watch",
+		models.DefaultServerBackupProgressWatch,
+		"Watch the progress of the backup.")
+
+	return flagSet
+}
+
+func (f *ServerBackupProgress) GetServerBackupProgress() *models.ServerBackupProgress {
+	return &f.ServerBackupProgress
+}
+
+type ServerBackupAbort struct {
+	models.ServerBackupAbort
+}
+
+// NewServerBackupAbort initializes and returns a new instance of ServerBackupAbort.
+func NewServerBackupAbort() *ServerBackupAbort {
+	return &ServerBackupAbort{}
+}
+
+func (f *ServerBackupAbort) NewFlagSet() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+
+	flagSet.StringVar(&f.JobID, "backup-id",
+		models.DefaultServerBackupJobID,
+		"Backup id")
+
+	return flagSet
+}
+
+func (f *ServerBackupAbort) GetServerBackupAbort() *models.ServerBackupAbort {
+	return &f.ServerBackupAbort
 }

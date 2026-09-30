@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -90,7 +90,10 @@ func TestNewCmd_Subcommands(t *testing.T) {
 	rootCmd, _ := NewCmd(testAppVersion, testCommitHash, testBuildTime)
 
 	assert.ElementsMatch(t,
-		[]string{"backup", "restore"},
+		[]string{
+			"backup", "restore",
+			// "snapshot-backup", "snapshot-restore",
+		},
 		subcommandNames(rootCmd),
 	)
 }
@@ -149,23 +152,3 @@ func TestPrintVersion(t *testing.T) {
 	assert.Contains(t, out, testCommitHash)
 	assert.Contains(t, out, testBuildTime)
 }
-
-/*
-func TestNewHelpFunction(t *testing.T) {
-	t.Parallel()
-
-	flagSet := flags.NewRoot().NewFlagSet()
-	helpFn := newHelpFunction(flagSet)
-
-	out := captureStdout(t, helpFn)
-
-	assert.Contains(t, out, welcomeMessage)
-	assert.Contains(t, out, strings.Repeat("-", len(welcomeMessage)))
-	assert.Contains(t, out, "Available Commands:")
-	assert.Contains(t, out, "backup")
-	assert.Contains(t, out, "restore")
-	assert.Contains(t, out, "server")
-	assert.Contains(t, out, "service")
-	assert.Contains(t, out, "Flags:")
-}
-*/

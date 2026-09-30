@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,17 +73,19 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	rootCmd.PersistentFlags().AddFlagSet(rootFlagSet)
 
 	// Add subcommands - they will initialize their own operation-specific flags
-	backupCmd, _ := scan.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	restoreCmd, _ := scan.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	scanBackupCmd, _ := scan.NewExportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	scanRestoreCmd, _ := scan.NewImportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	// Comment it for now, as they belong to not released features.
-	// serverCmd := server.NewCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	// serviceCmd := service.NewCmd()
-	// rootCmd.AddCommand(serverCmd)
-	// rootCmd.AddCommand(serviceCmd)
+	// Unreleased features:
+	// serverBackupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	// serverRestoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	rootCmd.AddCommand(backupCmd)
-	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(scanBackupCmd)
+	rootCmd.AddCommand(scanRestoreCmd)
+
+	// Unreleased features:
+	// rootCmd.AddCommand(serverBackupCmd)
+	// rootCmd.AddCommand(serverRestoreCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
@@ -125,11 +127,10 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nUsage:")
 		fmt.Println("  absctl [command] [flags]")
 		fmt.Println("\nAvailable Commands:")
-		fmt.Println("  backup    Aerospike backup command")
-		fmt.Println("  restore   Aerospike restore command")
-		//nolint:gocritic // This lines are commented as they belong to not released features.
-		// fmt.Println("  server    Manage server-integrated backups and restores")
-		// fmt.Println("  service   Interact with Aerospike Backup Service REST API")
+		fmt.Println("  backup             Aerospike scan-based export")
+		fmt.Println("  restore            Aerospike scan-based import")
+		fmt.Println("  snapshot-backup    Manage server-integrated backups")
+		fmt.Println("  snapshot-restore   Manage server-integrated restores")
 
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()

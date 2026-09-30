@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,7 +53,6 @@ func TestNewRestoreServiceConfig_WithoutConfigFile(t *testing.T) {
 		gcpStorage,
 		azureBlob,
 	)
-	config.Restore.Mode = models.RestoreModeASB
 
 	err := config.Validate()
 	require.ErrorContains(t, err, "input file or directory required")
@@ -118,12 +117,10 @@ func TestNewRestoreConfig_DefaultValues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
-		Restore: &models.Restore{},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Restore:     &models.Restore{},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -148,15 +145,11 @@ func TestNewRestoreConfig_CustomParallel(t *testing.T) {
 
 	serviceConfig := &RestoreServiceConfig{
 		Restore: &models.Restore{
-			Common: models.Common{
-				Parallel: customParallel,
-			},
+			Parallel: customParallel,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -202,15 +195,11 @@ func TestNewRestoreConfig_BandwidthConversion(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			serviceConfig := &RestoreServiceConfig{
 				Restore: &models.Restore{
-					Common: models.Common{
-						Bandwidth: tt.bandwidthMiB,
-					},
+					Bandwidth: tt.bandwidthMiB,
 				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					Compression: &models.Compression{},
-					Encryption:  &models.Encryption{},
-					SecretAgent: &models.SecretAgent{},
-				},
+				Compression: &models.Compression{},
+				Encryption:  &models.Encryption{},
+				SecretAgent: &models.SecretAgent{},
 			}
 
 			config := NewRestoreConfig(serviceConfig, logger)
@@ -227,17 +216,15 @@ func TestNewRestoreConfig_AllFlags(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
 		Restore: &models.Restore{
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2,set3",
-				BinList:          "bin1,bin2,bin3",
-				NoRecords:        true,
-				NoIndexes:        true,
-				NoUDFs:           true,
-				RecordsPerSecond: 1000,
-				Parallel:         4,
-				Bandwidth:        50,
-			},
+			Namespace:          "test-namespace",
+			SetList:            "set1,set2,set3",
+			BinList:            "bin1,bin2,bin3",
+			NoRecords:          true,
+			NoIndexes:          true,
+			NoUDFs:             true,
+			RecordsPerSecond:   1000,
+			Parallel:           4,
+			Bandwidth:          50,
 			ExtraTTL:           3600,
 			IgnoreRecordError:  true,
 			DisableBatchWrites: true,
@@ -248,17 +235,15 @@ func TestNewRestoreConfig_AllFlags(t *testing.T) {
 			RetryMaxAttempts:   5,
 			ValidateOnly:       false,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{
-				Mode:  "zstd",
-				Level: 3,
-			},
-			Encryption: &models.Encryption{
-				Mode: "aes256",
-			},
-			SecretAgent: &models.SecretAgent{
-				Address: "localhost",
-			},
+		Compression: &models.Compression{
+			Mode:  "zstd",
+			Level: 3,
+		},
+		Encryption: &models.Encryption{
+			Mode: "aes256",
+		},
+		SecretAgent: &models.SecretAgent{
+			Address: "localhost",
 		},
 	}
 
@@ -301,11 +286,9 @@ func TestNewRestoreConfig_ValidateOnly(t *testing.T) {
 		Restore: &models.Restore{
 			ValidateOnly: true,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -457,12 +440,10 @@ func TestNewRestoreConfig_NilValues(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
-		Restore: &models.Restore{},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: nil,
-			Encryption:  nil,
-			SecretAgent: nil,
-		},
+		Restore:     &models.Restore{},
+		Compression: nil,
+		Encryption:  nil,
+		SecretAgent: nil,
 	}
 
 	// Should not panic.
@@ -476,16 +457,12 @@ func TestNewRestoreConfig_EmptyStringLists(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &RestoreServiceConfig{
 		Restore: &models.Restore{
-			Common: models.Common{
-				SetList: "",
-				BinList: "",
-			},
+			SetList: "",
+			BinList: "",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
 	config := NewRestoreConfig(serviceConfig, logger)
@@ -539,11 +516,9 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 					RetryMultiplier:   tt.multiplier,
 					RetryMaxAttempts:  tt.maxRetries,
 				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					Compression: &models.Compression{},
-					Encryption:  &models.Encryption{},
-					SecretAgent: &models.SecretAgent{},
-				},
+				Compression: &models.Compression{},
+				Encryption:  &models.Encryption{},
+				SecretAgent: &models.SecretAgent{},
 			}
 
 			config := NewRestoreConfig(serviceConfig, logger)
@@ -561,23 +536,19 @@ func TestMapRestoreConfig_Success(t *testing.T) {
 	t.Parallel()
 	params := &RestoreServiceConfig{
 		Restore: &models.Restore{
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2",
-				BinList:          "bin1,bin2",
-				NoRecords:        true,
-				NoIndexes:        false,
-				RecordsPerSecond: 1000,
-				Bandwidth:        10,
-				Parallel:         5,
-			},
+			Namespace:        "test-namespace",
+			SetList:          "set1,set2",
+			BinList:          "bin1,bin2",
+			NoRecords:        true,
+			NoIndexes:        false,
+			RecordsPerSecond: 1000,
+			Bandwidth:        10,
+			Parallel:         5,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 	logger := logging.NewDefaultLogger()
 	config := NewRestoreConfig(params, logger)
@@ -612,16 +583,12 @@ func TestMapRestoreConfig_PartialConfig(t *testing.T) {
 			DisableBatchWrites: true,
 			BatchSize:          1000,
 			MaxAsyncBatches:    5,
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:          "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	logger := logging.NewDefaultLogger()

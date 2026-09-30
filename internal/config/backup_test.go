@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +17,9 @@ package config
 import (
 	"log/slog"
 	"os"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +60,6 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 	clientConfig := &client.AerospikeConfig{}
 	clientPolicy := &models.ClientPolicy{}
 	backupModel := &models.Backup{}
-	backupXDRModel := &models.BackupXDR{}
 	compression := &models.Compression{}
 	encryption := &models.Encryption{}
 	secretAgent := &models.SecretAgent{}
@@ -72,12 +68,11 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 	azureBlob := &models.AzureBlob{}
 	local := &models.Local{}
 
-	config, _ := NewBackupServiceConfig(
+	config := NewBackupServiceConfig(
 		app,
 		clientConfig,
 		clientPolicy,
 		backupModel,
-		backupXDRModel,
 		compression,
 		encryption,
 		secretAgent,
@@ -89,58 +84,6 @@ func TestNewBackupServiceConfig_WithoutConfigFile(t *testing.T) {
 
 	err := config.Validate()
 	require.ErrorContains(t, err, "must specify either estimate, output-file or directory")
-}
-
-func TestBackupServiceConfig_IsXDR(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		config   *BackupServiceConfig
-		expected bool
-	}{
-		{
-			name: "both nil",
-			config: &BackupServiceConfig{
-				BackupXDR: nil,
-				Backup:    nil,
-			},
-			expected: false,
-		},
-		{
-			name: "backupXDR not nil, backup nil",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{},
-				Backup:    nil,
-			},
-			expected: true,
-		},
-		{
-			name: "backupXDR nil, backup not nil",
-			config: &BackupServiceConfig{
-				BackupXDR: nil,
-				Backup:    &models.Backup{},
-			},
-			expected: false,
-		},
-		{
-			name: "both not nil",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{},
-				Backup:    &models.Backup{},
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := tt.config.IsXDR()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }
 
 func TestBackupServiceConfig_IsContinue(t *testing.T) {
@@ -188,97 +131,7 @@ func TestBackupServiceConfig_IsContinue(t *testing.T) {
 	}
 }
 
-func TestBackupServiceConfig_IsStopXDR(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		config   *BackupServiceConfig
-		expected bool
-	}{
-		{
-			name: "backupXDR is nil",
-			config: &BackupServiceConfig{
-				BackupXDR: nil,
-			},
-			expected: false,
-		},
-		{
-			name: "stopXDR is false",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					StopXDR: false,
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "stopXDR is true",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					StopXDR: true,
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := tt.config.IsStopXDR()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestBackupServiceConfig_IsUnblockMRT(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		config   *BackupServiceConfig
-		expected bool
-	}{
-		{
-			name: "backupXDR is nil",
-			config: &BackupServiceConfig{
-				BackupXDR: nil,
-			},
-			expected: false,
-		},
-		{
-			name: "unblockMRT is false",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					UnblockMRT: false,
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "unblockMRT is true",
-			config: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					UnblockMRT: true,
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := tt.config.IsUnblockMRT()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestBackupServiceConfig_SkipWriterInit(t *testing.T) {
+func TestBackupServiceConfig_ShouldInitWriter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -317,7 +170,7 @@ func TestBackupServiceConfig_SkipWriterInit(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := tt.config.SkipWriterInit()
+			result := tt.config.ShouldInitWriter()
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -377,66 +230,31 @@ func TestBackupServiceConfig_IsStdout(t *testing.T) {
 	}
 }
 
-func TestNewBackupConfigs_RegularBackup(t *testing.T) {
+func TestNewBackupConfig_RegularBackup(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Namespace: "test-namespace",
-				Parallel:  4,
-			},
+			Namespace: "test-namespace",
+			Parallel:  4,
 		},
-		BackupXDR: nil,
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, xdrConfig, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
-	assert.Nil(t, xdrConfig)
 	assert.Equal(t, "test-namespace", backupConfig.Namespace)
 	assert.Equal(t, 4, backupConfig.ParallelRead)
 	assert.Equal(t, 4, backupConfig.ParallelWrite)
 	assert.True(t, backupConfig.MetricsEnabled)
 }
 
-func TestNewBackupConfigs_XDRBackup(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	serviceConfig := &BackupServiceConfig{
-		Backup: nil,
-		BackupXDR: &models.BackupXDR{
-			Namespace:     "test-namespace",
-			ParallelWrite: 4,
-		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
-	}
-
-	backupConfig, xdrConfig, err := NewBackupConfigs(serviceConfig, logger)
-
-	require.NoError(t, err)
-	assert.NotNil(t, backupConfig)
-	assert.NotNil(t, xdrConfig)
-	assert.True(t, backupConfig.NoRecords)
-	assert.Equal(t, "test-namespace", backupConfig.Namespace)
-	assert.Equal(t, "test-namespace", xdrConfig.Namespace)
-	assert.Equal(t, 4, xdrConfig.ParallelWrite)
-	assert.True(t, xdrConfig.MetricsEnabled)
-}
-
-func TestNewBackupConfigs_BandwidthConversion(t *testing.T) {
+func TestNewBackupConfig_BandwidthConversion(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -473,18 +291,14 @@ func TestNewBackupConfigs_BandwidthConversion(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			serviceConfig := &BackupServiceConfig{
 				Backup: &models.Backup{
-					Common: models.Common{
-						Bandwidth: tt.bandwidthMiB,
-					},
+					Bandwidth: tt.bandwidthMiB,
 				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					Compression: &models.Compression{},
-					Encryption:  &models.Encryption{},
-					SecretAgent: &models.SecretAgent{},
-				},
+				Compression: &models.Compression{},
+				Encryption:  &models.Encryption{},
+				SecretAgent: &models.SecretAgent{},
 			}
 
-			backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+			backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 			require.NoError(t, err)
 			assert.NotNil(t, backupConfig)
@@ -493,7 +307,7 @@ func TestNewBackupConfigs_BandwidthConversion(t *testing.T) {
 	}
 }
 
-func TestNewBackupConfigs_StdoutConfiguration(t *testing.T) {
+func TestNewBackupConfig_StdoutConfiguration(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -501,18 +315,14 @@ func TestNewBackupConfigs_StdoutConfiguration(t *testing.T) {
 		Backup: &models.Backup{
 			OutputFile: StdPlaceholder,
 			FileLimit:  1000,
-			Common: models.Common{
-				Parallel: 8,
-			},
+			Parallel:   8,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -521,24 +331,22 @@ func TestNewBackupConfigs_StdoutConfiguration(t *testing.T) {
 	assert.Equal(t, 8, backupConfig.ParallelRead)
 }
 
-func TestNewBackupConfigs_AllFlags(t *testing.T) {
+func TestNewBackupConfig_AllFlags(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2,set3",
-				BinList:          "bin1,bin2,bin3",
-				NoRecords:        true,
-				NoIndexes:        true,
-				NoUDFs:           true,
-				RecordsPerSecond: 5000,
-				Parallel:         8,
-				Bandwidth:        100,
-				Directory:        "/tmp",
-			},
+			Namespace:        "test-namespace",
+			SetList:          "set1,set2,set3",
+			BinList:          "bin1,bin2,bin3",
+			NoRecords:        true,
+			NoIndexes:        true,
+			NoUDFs:           true,
+			RecordsPerSecond: 5000,
+			Parallel:         8,
+			Bandwidth:        100,
+			Directory:        "/tmp",
 			FileLimit:        100,
 			Compact:          true,
 			NoTTLOnly:        true,
@@ -546,19 +354,17 @@ func TestNewBackupConfigs_AllFlags(t *testing.T) {
 			StateFileDst:     "state.asb",
 			ScanPageSize:     10000,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{
-				Mode:  "zstd",
-				Level: 3,
-			},
-			Encryption: &models.Encryption{
-				Mode: "aes256",
-			},
-			SecretAgent: &models.SecretAgent{},
+		Compression: &models.Compression{
+			Mode:  "zstd",
+			Level: 3,
 		},
+		Encryption: &models.Encryption{
+			Mode: "aes256",
+		},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -585,26 +391,22 @@ func TestNewBackupConfigs_AllFlags(t *testing.T) {
 	assert.True(t, backupConfig.MetricsEnabled)
 }
 
-func TestNewBackupConfigs_ContinueBackup(t *testing.T) {
+func TestNewBackupConfig_ContinueBackup(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				Directory: "/backup/dir",
-			},
+			Directory:    "/backup/dir",
 			Continue:     "continue.state",
 			ScanPageSize: 5000,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -613,7 +415,7 @@ func TestNewBackupConfigs_ContinueBackup(t *testing.T) {
 	assert.Equal(t, int64(5000), backupConfig.PageSize)
 }
 
-func TestNewBackupConfigs_ParallelNodes(t *testing.T) {
+func TestNewBackupConfig_ParallelNodes(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -621,14 +423,12 @@ func TestNewBackupConfigs_ParallelNodes(t *testing.T) {
 		Backup: &models.Backup{
 			NodeList: "node1,node2,node3",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -638,7 +438,7 @@ func TestNewBackupConfigs_ParallelNodes(t *testing.T) {
 	assert.Contains(t, backupConfig.NodeList, "node3")
 }
 
-func TestNewBackupConfigs_RackList(t *testing.T) {
+func TestNewBackupConfig_RackList(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -646,14 +446,12 @@ func TestNewBackupConfigs_RackList(t *testing.T) {
 		Backup: &models.Backup{
 			RackList: "1,2,3",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -661,7 +459,7 @@ func TestNewBackupConfigs_RackList(t *testing.T) {
 	assert.Len(t, backupConfig.RackList, 3)
 }
 
-func TestNewBackupConfigs_InvalidRackList(t *testing.T) {
+func TestNewBackupConfig_InvalidRackList(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -669,19 +467,17 @@ func TestNewBackupConfigs_InvalidRackList(t *testing.T) {
 		Backup: &models.Backup{
 			RackList: "invalid,rack,list",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	_, _, err := NewBackupConfigs(serviceConfig, logger)
+	_, err := NewBackupConfig(serviceConfig, logger)
 
 	assert.Error(t, err)
 }
 
-func TestNewBackupConfigs_ModifiedBefore(t *testing.T) {
+func TestNewBackupConfig_ModifiedBefore(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -689,21 +485,19 @@ func TestNewBackupConfigs_ModifiedBefore(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedBefore: "2024-01-01",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
 	assert.NotNil(t, backupConfig.ModBefore)
 }
 
-func TestNewBackupConfigs_ModifiedAfter(t *testing.T) {
+func TestNewBackupConfig_ModifiedAfter(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -711,21 +505,19 @@ func TestNewBackupConfigs_ModifiedAfter(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedAfter: "2024-01-01",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
 	assert.NotNil(t, backupConfig.ModAfter)
 }
 
-func TestNewBackupConfigs_InvalidModifiedBefore(t *testing.T) {
+func TestNewBackupConfig_InvalidModifiedBefore(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -733,20 +525,18 @@ func TestNewBackupConfigs_InvalidModifiedBefore(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedBefore: "invalid-date",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	_, _, err := NewBackupConfigs(serviceConfig, logger)
+	_, err := NewBackupConfig(serviceConfig, logger)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified before date")
 }
 
-func TestNewBackupConfigs_InvalidModifiedAfter(t *testing.T) {
+func TestNewBackupConfig_InvalidModifiedAfter(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -754,140 +544,33 @@ func TestNewBackupConfigs_InvalidModifiedAfter(t *testing.T) {
 		Backup: &models.Backup{
 			ModifiedAfter: "invalid-date",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	_, _, err := NewBackupConfigs(serviceConfig, logger)
+	_, err := NewBackupConfig(serviceConfig, logger)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse modified after date")
 }
 
-func TestNewBackupConfigs_XDRDefaultParallelWrite(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	serviceConfig := &BackupServiceConfig{
-		Backup: nil,
-		BackupXDR: &models.BackupXDR{
-			Namespace:     "test-namespace",
-			ParallelWrite: 0,
-		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
-	}
-
-	_, xdrConfig, err := NewBackupConfigs(serviceConfig, logger)
-
-	require.NoError(t, err)
-	assert.NotNil(t, xdrConfig)
-	assert.Equal(t, runtime.NumCPU(), xdrConfig.ParallelWrite)
-}
-
-func TestNewBackupConfigs_XDRTimeouts(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	serviceConfig := &BackupServiceConfig{
-		Backup: nil,
-		BackupXDR: &models.BackupXDR{
-			Namespace:                    "test-namespace",
-			ReadTimeoutMilliseconds:      5000,
-			WriteTimeoutMilliseconds:     3000,
-			InfoPolingPeriodMilliseconds: 1000,
-			StartTimeoutMilliseconds:     10000,
-		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
-	}
-
-	_, xdrConfig, err := NewBackupConfigs(serviceConfig, logger)
-
-	require.NoError(t, err)
-	assert.NotNil(t, xdrConfig)
-	assert.Equal(t, 5000*time.Millisecond, xdrConfig.ReadTimeout)
-	assert.Equal(t, 3000*time.Millisecond, xdrConfig.WriteTimeout)
-	assert.Equal(t, 1000*time.Millisecond, xdrConfig.InfoPollingPeriod)
-	assert.Equal(t, 10000*time.Millisecond, xdrConfig.StartTimeout)
-}
-
-func TestNewBackupConfigs_XDRAllFields(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	serviceConfig := &BackupServiceConfig{
-		Backup: nil,
-		BackupXDR: &models.BackupXDR{
-			Namespace:       "test-namespace",
-			ParallelWrite:   8,
-			FileLimit:       200,
-			DC:              "dc1",
-			LocalAddress:    "127.0.0.1",
-			LocalPort:       3000,
-			Rewind:          "2024-01-01",
-			ResultQueueSize: 100,
-			AckQueueSize:    50,
-			MaxConnections:  64,
-			MaxThroughput:   1000,
-			Forward:         true,
-		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
-	}
-
-	_, xdrConfig, err := NewBackupConfigs(serviceConfig, logger)
-
-	require.NoError(t, err)
-	assert.NotNil(t, xdrConfig)
-	assert.Equal(t, "test-namespace", xdrConfig.Namespace)
-	assert.Equal(t, 8, xdrConfig.ParallelWrite)
-	assert.Equal(t, uint64(200*1024*1024), xdrConfig.FileLimit)
-	assert.Equal(t, "dc1", xdrConfig.DC)
-	assert.Equal(t, "127.0.0.1", xdrConfig.LocalAddress)
-	assert.Equal(t, 3000, xdrConfig.LocalPort)
-	assert.Equal(t, "2024-01-01", xdrConfig.Rewind)
-	assert.Equal(t, 100, xdrConfig.ResultQueueSize)
-	assert.Equal(t, 50, xdrConfig.AckQueueSize)
-	assert.Equal(t, 64, xdrConfig.MaxConnections)
-	assert.Equal(t, 1000, xdrConfig.MaxThroughput)
-	assert.True(t, xdrConfig.Forward)
-	assert.True(t, xdrConfig.MetricsEnabled)
-	assert.Equal(t, backup.EncoderTypeASBX, xdrConfig.EncoderType)
-}
-
-func TestNewBackupConfigs_EmptyStringLists(t *testing.T) {
+func TestNewBackupConfig_EmptyStringLists(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				SetList: "",
-				BinList: "",
-			},
+			SetList:  "",
+			BinList:  "",
 			NodeList: "",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: &models.Compression{},
-			Encryption:  &models.Encryption{},
-			SecretAgent: &models.SecretAgent{},
-		},
+		Compression: &models.Compression{},
+		Encryption:  &models.Encryption{},
+		SecretAgent: &models.SecretAgent{},
 	}
 
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -895,21 +578,19 @@ func TestNewBackupConfigs_EmptyStringLists(t *testing.T) {
 	assert.Nil(t, backupConfig.BinList)
 }
 
-func TestNewBackupConfigs_NilValues(t *testing.T) {
+func TestNewBackupConfig_NilValues(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	serviceConfig := &BackupServiceConfig{
-		Backup: &models.Backup{},
-		ServiceConfigCommon: ServiceConfigCommon{
-			Compression: nil,
-			Encryption:  nil,
-			SecretAgent: nil,
-		},
+		Backup:      &models.Backup{},
+		Compression: nil,
+		Encryption:  nil,
+		SecretAgent: nil,
 	}
 
 	// Should not panic.
-	backupConfig, _, err := NewBackupConfigs(serviceConfig, logger)
+	backupConfig, err := NewBackupConfig(serviceConfig, logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, backupConfig)
@@ -935,23 +616,19 @@ func TestMapBackupConfig_Success(t *testing.T) {
 			Compact:          true,
 			NodeList:         "node1,node2",
 			NoTTLOnly:        true,
-			Common: models.Common{
-				Namespace:        "test-namespace",
-				SetList:          "set1,set2",
-				BinList:          "bin1,bin2",
-				NoRecords:        true,
-				NoIndexes:        false,
-				RecordsPerSecond: 1000,
-				Bandwidth:        10,
-				Parallel:         5,
-			},
+			Namespace:        "test-namespace",
+			SetList:          "set1,set2",
+			BinList:          "bin1,bin2",
+			NoRecords:        true,
+			NoIndexes:        false,
+			RecordsPerSecond: 1000,
+			Bandwidth:        10,
+			Parallel:         5,
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -999,16 +676,12 @@ func TestMapBackupConfig_InvalidModifiedBefore(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			ModifiedBefore: "invalid-date",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:      "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -1023,16 +696,12 @@ func TestMapBackupConfig_InvalidModifiedAfter(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			ModifiedAfter: "invalid-date",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:     "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
@@ -1047,195 +716,16 @@ func TestMapBackupConfig_InvalidExpression(t *testing.T) {
 	params := &BackupServiceConfig{
 		Backup: &models.Backup{
 			FilterExpression: "invalid-exp",
-			Common: models.Common{
-				Namespace: "test-namespace",
-			},
+			Namespace:        "test-namespace",
 		},
-		ServiceConfigCommon: ServiceConfigCommon{
-			App:         &models.App{},
-			Compression: testCompression(),
-			Encryption:  testEncryption(),
-			SecretAgent: testSecretAgent(),
-		},
+		App:         &models.App{},
+		Compression: testCompression(),
+		Encryption:  testEncryption(),
+		SecretAgent: testSecretAgent(),
 	}
 
 	config, err := newBackupConfig(params)
 	require.Error(t, err)
 	assert.Nil(t, config)
 	assert.Contains(t, err.Error(), "failed to parse filter expression")
-}
-
-func TestMapBackupXDRConfig(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		params *BackupServiceConfig
-		verify func(*testing.T, *backup.ConfigBackupXDR)
-	}{
-		{
-			name: "Default configuration",
-			params: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					DC:            "dc1",
-					LocalAddress:  "127.0.0.1",
-					LocalPort:     3004,
-					Namespace:     "test",
-					MaxThroughput: 10,
-				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					App:         &models.App{},
-					Compression: testCompression(),
-					Encryption:  testEncryption(),
-					SecretAgent: testSecretAgent(),
-				},
-			},
-			verify: func(t *testing.T, cfg *backup.ConfigBackupXDR) {
-				t.Helper()
-				assert.Equal(t, "dc1", cfg.DC)
-				assert.Equal(t, "127.0.0.1", cfg.LocalAddress)
-				assert.Equal(t, 3004, cfg.LocalPort)
-				assert.Equal(t, "test", cfg.Namespace)
-				assert.Equal(t, backup.EncoderTypeASBX, cfg.EncoderType)
-
-				// Verify compression policy
-				assert.NotNil(t, cfg.CompressionPolicy)
-				assert.Equal(t, "ZSTD", cfg.CompressionPolicy.Mode)
-				assert.Equal(t, 3, cfg.CompressionPolicy.Level)
-
-				// Verify encryption policy
-				assert.NotNil(t, cfg.EncryptionPolicy)
-				assert.Equal(t, "AES256", cfg.EncryptionPolicy.Mode)
-				assert.Equal(t, "/path/to/keyfile", *cfg.EncryptionPolicy.KeyFile)
-
-				// Verify secret agent config
-				assert.NotNil(t, cfg.SecretAgentConfig)
-				assert.Equal(t, "localhost", *cfg.SecretAgentConfig.Address)
-				assert.Equal(t, "tcp", *cfg.SecretAgentConfig.ConnectionType)
-				assert.Equal(t, 8080, *cfg.SecretAgentConfig.Port)
-
-				assert.Equal(t, 10, cfg.MaxThroughput)
-			},
-		},
-		{
-			name: "Full configuration with all parameters",
-			params: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					DC:                           "dc1",
-					LocalAddress:                 "127.0.0.1",
-					LocalPort:                    3004,
-					Namespace:                    "test",
-					FileLimit:                    1000,
-					ParallelWrite:                4,
-					Rewind:                       "1h",
-					ReadTimeoutMilliseconds:      5000,
-					WriteTimeoutMilliseconds:     5000,
-					ResultQueueSize:              1000,
-					AckQueueSize:                 1000,
-					MaxConnections:               100,
-					InfoPolingPeriodMilliseconds: 1000,
-				},
-				ServiceConfigCommon: ServiceConfigCommon{
-					App:         &models.App{},
-					Compression: testCompression(),
-					Encryption:  testEncryption(),
-					SecretAgent: testSecretAgent(),
-				},
-			},
-			verify: func(t *testing.T, cfg *backup.ConfigBackupXDR) {
-				t.Helper()
-				assert.Equal(t, uint64(1000*1024*1024), cfg.FileLimit)
-				assert.Equal(t, 4, cfg.ParallelWrite)
-				assert.Equal(t, "1h", cfg.Rewind)
-				assert.Equal(t, time.Duration(5000)*time.Millisecond, cfg.ReadTimeout)
-				assert.Equal(t, time.Duration(5000)*time.Millisecond, cfg.WriteTimeout)
-				assert.Equal(t, 1000, cfg.ResultQueueSize)
-				assert.Equal(t, 1000, cfg.AckQueueSize)
-				assert.Equal(t, 100, cfg.MaxConnections)
-				assert.Equal(t, time.Duration(1000)*time.Millisecond, cfg.InfoPollingPeriod)
-			},
-		},
-		{
-			name: "Configuration without optional policies",
-			params: &BackupServiceConfig{
-				BackupXDR: &models.BackupXDR{
-					DC:           "dc1",
-					LocalAddress: "127.0.0.1",
-					LocalPort:    3004,
-					Namespace:    "test",
-				},
-				// No compression, encryption or secret agent
-				ServiceConfigCommon: ServiceConfigCommon{
-					App: &models.App{},
-				},
-			},
-			verify: func(t *testing.T, cfg *backup.ConfigBackupXDR) {
-				t.Helper()
-				assert.Nil(t, cfg.CompressionPolicy)
-				assert.Nil(t, cfg.EncryptionPolicy)
-				assert.Nil(t, cfg.SecretAgentConfig)
-			},
-		},
-		{
-			name: "Configuration with only required fields",
-			params: &BackupServiceConfig{
-				ServiceConfigCommon: ServiceConfigCommon{
-					App: &models.App{},
-				},
-				BackupXDR: &models.BackupXDR{
-					DC:        "dc1",
-					Namespace: "test",
-				},
-			},
-			verify: func(t *testing.T, cfg *backup.ConfigBackupXDR) {
-				t.Helper()
-				assert.Equal(t, "dc1", cfg.DC)
-				assert.Equal(t, "test", cfg.Namespace)
-				assert.Empty(t, cfg.LocalAddress)
-				assert.Equal(t, 0, cfg.LocalPort)
-				assert.Equal(t, backup.EncoderTypeASBX, cfg.EncoderType)
-			},
-		},
-		{
-			name: "Configuration with zero values",
-			params: &BackupServiceConfig{
-				ServiceConfigCommon: ServiceConfigCommon{
-					App: &models.App{},
-				},
-				BackupXDR: &models.BackupXDR{
-					DC:                           "dc1",
-					Namespace:                    "test",
-					FileLimit:                    0,
-					ParallelWrite:                0,
-					ReadTimeoutMilliseconds:      0,
-					WriteTimeoutMilliseconds:     0,
-					ResultQueueSize:              0,
-					AckQueueSize:                 0,
-					MaxConnections:               0,
-					InfoPolingPeriodMilliseconds: 0,
-				},
-			},
-			verify: func(t *testing.T, cfg *backup.ConfigBackupXDR) {
-				t.Helper()
-				assert.Equal(t, uint64(0), cfg.FileLimit)
-				assert.Equal(t, runtime.NumCPU(), cfg.ParallelWrite)
-				assert.Equal(t, time.Duration(0), cfg.ReadTimeout)
-				assert.Equal(t, time.Duration(0), cfg.WriteTimeout)
-				assert.Equal(t, 0, cfg.ResultQueueSize)
-				assert.Equal(t, 0, cfg.AckQueueSize)
-				assert.Equal(t, 0, cfg.MaxConnections)
-				assert.Equal(t, time.Duration(0), cfg.InfoPollingPeriod)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			config := newBackupXDRConfig(tt.params)
-			assert.NotNil(t, config)
-			tt.verify(t, config)
-		})
-	}
 }

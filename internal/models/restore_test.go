@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,21 +36,15 @@ func TestValidateRestore(t *testing.T) {
 			name: "Valid restore configuration with input file",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
-				Common: Common{
-					Namespace: testNamespace,
-				},
+				Namespace: testNamespace,
 			},
 			wantErr: false,
 		},
 		{
 			name: "Valid restore configuration with directory",
 			restore: &Restore{
-				Mode: RestoreModeASB,
-				Common: Common{
-					Directory: "restore-dir",
-					Namespace: "test",
-				},
+				Directory: "restore-dir",
+				Namespace: "test",
 			},
 			wantErr: false,
 		},
@@ -59,32 +53,14 @@ func TestValidateRestore(t *testing.T) {
 			restore: &Restore{
 				DirectoryList:   "dir1,dir2",
 				ParentDirectory: "parent",
-				Mode:            RestoreModeASB,
-				Common: Common{
-					Namespace: "test",
-				},
+				Namespace:       "test",
 			},
 			wantErr: false,
 		},
 		{
-			name: "Invalid restore mode",
-			restore: &Restore{
-				InputFile: "backup.asb",
-				Mode:      "invalid-mode",
-				Common: Common{
-					Namespace: "test",
-				},
-			},
-			wantErr: true,
-			errMsg:  "invalid restore mode: invalid-mode",
-		},
-		{
 			name: "Missing input source",
 			restore: &Restore{
-				Mode: RestoreModeASB,
-				Common: Common{
-					Namespace: "test",
-				},
+				Namespace: "test",
 			},
 			wantErr: true,
 			errMsg:  "input file or directory required",
@@ -93,20 +69,26 @@ func TestValidateRestore(t *testing.T) {
 			name: "Invalid restore restore - both input file and directory",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
-				Common: Common{
-					Directory: "restore-dir",
-					Namespace: "test",
-				},
+				Directory: "restore-dir",
+				Namespace: "test",
 			},
 			wantErr: true,
 			errMsg:  "only one of directory and input-file may be configured at the same time",
 		},
 		{
+			name: "Invalid restore - parent directory without directory list",
+			restore: &Restore{
+				ParentDirectory: "parent",
+				Directory:       "restore-dir",
+				Namespace:       "test",
+			},
+			wantErr: true,
+			errMsg:  "parent-directory requires directory-list to be set",
+		},
+		{
 			name: "Invalid common restore - missing namespace",
 			restore: &Restore{
 				InputFile: "backup.asb",
-				Mode:      RestoreModeASB,
 			},
 			wantErr: true,
 			errMsg:  "namespace is required",
@@ -114,13 +96,10 @@ func TestValidateRestore(t *testing.T) {
 		{
 			name: "Replace and uniq are mutually exclusive",
 			restore: &Restore{
-				Mode: RestoreModeASB,
-				Common: Common{
-					Directory: "restore-dir",
-					Namespace: "test",
-				},
-				Replace: true,
-				Uniq:    true,
+				Directory: "restore-dir",
+				Namespace: "test",
+				Replace:   true,
+				Uniq:      true,
 			},
 			wantErr: true,
 			errMsg:  "replace and unique are mutually exclusive",
@@ -149,9 +128,7 @@ func TestMapRestoreNamespace_SuccessSingleNamespace(t *testing.T) {
 	t.Parallel()
 
 	restore := &Restore{
-		Common: Common{
-			Namespace: "source-ns",
-		},
+		Namespace: "source-ns",
 	}
 
 	result := restore.NamespaceConfig()
@@ -164,9 +141,7 @@ func TestMapRestoreNamespace_SuccessDifferentNamespaces(t *testing.T) {
 	t.Parallel()
 
 	restore := &Restore{
-		Common: Common{
-			Namespace: "source-ns,destination-ns",
-		},
+		Namespace: "source-ns,destination-ns",
 	}
 
 	result := restore.NamespaceConfig()
@@ -179,9 +154,7 @@ func TestMapRestoreNamespace_InvalidNamespace(t *testing.T) {
 	t.Parallel()
 
 	restore := &Restore{
-		Common: Common{
-			Namespace: "source-ns,destination-ns,extra-ns",
-		},
+		Namespace: "source-ns,destination-ns,extra-ns",
 	}
 
 	result := restore.NamespaceConfig()
@@ -192,12 +165,10 @@ func TestMapWritePolicy_Success(t *testing.T) {
 	t.Parallel()
 
 	restoreModel := &Restore{
-		Replace: true,
-		Uniq:    false,
-		Common: Common{
-			TotalTimeout:  5000,
-			SocketTimeout: 1500,
-		},
+		Replace:       true,
+		Uniq:          false,
+		TotalTimeout:  5000,
+		SocketTimeout: 1500,
 	}
 
 	writePolicy := restoreModel.WritePolicy()

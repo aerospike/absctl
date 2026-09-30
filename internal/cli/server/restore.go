@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,98 +15,186 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
-	"github.com/aerospike/absctl/internal/server"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
-// restoreFlags groups the operation-specific flag holders shared by all
-// "server restore" subcommands.
-type restoreFlags struct {
-	aws *flags.AwsS3
+// restoreCtx groups the storage flag holders shared by the "server restore"
+// subcommands.
+type restoreCtx struct {
+	start    *flags.ServerRestore
+	prepare  *flags.ServerRestorePrepare
+	progress *flags.ServerRestoreProgress
+	abort    *flags.ServerRestoreAbort
+	// objectStorageS3 is the restore read source (start, prepare).
+	objectStorageS3 *flags.ObjectStorageS3
 }
 
-func newRestoreCmd(rc *runCtx) *cobra.Command {
-	rf := &restoreFlags{
-		aws: flags.NewAwsS3(flags.OperationRestore),
+func newRestoreCtx() *restoreCtx {
+	return &restoreCtx{
+		start:           flags.NewServerRestore(),
+		prepare:         flags.NewServerRestorePrepare(),
+		progress:        flags.NewServerRestoreProgress(),
+		abort:           flags.NewServerRestoreAbort(),
+		objectStorageS3: flags.NewObjectStorageS3(),
 	}
+}
+
+// restoreServiceConfig builds the service config for one snapshot-restore
+// subcommand. When --config is set, the YAML file is the single source of
+// truth and every other flag is ignored, matching the scan commands; only the
+// section belonging to command is populated, so the unrelated ones are skipped
+// during validation. Otherwise fromFlags supplies the flag-based config.
+func restoreServiceConfig(
+	ctx context.Context,
+	rc *runCtx,
+	command config.ServerRestoreCommand,
+	fromFlags func() *config.ServerRestoreServiceConfig,
+) (*config.ServerRestoreServiceConfig, error) {
+	path := rc.app.GetApp().ConfigFilePath
+	if path == "" {
+		return fromFlags(), nil
+	}
+
+	cfg, err := config.DecodeServerRestoreServiceConfig(ctx, path, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+	}
+
+	return cfg, nil
+}
+
+// NewRestoreCmd builds the top-level "restore" command for server-integrated
+// restores.
+func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
+	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
+
+	rf := newRestoreCtx()
 
 	cmd := &cobra.Command{
-		Use:   useRestore,
-		Short: "Manage server-integrated restores",
+		Use:   UseSnapshotRestore,
+		Short: ShortRestore,
 	}
 
-	awsFlagSet := rf.aws.NewFlagSet()
-
-	cmd.PersistentFlags().AddFlagSet(awsFlagSet)
-
-	cmd.AddCommand(newRestoreStartCmd(rc, rf))
-	cmd.AddCommand(newRestorePrepareCmd(rc, rf))
-
-	setParentHelp(cmd,
-		awsFlagSet,
+	cmd.AddCommand(
+		newRestoreStartCmd(rc, rf),
+		newRestorePrepareCmd(rc, rf),
+		newRestoreProgressCmd(rc, rf),
+		newRestoreAbortCmd(rc, rf),
 	)
+
+	applyRootPersistent(cmd, rc)
+	setHelpRestore(cmd)
 
 	return cmd
 }
 
-//nolint:dupl // Sub commands are intentionally symmetric per operation.
-func newRestoreStartCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+func setHelpRestore(cmd *cobra.Command) {
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		printHelpHeader(flags.SectionTextUsageRestoreServer)
+		printCommands(c)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	startFlags := rf.start.NewFlagSet()
+	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   useStart,
-		Short: "Start a server-integrated restore",
-		Long:  "Start a server-integrated restore on the Aerospike cluster.",
+		Use:   UseStart,
+		Short: ShortRestoreStart,
+		Long:  LongRestoreStart,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
-
-			if err := cfg.Validate(false); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandStart,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						rf.start.GetServerRestore(),
+						nil, nil, nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
 			}
 
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := newService(rc, nil, cfg)
 			if err != nil {
-				return fmt.Errorf("server side restore initialization failed: %w", err)
+				return fmt.Errorf("failed to initialize server integrated restore: %w", err)
 			}
 
 			if err := svc.StartRestore(cmd.Context()); err != nil {
-				return fmt.Errorf("server side restore failed: %w", err)
+				return fmt.Errorf("failed to start server integrated restore: %w", err)
 			}
 
 			return nil
 		},
 	}
 
-	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(startFlags)
+	cmd.Flags().AddFlagSet(objectStoreFlagSet)
+
+	setHelpRestoreStart(cmd, startFlags, objectStoreFlagSet, common)
 
 	return cmd
 }
 
-//nolint:dupl // Sub commands look the same.
-func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
-	ssbFlags := flags.NewServerBackup()
-	ssbFlagSet := ssbFlags.NewRestoreStartFlagSet()
+func setHelpRestoreStart(
+	cmd *cobra.Command,
+	startFS, objectStoreFS *pflag.FlagSet,
+	common commonFlagSets,
+) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreStart,
+		Sections: restoreStartHelpSections(startFS, objectStoreFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	prepareFlags := rf.prepare.NewFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   usePrepare,
-		Short: "Prepare a server-integrated restore",
-		Long:  "Prepare a server-integrated restore on the Aerospike cluster.",
+		Use:   UsePrepare,
+		Short: ShortRestorePrepare,
+		Long:  LongRestorePrepare,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := newIntegratedRestoreConfig(rc, rf, ssbFlags)
-
-			if err := cfg.Validate(false); err != nil {
-				return fmt.Errorf("failed to validate config: %w", err)
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandPrepare,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil,
+						rf.prepare.GetServerRestorePrepare(),
+						nil, nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
 			}
 
-			svc, err := server.NewService(cmd.Context(), cfg, rc.logger)
+			svc, err := newService(rc, nil, cfg)
 			if err != nil {
-				return fmt.Errorf("server side restore initialization failed: %w", err)
+				return err
 			}
 
 			if err := svc.PrepareRestore(cmd.Context()); err != nil {
@@ -117,25 +205,142 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreFlags) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().AddFlagSet(ssbFlagSet)
-	setLeafHelp(cmd)
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(prepareFlags)
+
+	setHelpRestorePrepare(cmd, prepareFlags, common)
 
 	return cmd
 }
 
-// newIntegratedRestoreConfig builds the IntegratedServiceConfig from the flag
-// objects collected on the parent commands.
-func newIntegratedRestoreConfig(
-	rc *runCtx,
-	rf *restoreFlags,
-	ssbFlags *flags.ServerBackup,
-) *config.ServerBackupServiceConfig {
-	return config.NewServerBackupServiceConfig(
-		ssbFlags.GetIntegratedBackup(),
-		rc.app.GetApp(),
-		rc.aerospike.NewAerospikeConfig(),
-		rc.clientPolicy.GetClientPolicy(),
-		rc.secretAgent.GetSecretAgent(),
-		rf.aws.GetAwsS3(),
-	)
+func setHelpRestorePrepare(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestorePrepare,
+		Sections: restorePrepareHelpSections(prepareFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	progressFlags := rf.progress.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseProgress,
+		Short: ShortRestoreProgress,
+		Long:  LongRestoreProgress,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandProgress,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil, nil,
+						rf.progress.GetServerRestoreProgress(),
+						nil,
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						rf.objectStorageS3.ToAwsS3(),
+					)
+				})
+			if err != nil {
+				return err
+			}
+
+			svc, err := newService(rc, nil, cfg)
+			if err != nil {
+				return err
+			}
+
+			if err := svc.RestoreProgress(cmd.Context()); err != nil {
+				return fmt.Errorf("server side restore preparation failed: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(progressFlags)
+
+	setHelpRestoreProgress(cmd, progressFlags, common)
+
+	return cmd
+}
+
+func setHelpRestoreProgress(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreProgress,
+		Sections: restoreProgressHelpSections(prepareFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
+}
+
+func newRestoreAbortCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	abortFlags := rf.abort.NewFlagSet()
+
+	cmd := &cobra.Command{
+		Use:   UseAbort,
+		Short: ShortRestoreAbort,
+		Long:  LongRestoreAbort,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandAbort,
+				func() *config.ServerRestoreServiceConfig {
+					return config.NewServerRestoreServiceConfig(
+						nil, nil, nil,
+						rf.abort.GetServerRestoreAbort(),
+						rc.app.GetApp(),
+						rc.aerospike.NewAerospikeConfig(),
+						rc.clientPolicy.GetClientPolicy(),
+						rc.secretAgent.GetSecretAgent(),
+						nil,
+					)
+				})
+			if err != nil {
+				return err
+			}
+
+			svc, err := newService(rc, nil, cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize restore abort: %w", err)
+			}
+
+			// The service already reports what went wrong and for which job, so the
+			// error is passed through instead of being prefixed again.
+			if err := svc.AbortRestore(cmd.Context()); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	common := applyCommon(cmd, rc)
+	cmd.Flags().AddFlagSet(abortFlags)
+
+	setHelpRestoreAbort(cmd, abortFlags, common)
+
+	return cmd
+}
+
+func setHelpRestoreAbort(cmd *cobra.Command, abortFS *pflag.FlagSet, common commonFlagSets) {
+	doc := SubcommandDoc{
+		Usage:    flags.SectionTextUsageRestoreAbort,
+		Sections: restoreAbortHelpSections(abortFS, common),
+	}
+
+	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
+		printSubcommandHelp(doc)
+	})
+
+	usageFromHelp(cmd)
 }

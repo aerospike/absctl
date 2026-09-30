@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package logging
 
 import (
 	"bytes"
-	"log/slog"
 	"testing"
 )
 
@@ -37,18 +36,6 @@ func captureOutput(t *testing.T, fn func()) string {
 	})
 
 	fn()
-
-	return buf.String()
-}
-
-// captureLogJSON runs fn with a JSON slog logger writing into a buffer and
-// returns the resulting JSON line(s). Use it to verify log emissions that
-// PrintXxx functions produce when toLog is true.
-func captureLogJSON(_ *testing.T, fn func(logger *slog.Logger)) string {
-	buf := &bytes.Buffer{}
-	logger := slog.New(slog.NewJSONHandler(buf, nil))
-
-	fn(logger)
 
 	return buf.String()
 }

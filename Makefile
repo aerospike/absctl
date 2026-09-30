@@ -10,6 +10,7 @@ LICENSE = "Apache License 2.0"
 
 GO ?= $(shell which go || echo "/usr/local/go/bin/go")
 NFPM ?= $(shell which nfpm)
+COMPOSE ?= docker compose -f docker-compose.test.yaml
 OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 REGISTRY ?= "docker.io"
@@ -48,10 +49,50 @@ PREFIX ?= /usr
 BINDIR ?= $(PREFIX)/bin
 DESTDIR ?=
 
+# --- macOS installer -------------------------------------------------------
+# The mac artifact is a .pkg rather than a bare binary or a tarball because
+# Apple can only notarize and staple a container format: shared-workflows'
+# sign-mac-artifacts codesigns a loose Mach-O but only sends .pkg/.dmg through
+# notarytool, so anything else reaches users with a Gatekeeper prompt.
+MAC_ARCH ?= $(ARCH)
+MAC_PKG_ID ?= com.aerospike.absctl
+# /usr/local/bin, not $(BINDIR): /usr/bin is SIP-protected and pkgbuild payloads
+# cannot be installed there.
+MAC_INSTALL_LOCATION ?= /usr/local/bin
+# pkgbuild --version wants a bare dotted number; our tags carry a leading "v".
+MAC_PKG_VERSION = $(patsubst v%,%,$(VERSION))
+# Shipping name follows the other mac tools (aerospike-asadm-<version>-macos-<arch>.pkg),
+# which spell amd64 the Apple way.
+MAC_PKG_ARCH = $(if $(filter amd64,$(MAC_ARCH)),x86_64,$(MAC_ARCH))
+MAC_PKG_ROOT = $(TARGET_DIR)/macos-pkgroot-$(MAC_ARCH)
+MAC_PKG = $(TARGET_DIR)/$(NAME)-$(MAC_PKG_VERSION)-macos-$(MAC_PKG_ARCH).pkg
 
+
+# Runs the unit tests. Tests that need a live Aerospike cluster, MinIO, Azurite
+# or fake-gcs-server skip themselves; use test-integration to include them.
 .PHONY: test
 test:
 	$(GOTEST) -parallel $(NPROC) -timeout=5m -count=1 -v ./...
+
+# Runs the full suite, including the tests that need external services.
+# Start them first with test-env-up.
+.PHONY: test-integration
+test-integration:
+	ABSCTL_INTEGRATION=1 $(GOTEST) -parallel $(NPROC) -timeout=5m -count=1 -v ./...
+
+# Starts the services the integration tests need and waits until they are ready.
+# minio-init is run separately because `up --wait` treats a container that exits,
+# even successfully, as a failure.
+.PHONY: test-env-up
+test-env-up:
+	$(COMPOSE) up -d --wait
+	$(COMPOSE) run --rm minio-init
+
+# --profile init is needed for down to also clean up the minio-init container,
+# since compose ignores services whose profile is not active.
+.PHONY: test-env-down
+test-env-down:
+	$(COMPOSE) --profile init down -v
 
 .PHONY: coverage
 coverage:
@@ -148,6 +189,31 @@ packages: buildx
 			--target $(TARGET_DIR); \
 			done; \
   	done; \
+
+# Builds the unsigned macOS installer for one architecture. Apple signing,
+# notarization and stapling happen in CI (pre-release.yml -> sign-mac-packages),
+# so what this produces is installable locally but not yet Gatekeeper-clean.
+.PHONY: macos-pkg
+macos-pkg:
+	@[ "$$(uname -s)" = Darwin ] || { echo "macos-pkg needs pkgbuild, which only ships with macOS" >&2; exit 1; }
+	$(MAKE) build OS=darwin ARCH=$(MAC_ARCH)
+	rm -rf "$(MAC_PKG_ROOT)"
+	install -d "$(MAC_PKG_ROOT)$(MAC_INSTALL_LOCATION)"
+	install -m 755 "$(TARGET_DIR)/$(BINARY_NAME)_darwin_$(MAC_ARCH)" "$(MAC_PKG_ROOT)$(MAC_INSTALL_LOCATION)/$(BINARY_NAME)"
+# Keep stray extended attributes (notably com.apple.quarantine, picked up by anything
+# that was downloaded rather than built here) out of the payload. Not cosmetic:
+# pkgbuild serializes xattrs as AppleDouble members and a quarantine flag that
+# survives into the installed tree makes Gatekeeper reject the binary.
+# com.apple.provenance is a restricted xattr and stays; it is metadata-only and the
+# installer reassembles it onto the file rather than writing a "._absctl" sibling.
+	xattr -cr "$(MAC_PKG_ROOT)"
+	pkgbuild --root "$(MAC_PKG_ROOT)" \
+		--identifier $(MAC_PKG_ID) \
+		--version $(MAC_PKG_VERSION) \
+		--install-location / \
+		"$(MAC_PKG)"
+	rm -rf "$(MAC_PKG_ROOT)"
+	@echo "Built $(MAC_PKG)"
 
 .PHONY: checksums
 checksums:

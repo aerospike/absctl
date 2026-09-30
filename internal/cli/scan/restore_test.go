@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,13 +27,13 @@ func TestNewRestoreCmd_Structure(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, shared := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, shared := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	require.NotNil(t, cmd)
 	require.NotNil(t, shared)
-	assert.Equal(t, "restore", cmd.Use)
-	assert.Equal(t, restoreWelcomeMessageShort, cmd.Short)
-	assert.Equal(t, restoreWelcomeMessage, cmd.Long)
+	assert.Equal(t, UseRestore, cmd.Use)
+	assert.Equal(t, ShortRestore, cmd.Short)
+	assert.Equal(t, LongRestore, cmd.Long)
 	assert.True(t, cmd.SilenceUsage)
 	assert.NotNil(t, cmd.RunE)
 }
@@ -42,7 +42,7 @@ func TestNewRestoreCmd_HasExpectedFlags(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	expectedFlags := []string{
 		"namespace",
@@ -65,7 +65,7 @@ func TestNewRestoreCmd_NiceFlagDeprecated(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	cmd, _ := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	cmd, _ := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	nice := cmd.Flag("nice")
 	require.NotNil(t, nice, "deprecated --nice flag must still be registered")
@@ -92,7 +92,7 @@ func TestNewRestoreHelpFunction_Output(t *testing.T) {
 	t.Parallel()
 
 	rootFlags := flags.NewRoot()
-	_, shared := NewRestoreCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
+	_, shared := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
 	appFS := shared.App.NewFlagSet()
 
@@ -103,6 +103,6 @@ func TestNewRestoreHelpFunction_Output(t *testing.T) {
 	)
 
 	out := captureStdout(t, helpFn)
-	assert.Contains(t, out, restoreWelcomeMessage)
-	assert.Contains(t, out, strings.Repeat("-", len(restoreWelcomeMessage)))
+	assert.Contains(t, out, textWelcomeMessageRestore)
+	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageRestore)))
 }

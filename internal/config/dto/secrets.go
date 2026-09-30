@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,11 +53,8 @@ func collectSecretableFields(
 
 	// AWS S3.
 	if s3 != nil {
-		fields = append(fields,
-			s3.BucketName, s3.Region, s3.Profile,
-			s3.EndpointOverride, s3.AccessKeyID, s3.SecretAccessKey,
-			s3.StorageClass, s3.AccessTier,
-		)
+		fields = append(fields, s3.secretableFields()...)
+		fields = append(fields, s3.StorageClass, s3.AccessTier)
 	}
 
 	// Azure Blob.
@@ -73,6 +70,31 @@ func collectSecretableFields(
 	// GCP Storage.
 	if gcp != nil {
 		fields = append(fields, gcp.KeyFile, gcp.BucketName, gcp.EndpointOverride)
+	}
+
+	return fields
+}
+
+// collectServerSecretableFields gathers the secret-agent-resolvable fields of a
+// server-integrated (snapshot) config. These commands have no client-side
+// encryption and use the reduced S3 schema, so the set is narrower than
+// collectSecretableFields.
+func collectServerSecretableFields(cluster *Cluster, s3 *ObjectStorageS3) []*string {
+	var fields []*string
+
+	if cluster != nil {
+		fields = append(fields, cluster.User, cluster.Password)
+
+		if cluster.TLS != nil {
+			fields = append(fields,
+				cluster.TLS.CaFile, cluster.TLS.CertFile,
+				cluster.TLS.KeyFile, cluster.TLS.KeyFilePassword,
+			)
+		}
+	}
+
+	if s3 != nil {
+		fields = append(fields, s3.secretableFields()...)
 	}
 
 	return fields
