@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -66,8 +66,8 @@ jobs:
             echo "No valid version found"
             exit 1
           fi
-          
-          
+
+
           BUNDLE_NAME="${GITHUB_REPOSITORY##*/}"
           echo "Setting BUNDLE_NAME=$BUNDLE_NAME"
           echo "BUNDLE_NAME=$BUNDLE_NAME" >> $GITHUB_ENV
@@ -114,16 +114,16 @@ jobs:
           JF_PROJECT: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
           JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         run: |
-          
+
           TARGET_ENV="PROD"
-          
+
           echo "Starting promotion of release bundle to JFrog $TARGET_ENV environment..."
-          
+
           jfrog release-bundle-promote "$BUNDLE_NAME" "$BUNDLE_VERSION" \
             --signing-key="aerospike" \
             --project="$JF_PROJECT" \
             "$TARGET_ENV"
-          
+
           if [ $? -ne 0 ]; then
             echo "Failed to promote $BUNDLE_NAME:$BUNDLE_VERSION release bundle to $TARGET_ENV"
             exit 1
@@ -143,7 +143,7 @@ jobs:
           IMAGE="$JF_REGISTRY/$IMAGE_REPO/$IMAGE_NAME:$IMAGE_TAG"
           MAX_RETRIES=4
           RETRY_DELAY=15
-          
+
           echo "Checking for Docker image: $IMAGE"
           for i in $(seq 1 $MAX_RETRIES); do
             if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
@@ -157,7 +157,7 @@ jobs:
               fi
             fi
           done
-          
+
           echo "Image $IMAGE not found after $MAX_RETRIES attempts over $((MAX_RETRIES * RETRY_DELAY)) seconds."
           exit 1
 
@@ -171,7 +171,7 @@ jobs:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
           ORG: "aerospike"
         run: |
-          
+
           SOURCE_IMAGE="$JF_REGISTRY/$IMAGE_REPO/$IMAGE_NAME:$IMAGE_TAG"
           TARGET_IMAGE_VERSION_TAG="$ORG/$IMAGE_NAME:$IMAGE_TAG"
           TARGET_IMAGE_LATEST_TAG="$ORG/$IMAGE_NAME:latest"
@@ -201,7 +201,7 @@ jobs:
             echo "No valid commit hash for a tag"
             exit 1
           fi
-          
+
           echo "Setting TAG_COMMIT=$TAG_COMMIT"
           echo "TAG_COMMIT=$TAG_COMMIT" >> $GITHUB_ENV
 
@@ -233,33 +233,33 @@ jobs:
           echo "Starting DockerHub push from OCI Archive..."
           echo "Image Name : $IMAGE_NAME"
           echo "Image Tag  : $IMAGE_TAG"
-          
+
           echo "Verifying OCI archive content at $OCI_ARCHIVE_PATH"
           if [ ! -f "$OCI_ARCHIVE_PATH" ]; then
             echo "Archive file not found: $OCI_ARCHIVE_PATH"
             exit 1
           fi
-          
+
           echo "Listing contents of OCI archive:"
           tar -tf "$OCI_ARCHIVE_PATH" || {
             echo "Failed to list archive contents."
             exit 1
           }
-          
+
           echo "Initiating image push via skopeo to DockerHub..."
-          
+
           for TAG in "$IMAGE_TAG" "latest"; do
             echo "Pushing tag: $TAG"
             skopeo copy --all \
               --dest-creds $DOCKER_USERNAME:$DOCKER_PASSWORD \
               oci-archive:$OCI_ARCHIVE_PATH \
               docker://docker.io/aerospike/$IMAGE_NAME:$TAG
-          
+
             SKOPEO_STATUS=$?
             if [ $SKOPEO_STATUS -ne 0 ]; then
               echo "skopeo copy for tag '$TAG' failed with exit code $SKOPEO_STATUS"
               exit $SKOPEO_STATUS
             fi
           done
-          
+
           echo "OCI archive successfully pushed to DockerHub with both '$IMAGE_TAG' and 'latest' tags."

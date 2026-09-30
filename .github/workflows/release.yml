@@ -1,5 +1,15 @@
 name: Publish Aerospike Backup Tools Release (Shared Workflows)
 
+# PLACEHOLDER -- this file exists only to register the workflow path
+# `.github/workflows/release.yml` on the default branch. GitHub exposes a
+# `workflow_dispatch` trigger only for workflows present on the default branch; once this
+# path is registered, dispatching it with a different `ref` runs THAT ref's version of the
+# file. That is how the real release workflow on `switch-to-sharedworkflows` can be
+# rehearsed before it is merged.
+#
+# The `version` input below mirrors the real workflow's input so a dispatch carrying it is
+# accepted. Replace this whole file with the real release workflow when that branch merges.
+
 on:
   workflow_dispatch:
     inputs:
