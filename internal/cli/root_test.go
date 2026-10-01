@@ -58,6 +58,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 func subcommandNames(cmd *cobra.Command) []string {
 	names := make([]string, 0, len(cmd.Commands()))
+	// test
 	for _, sub := range cmd.Commands() {
 		names = append(names, sub.Name())
 	}
