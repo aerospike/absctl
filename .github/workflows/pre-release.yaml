@@ -498,7 +498,7 @@ jobs:
           egress-policy: audit
 
       - name: Set up Docker Buildx
-        uses: step-security/setup-buildx-action@6997872a55d77391e51b87609556578131f44402 # v4.1.0
+        uses: step-security/setup-buildx-action@e50058a0fcd8d1a7d626c905502d010a468bf238 # v4.4.1
       - name: Checkout Code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

@@ -31,7 +31,7 @@ jobs:
           JF_PROJECT: ${{ vars.JFROG_CLI_BUILD_PROJECT }}
 
       - name: Set up Docker Buildx
-        uses: step-security/setup-buildx-action@6997872a55d77391e51b87609556578131f44402 # v4.1.0
+        uses: step-security/setup-buildx-action@e50058a0fcd8d1a7d626c905502d010a468bf238 # v4.4.1
 
       - name: Login to DockerHub
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
