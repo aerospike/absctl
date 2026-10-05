@@ -22,26 +22,103 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testRestoreNamespace = "test-ns"
+	testRestoreBackupID  = "backup-job-1"
+	testRestoreJobID     = "restore-job-1"
+	flagRestoreNamespace = "--namespace"
+	flagRestoreJobID     = "--job-id"
+)
+
 func TestServerRestore_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
-	restore := NewServerRestore()
-	flagSet := restore.NewFlagSet()
+	const (
+		testStorage           = "aws-s3"
+		testPath              = "backups/daily"
+		testSetList           = "set1,set2"
+		testFilterExp         = "kwGTUQKkYmluMQE="
+		testParallel          = "16"
+		testRecordsPerSecond  = "1000"
+		testMaxInflight       = "500"
+		testRetryBaseInterval = "2000"
+		testRetryMultiplier   = "1.5"
+		testRetryMaxAttempts  = "3"
+	)
 
-	args := []string{
-		"--namespace", "test-ns",
-		"--object-storage-type", "aws-s3",
-		"--backup-id", "backup-job-1",
+	want := &models.ServerRestore{
+		Namespace:         testRestoreNamespace,
+		StorageType:       testStorage,
+		BackupID:          testRestoreBackupID,
+		JobID:             testRestoreJobID,
+		Path:              testPath,
+		SetList:           testSetList,
+		FilterExp:         testFilterExp,
+		NoIndexes:         true,
+		NoUDFs:            true,
+		FuzzyRestore:      true,
+		AllowUnhosted:     true,
+		Parallel:          16,
+		RecordsPerSecond:  1000,
+		MaxInflight:       500,
+		RetryBaseInterval: 2000,
+		RetryMultiplier:   1.5,
+		RetryMaxAttempts:  3,
+		IgnoreRecordError: true,
 	}
 
-	err := flagSet.Parse(args)
-	require.NoError(t, err)
+	commonArgs := []string{
+		"--object-storage-type", testStorage,
+		"--backup-id", testRestoreBackupID,
+		flagRestoreJobID, testRestoreJobID,
+		"--path", testPath,
+		"--filter-exp", testFilterExp,
+		"--no-udfs",
+		"--fuzzy-restore",
+		"--allow-unhosted",
+		"--max-inflight", testMaxInflight,
+		"--retry-base-interval", testRetryBaseInterval,
+		"--retry-multiplier", testRetryMultiplier,
+		"--retry-max-attempts", testRetryMaxAttempts,
+		"--ignore-record-error",
+	}
 
-	result := restore.GetServerRestore()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "long flags",
+			args: append([]string{
+				flagRestoreNamespace, testRestoreNamespace,
+				"--set-list", testSetList,
+				"--no-indexes",
+				"--parallel", testParallel,
+				"--records-per-second", testRecordsPerSecond,
+			}, commonArgs...),
+		},
+		{
+			name: "short flags",
+			args: append([]string{
+				"-n", testRestoreNamespace,
+				"-s", testSetList,
+				"-I",
+				"-w", testParallel,
+				"-L", testRecordsPerSecond,
+			}, commonArgs...),
+		},
+	}
 
-	assert.Equal(t, "test-ns", result.Namespace)
-	assert.Equal(t, "aws-s3", result.StorageType)
-	assert.Equal(t, "backup-job-1", result.JobID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			restore := NewServerRestore()
+			require.NoError(t, restore.NewFlagSet().Parse(tt.args))
+
+			assert.Equal(t, want, restore.GetServerRestore())
+		})
+	}
 }
 
 func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
@@ -57,53 +134,82 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 
 	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
 	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
-	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.BackupID)
+	assert.Equal(t, models.DefaultServerRestoreJobID, result.JobID)
 	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
+	assert.Equal(t, models.DefaultCommonSetList, result.SetList)
+	assert.Equal(t, models.DefaultServerFilterExp, result.FilterExp)
+	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
+	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, result.FuzzyRestore)
+	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, result.AllowUnhosted)
+	assert.Equal(t, models.DefaultServerRestoreParallel, result.Parallel)
+	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, result.RecordsPerSecond)
+	assert.Equal(t, models.DefaultServerRestoreMaxInflight, result.MaxInflight)
+	assert.Equal(t, models.DefaultServerRestoreRetryBaseInterval, result.RetryBaseInterval)
+	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, result.RetryMultiplier, 0)
+	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, result.RetryMaxAttempts)
+	assert.Equal(t, models.DefaultServerRestoreIgnoreRecordError, result.IgnoreRecordError)
 }
 
 func TestServerRestorePrepare_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
-	prepare := NewServerRestorePrepare()
-	flagSet := prepare.NewFlagSet()
-
-	args := []string{
-		"--namespace", "test-ns",
-		"--backup-id", "backup-job-1",
+	tests := []struct {
+		name               string
+		args               []string
+		wantNamespace      string
+		wantJobID          string
+		wantHydrateReplica bool
+	}{
+		{
+			name:               "no arguments keeps the defaults",
+			args:               []string{},
+			wantNamespace:      models.DefaultCommonNamespace,
+			wantJobID:          models.DefaultServerRestoreJobID,
+			wantHydrateReplica: models.DefaultServerRestoreHydrateReplica,
+		},
+		{
+			name:               "long flags",
+			args:               []string{flagRestoreNamespace, testRestoreNamespace, flagRestoreJobID, testRestoreJobID},
+			wantNamespace:      testRestoreNamespace,
+			wantJobID:          testRestoreJobID,
+			wantHydrateReplica: models.DefaultServerRestoreHydrateReplica,
+		},
+		{
+			name:               "short namespace flag",
+			args:               []string{"-n", testRestoreNamespace},
+			wantNamespace:      testRestoreNamespace,
+			wantJobID:          models.DefaultServerRestoreJobID,
+			wantHydrateReplica: models.DefaultServerRestoreHydrateReplica,
+		},
+		{
+			name:               "master only",
+			args:               []string{"--hydrate-replica=false"},
+			wantNamespace:      models.DefaultCommonNamespace,
+			wantJobID:          models.DefaultServerRestoreJobID,
+			wantHydrateReplica: false,
+		},
 	}
 
-	err := flagSet.Parse(args)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	result := prepare.GetServerRestorePrepare()
+			prepare := NewServerRestorePrepare()
+			require.NoError(t, prepare.NewFlagSet().Parse(tt.args))
 
-	assert.Equal(t, "test-ns", result.Namespace)
-	assert.Equal(t, "backup-job-1", result.JobID)
-}
+			result := prepare.GetServerRestorePrepare()
 
-func TestServerRestorePrepare_NewFlagSet_DefaultValues(t *testing.T) {
-	t.Parallel()
-
-	prepare := NewServerRestorePrepare()
-	flagSet := prepare.NewFlagSet()
-
-	err := flagSet.Parse([]string{})
-	require.NoError(t, err)
-
-	result := prepare.GetServerRestorePrepare()
-
-	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
-	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+			assert.Equal(t, tt.wantNamespace, result.Namespace)
+			assert.Equal(t, tt.wantJobID, result.JobID)
+			assert.Equal(t, tt.wantHydrateReplica, result.HydrateReplica)
+		})
+	}
 }
 
 func TestServerRestoreAbort_NewFlagSet(t *testing.T) {
 	t.Parallel()
-
-	const (
-		testNamespace = "test-ns"
-		testJobID     = "backup-job-1"
-	)
 
 	tests := []struct {
 		name          string
@@ -115,26 +221,26 @@ func TestServerRestoreAbort_NewFlagSet(t *testing.T) {
 			name:          "no arguments keeps the defaults",
 			args:          []string{},
 			wantNamespace: models.DefaultCommonNamespace,
-			wantJobID:     models.DefaultServerBackupJobID,
+			wantJobID:     models.DefaultServerRestoreJobID,
 		},
 		{
 			// A restore job is named by both, so both flags have to reach the model.
-			name:          "namespace and backup id",
-			args:          []string{"--namespace", testNamespace, "--backup-id", testJobID},
-			wantNamespace: testNamespace,
-			wantJobID:     testJobID,
+			name:          "namespace and job id",
+			args:          []string{flagRestoreNamespace, testRestoreNamespace, flagRestoreJobID, testRestoreJobID},
+			wantNamespace: testRestoreNamespace,
+			wantJobID:     testRestoreJobID,
 		},
 		{
 			name:          "only namespace",
-			args:          []string{"--namespace", testNamespace},
-			wantNamespace: testNamespace,
-			wantJobID:     models.DefaultServerBackupJobID,
+			args:          []string{"-n", testRestoreNamespace},
+			wantNamespace: testRestoreNamespace,
+			wantJobID:     models.DefaultServerRestoreJobID,
 		},
 		{
-			name:          "only backup id",
-			args:          []string{"--backup-id", testJobID},
+			name:          "only job id",
+			args:          []string{flagRestoreJobID, testRestoreJobID},
 			wantNamespace: models.DefaultCommonNamespace,
-			wantJobID:     testJobID,
+			wantJobID:     testRestoreJobID,
 		},
 	}
 
@@ -151,6 +257,32 @@ func TestServerRestoreAbort_NewFlagSet(t *testing.T) {
 
 			assert.Equal(t, tt.wantNamespace, result.Namespace)
 			assert.Equal(t, tt.wantJobID, result.JobID)
+		})
+	}
+}
+
+func TestServerRestore_NewFlagSet_BackupIDRemoved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		parse func([]string) error
+	}{
+		{
+			name:  "prepare",
+			parse: NewServerRestorePrepare().NewFlagSet().Parse,
+		},
+		{
+			name:  "abort",
+			parse: NewServerRestoreAbort().NewFlagSet().Parse,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Error(t, tt.parse([]string{"--backup-id", testRestoreBackupID}))
 		})
 	}
 }

@@ -43,10 +43,12 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupObjectStorageType, derefString(backup.StorageType))
 	assert.Equal(t, models.DefaultBackupModifiedAfter, derefString(backup.ModifiedAfter))
 	assert.Equal(t, models.DefaultBackupModifiedBefore, derefString(backup.ModifiedBefore))
+	assert.Equal(t, models.DefaultServerBackupPath, derefString(backup.Path))
 	assert.Empty(t, backup.SetList)
+	assert.Empty(t, backup.BinList)
+	assert.Equal(t, models.DefaultServerFilterExp, derefString(backup.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
-	assert.Equal(t, models.DefaultBackupEnableChangeStream, derefBool(backup.EnableChangeStream))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 
 	list := defaultServerBackupListConfig()
@@ -54,10 +56,12 @@ func TestDefaultServerBackupSections(t *testing.T) {
 
 	validate := defaultServerBackupValidateConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(validate.JobID))
+	assert.Equal(t, models.DefaultServerBackupPath, derefString(validate.Path))
 	assert.Equal(t, models.DefaultServerBackupValidateSampleSize, derefInt(validate.SampleSize))
 
 	progress := defaultServerBackupProgressConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(progress.JobID))
+	assert.Equal(t, models.DefaultServerBackupPath, derefString(progress.Path))
 	assert.Equal(t, models.DefaultServerBackupProgressWatch, derefBool(progress.Watch))
 
 	abort := defaultServerBackupAbortConfig()
@@ -73,28 +77,31 @@ func TestServerBackupToModels(t *testing.T) {
 	modifiedBefore := "2026-02-01_00:00:00"
 	noIndexes := true
 	noUDFs := true
-	changeStream := true
 	async := true
 	path := "some/prefix"
+	backupPath := "backups/daily"
+	filterExp := "kwGTUQKkYmluMQE="
 	jobID := "bkp-1"
 	sampleSize := 500
 	watch := true
 
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
-			Namespace:          &namespace,
-			StorageType:        &storageType,
-			ModifiedAfter:      &modifiedAfter,
-			ModifiedBefore:     &modifiedBefore,
-			SetList:            []string{"set1", "set2"},
-			NoIndexes:          &noIndexes,
-			NoUDFs:             &noUDFs,
-			EnableChangeStream: &changeStream,
-			Async:              &async,
+			Namespace:      &namespace,
+			StorageType:    &storageType,
+			Path:           &backupPath,
+			ModifiedAfter:  &modifiedAfter,
+			ModifiedBefore: &modifiedBefore,
+			SetList:        []string{"set1", "set2"},
+			BinList:        []string{"bin1", "bin2"},
+			FilterExp:      &filterExp,
+			NoIndexes:      &noIndexes,
+			NoUDFs:         &noUDFs,
+			Async:          &async,
 		},
 		List:     ServerBackupListConfig{Path: &path},
-		Validate: ServerBackupValidateConfig{JobID: &jobID, SampleSize: &sampleSize},
-		Progress: ServerBackupProgressConfig{JobID: &jobID, Watch: &watch},
+		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
+		Progress: ServerBackupProgressConfig{JobID: &jobID, Path: &backupPath, Watch: &watch},
 		Abort:    ServerBackupAbortConfig{JobID: &jobID},
 	}
 
@@ -106,9 +113,11 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.Equal(t, modifiedBefore, start.ModifiedBefore)
 	// The model carries a comma separated list, the YAML a sequence.
 	assert.Equal(t, "set1,set2", start.SetList)
+	assert.Equal(t, "bin1,bin2", start.BinList)
+	assert.Equal(t, backupPath, start.Path)
+	assert.Equal(t, filterExp, start.FilterExp)
 	assert.True(t, start.NoIndexes)
 	assert.True(t, start.NoUDFs)
-	assert.True(t, start.EnableChangeStream)
 	assert.True(t, start.Async)
 
 	list := backup.ToModelServerBackupList()
@@ -118,11 +127,13 @@ func TestServerBackupToModels(t *testing.T) {
 	validate := backup.ToModelServerBackupValidate()
 	require.NotNil(t, validate)
 	assert.Equal(t, jobID, validate.JobID)
+	assert.Equal(t, backupPath, validate.Path)
 	assert.Equal(t, sampleSize, validate.SampleSize)
 
 	progress := backup.ToModelServerBackupProgress()
 	require.NotNil(t, progress)
 	assert.Equal(t, jobID, progress.JobID)
+	assert.Equal(t, backupPath, progress.Path)
 	assert.True(t, progress.Watch)
 
 	abort := backup.ToModelServerBackupAbort()

@@ -22,6 +22,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testBackupJobID     = "backup-job-1"
+	testBackupKeyPrefix = "backups/daily"
+)
+
 func TestServerBackup_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
@@ -81,11 +86,82 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
 	assert.Equal(t, models.DefaultBackupModifiedAfter, result.ModifiedAfter)
 	assert.Equal(t, models.DefaultBackupModifiedBefore, result.ModifiedBefore)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 	assert.Equal(t, models.DefaultCommonSetList, result.SetList)
+	assert.Equal(t, models.DefaultCommonBinList, result.BinList)
+	assert.Equal(t, models.DefaultServerFilterExp, result.FilterExp)
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
-	assert.Equal(t, models.DefaultBackupEnableChangeStream, result.EnableChangeStream)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+}
+
+func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testNamespace = "test-ns"
+		testPath      = "backups/daily"
+		testSetList   = "set1,set2"
+		testBinList   = "bin1,bin2"
+		testFilterExp = "kwGTUQKkYmluMQE="
+	)
+
+	want := &models.ServerBackup{
+		Namespace: testNamespace,
+		Path:      testPath,
+		SetList:   testSetList,
+		BinList:   testBinList,
+		FilterExp: testFilterExp,
+		NoIndexes: true,
+	}
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "long flags",
+			args: []string{
+				"--namespace", testNamespace,
+				"--path", testPath,
+				"--set-list", testSetList,
+				"--bin-list", testBinList,
+				"--filter-exp", testFilterExp,
+				"--no-indexes",
+			},
+		},
+		{
+			// The short flags match the ones of the scan backup, so that the same
+			// muscle memory works for both.
+			name: "short flags",
+			args: []string{
+				"-n", testNamespace,
+				"--path", testPath,
+				"-s", testSetList,
+				"-B", testBinList,
+				"-f", testFilterExp,
+				"-I",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			backup := NewServerBackup()
+			require.NoError(t, backup.NewFlagSet().Parse(tt.args))
+
+			assert.Equal(t, want, backup.GetServerBackup())
+		})
+	}
+}
+
+func TestServerBackup_NewFlagSet_EnableChangeStreamRemoved(t *testing.T) {
+	t.Parallel()
+
+	err := NewServerBackup().NewFlagSet().Parse([]string{"--enable-change-stream"})
+	require.Error(t, err)
 }
 
 func TestServerBackup_NewFlagSet_Async(t *testing.T) {
@@ -136,7 +212,8 @@ func TestServerBackupValidate_NewFlagSet(t *testing.T) {
 
 	args := []string{
 		"--sample-size", "5000",
-		"--backup-id", "backup-job-1",
+		"--backup-id", testBackupJobID,
+		"--path", testBackupKeyPrefix,
 	}
 
 	err := flagSet.Parse(args)
@@ -145,7 +222,8 @@ func TestServerBackupValidate_NewFlagSet(t *testing.T) {
 	result := validate.GetServerBackupValidate()
 
 	assert.Equal(t, 5000, result.SampleSize)
-	assert.Equal(t, "backup-job-1", result.JobID)
+	assert.Equal(t, testBackupJobID, result.JobID)
+	assert.Equal(t, testBackupKeyPrefix, result.Path)
 }
 
 func TestServerBackupValidate_NewFlagSet_DefaultValues(t *testing.T) {
@@ -161,6 +239,7 @@ func TestServerBackupValidate_NewFlagSet_DefaultValues(t *testing.T) {
 
 	assert.Equal(t, models.DefaultServerBackupValidateSampleSize, result.SampleSize)
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 }
 
 func TestServerBackupProgress_NewFlagSet(t *testing.T) {
@@ -170,7 +249,8 @@ func TestServerBackupProgress_NewFlagSet(t *testing.T) {
 	flagSet := progress.NewFlagSet()
 
 	args := []string{
-		"--backup-id", "backup-job-1",
+		"--backup-id", testBackupJobID,
+		"--path", testBackupKeyPrefix,
 		"--watch",
 	}
 
@@ -179,7 +259,8 @@ func TestServerBackupProgress_NewFlagSet(t *testing.T) {
 
 	result := progress.GetServerBackupProgress()
 
-	assert.Equal(t, "backup-job-1", result.JobID)
+	assert.Equal(t, testBackupJobID, result.JobID)
+	assert.Equal(t, testBackupKeyPrefix, result.Path)
 	assert.True(t, result.Watch)
 }
 
@@ -189,12 +270,12 @@ func TestServerBackupAbort_NewFlagSet(t *testing.T) {
 	abort := NewServerBackupAbort()
 	flagSet := abort.NewFlagSet()
 
-	err := flagSet.Parse([]string{"--backup-id", "backup-job-1"})
+	err := flagSet.Parse([]string{"--backup-id", testBackupJobID})
 	require.NoError(t, err)
 
 	result := abort.GetServerBackupAbort()
 
-	assert.Equal(t, "backup-job-1", result.JobID)
+	assert.Equal(t, testBackupJobID, result.JobID)
 }
 
 func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
@@ -223,5 +304,6 @@ func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {
 	result := progress.GetServerBackupProgress()
 
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 	assert.Equal(t, models.DefaultServerBackupProgressWatch, result.Watch)
 }

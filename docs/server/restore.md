@@ -67,11 +67,27 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-      --namespace string             The namespace to restore.
+  -n, --namespace string             The namespace to restore.
       --object-storage-type string   Type of object storage. Example: aws-s3
-      --backup-id string             Job id used for restore.
-      --path string                  Path to restore from.
-      --fuzzy-restore                Fuzzy restore.
+      --backup-id string             Id of the backup to restore from.
+      --job-id string                Id of the restore job. A cold restore must use the job id passed to
+                                     the restore preparation. If empty, the backup id is used.
+      --path string                  Key prefix in the bucket the backup was written under.
+  -s, --set-list string              Only restore the given sets from the backup.
+                                     Default: restore all sets.
+      --filter-exp string            Base64 encoded filter expression. Cold restore only.
+  -I, --no-indexes                   Don't restore any secondary indexes.
+      --no-udfs                      Don't restore any UDFs.
+      --fuzzy-restore                Restore by writing records into the live namespace instead of
+                                     the cold partition hydration. The flags below apply to a fuzzy restore only.
+      --allow-unhosted               Allow the restore even if the principal does not host the namespace.
+  -w, --parallel int                 Number of worker threads, from 1 to 128. (default 8)
+  -L, --records-per-second int       Limit total written records per second. If 0, no limit is applied.
+      --max-inflight int             Maximum number of concurrent writes, up to 100000. (default 200)
+      --retry-base-interval int      Base delay before a retry (in ms). (default 1000)
+      --retry-multiplier float       Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
+      --retry-max-attempts int       Maximum number of attempts per record. (default 5)
+      --ignore-record-error          Continue the restore on errors of individual records.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -165,8 +181,10 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-      --namespace string   The namespace to restore.
-      --backup-id string   Job id used for restore.
+  -n, --namespace string   The namespace to restore.
+      --job-id string      Id of the restore job. The restore must be started with the same job id.
+      --hydrate-replica    Restore all replicas. If false, only the master is restored and
+                           the other replicas are filled by migrations. (default true)
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -248,7 +266,7 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-      --namespace string   The namespace to check progress.
+  -n, --namespace string   The namespace to check progress.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -334,8 +352,8 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-      --namespace string   The namespace the restore is aborted for.
-      --backup-id string   Job id of the restore to abort.
+  -n, --namespace string   The namespace the restore is aborted for.
+      --job-id string      Id of the restore job to abort.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -434,25 +452,57 @@ restore:
   namespace: source-ns1
   # Type of object storage. Example: aws-s3
   object-storage-type: aws-s3
-  # Job id used for restore.
-  backup-id: backup-id-1
-  # Path to restore from.
+  # Id of the backup to restore from.
+  backup-id: ""
+  # Id of the restore job. A cold restore must use the job id passed to
+  # the restore preparation. If empty, the backup id is used.
+  job-id: backup-id-1
+  # Key prefix in the bucket the backup was written under.
   path: backup_dir
-  # Fuzzy restore.
+  # Only restore the given sets from the backup.
+  # Default: restore all sets.
+  set-list: []
+  # Base64 encoded filter expression. Cold restore only.
+  filter-exp: ""
+  # Don't restore any secondary indexes.
+  no-indexes: false
+  # Don't restore any UDFs.
+  no-udfs: false
+  # Restore by writing records into the live namespace instead of
+  # the cold partition hydration. The flags below apply to a fuzzy restore only.
   fuzzy-restore: false
+  # Allow the restore even if the principal does not host the namespace.
+  allow-unhosted: false
+  # Number of worker threads, from 1 to 128.
+  parallel: 8
+  # Limit total written records per second. If 0, no limit is applied.
+  records-per-second: 0
+  # Maximum number of concurrent writes, up to 100000.
+  max-inflight: 200
+  # Base delay before a retry (in ms).
+  retry-base-interval: 1000
+  # Backoff multiplier of the retry delay. Must be at least 1.0.
+  retry-multiplier: 1
+  # Maximum number of attempts per record.
+  retry-max-attempts: 5
+  # Continue the restore on errors of individual records.
+  ignore-record-error: false
 prepare:
   # The namespace to restore.
   namespace: source-ns1
-  # Job id used for restore.
-  backup-id: backup-id-1
+  # Id of the restore job. The restore must be started with the same job id.
+  job-id: backup-id-1
+  # Restore all replicas. If false, only the master is restored and
+  # the other replicas are filled by migrations.
+  hydrate-replica: true
 progress:
   # The namespace to check progress.
   namespace: source-ns1
 abort:
   # The namespace the restore is aborted for.
   namespace: source-ns1
-  # Job id of the restore to abort.
-  backup-id: backup-id-1
+  # Id of the restore job to abort.
+  job-id: backup-id-1
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP

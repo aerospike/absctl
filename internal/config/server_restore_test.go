@@ -23,16 +23,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testErrMsgJobIDRequired = "job-id is required"
+
 func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
-			JobID:       testServerJobID,
+			Namespace:         testServerNamespace,
+			StorageType:       testServerStorage,
+			BackupID:          testServerJobID,
+			Parallel:          models.DefaultServerRestoreParallel,
+			MaxInflight:       models.DefaultServerRestoreMaxInflight,
+			RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
+			RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
+			RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
 		},
 		Prepare: &models.ServerRestorePrepare{
-			Namespace: testServerNamespace,
-			JobID:     testServerJobID,
+			Namespace:      testServerNamespace,
+			JobID:          testServerJobID,
+			HydrateReplica: models.DefaultServerRestoreHydrateReplica,
 		},
 		App:          &models.App{},
 		ClientConfig: &client.AerospikeConfig{},
@@ -215,7 +223,18 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing backup id in prepare",
+			name: "missing backup id in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.Start.BackupID = ""
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "missing job id in prepare",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
 				cfg.Prepare.JobID = ""
@@ -223,7 +242,7 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			wantErrMsg: testErrMsgJobIDRequired,
 		},
 		{
 			name: "valid abort config without object storage",
@@ -242,7 +261,7 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing abort backup id",
+			name: "missing abort job id",
 			cfg: func() *ServerRestoreServiceConfig {
 				return &ServerRestoreServiceConfig{
 					Abort: &models.ServerRestoreAbort{Namespace: testServerNamespace},
@@ -251,7 +270,7 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			wantErrMsg: testErrMsgJobIDRequired,
 		},
 		{
 			name: "missing abort namespace",

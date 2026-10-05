@@ -173,7 +173,6 @@ const (
 
 	// Server-specific backup.
 
-	DefaultBackupEnableChangeStream       = false
 	DefaultServerBackupAsync              = false
 	DefaultServerBackupValidateSampleSize = 10000
 	DefaultServerBackupProgressWatch      = false
@@ -184,6 +183,7 @@ const (
 	DefaultServerBackupObjectStorageType = ""
 	DefaultServerBackupJobID             = ""
 	DefaultServerBackupPath              = ""
+	DefaultServerFilterExp               = ""
 )
 
 // Restore.
@@ -209,7 +209,17 @@ const (
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false
 
-	// Server-specific restore.
+	// Server-specific restore. The values match the defaults of the server.
 
-	DefaultServerRestoreFuzzyRestore = false
+	DefaultServerRestoreJobID             = ""
+	DefaultServerRestoreFuzzyRestore      = false
+	DefaultServerRestoreAllowUnhosted     = false
+	DefaultServerRestoreParallel          = 8
+	DefaultServerRestoreRecordsPerSecond  = 0
+	DefaultServerRestoreMaxInflight       = 200
+	DefaultServerRestoreRetryBaseInterval = 1000
+	DefaultServerRestoreRetryMultiplier   = 1.0
+	DefaultServerRestoreRetryMaxAttempts  = 5
+	DefaultServerRestoreIgnoreRecordError = false
+	DefaultServerRestoreHydrateReplica    = true
 )

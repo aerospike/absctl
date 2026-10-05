@@ -23,12 +23,16 @@ import (
 type ServerBackup struct {
 	ServerCommon
 
-	ModifiedBefore     string
-	ModifiedAfter      string
-	SetList            string
-	NoIndexes          bool
-	NoUDFs             bool
-	EnableChangeStream bool
+	// Path is the key prefix the backup is written under.
+	Path           string
+	ModifiedBefore string
+	ModifiedAfter  string
+	SetList        string
+	BinList        string
+	// FilterExp is a base64-encoded filter expression.
+	FilterExp string
+	NoIndexes bool
+	NoUDFs    bool
 	// Async returns from the start command as soon as the cluster accepts the job,
 	// instead of following the backup until it ends.
 	Async bool
@@ -61,6 +65,14 @@ func (s *ServerBackup) Validate() error {
 		return fmt.Errorf("modified-before must be strictly greater than modified-after")
 	}
 
+	if err := validatePath(s.Path); err != nil {
+		return err
+	}
+
+	if err := validateFilterExp(s.FilterExp); err != nil {
+		return err
+	}
+
 	return s.ServerCommon.Validate()
 }
 
@@ -84,12 +96,14 @@ func (s *ServerBackupList) Validate() error {
 		return nil
 	}
 
-	return nil
+	return validatePath(s.Path)
 }
 
 type ServerBackupValidate struct {
 	// JobID is the id of the backup to validate.
 	JobID string
+	// Path is the key prefix the backup was written under.
+	Path string
 	// SampleSize specifies the sample size limit for validation operations.
 	// Zero means that every segment is validated.
 	SampleSize int
@@ -104,6 +118,10 @@ func (s *ServerBackupValidate) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
+	if err := validatePath(s.Path); err != nil {
+		return err
+	}
+
 	if s.SampleSize < 0 {
 		return fmt.Errorf("sample-size must be non-negative")
 	}
@@ -113,7 +131,11 @@ func (s *ServerBackupValidate) Validate() error {
 
 // ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
 type ServerBackupProgress struct {
+	// JobID is the id of the backup to follow.
 	JobID string
+	// Path is the key prefix the backup is written under.
+	Path string
+	// Watch keeps reporting the backup until it reaches a terminal state.
 	Watch bool
 }
 
@@ -126,7 +148,7 @@ func (s *ServerBackupProgress) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
-	return nil
+	return validatePath(s.Path)
 }
 
 // ServerBackupAbort contains flags that will be mapped to ServerBackupAbort.

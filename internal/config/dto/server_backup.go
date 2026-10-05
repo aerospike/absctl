@@ -71,28 +71,32 @@ func (b *ServerBackup) LoadSecrets(ctx context.Context) error {
 
 // ServerBackupConfig maps the "backup" section, used by "snapshot-backup start".
 type ServerBackupConfig struct {
-	Namespace          *string  `yaml:"namespace"`
-	StorageType        *string  `yaml:"object-storage-type"`
-	ModifiedAfter      *string  `yaml:"modified-after"`
-	ModifiedBefore     *string  `yaml:"modified-before"`
-	SetList            []string `yaml:"set-list"`
-	NoIndexes          *bool    `yaml:"no-indexes"`
-	NoUDFs             *bool    `yaml:"no-udfs"`
-	EnableChangeStream *bool    `yaml:"enable-change-stream"`
-	Async              *bool    `yaml:"async"`
+	Namespace      *string  `yaml:"namespace"`
+	StorageType    *string  `yaml:"object-storage-type"`
+	Path           *string  `yaml:"path"`
+	ModifiedAfter  *string  `yaml:"modified-after"`
+	ModifiedBefore *string  `yaml:"modified-before"`
+	SetList        []string `yaml:"set-list"`
+	BinList        []string `yaml:"bin-list"`
+	FilterExp      *string  `yaml:"filter-exp"`
+	NoIndexes      *bool    `yaml:"no-indexes"`
+	NoUDFs         *bool    `yaml:"no-udfs"`
+	Async          *bool    `yaml:"async"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
 	return ServerBackupConfig{
-		Namespace:          new(models.DefaultCommonNamespace),
-		StorageType:        new(models.DefaultServerBackupObjectStorageType),
-		ModifiedAfter:      new(models.DefaultBackupModifiedAfter),
-		ModifiedBefore:     new(models.DefaultBackupModifiedBefore),
-		SetList:            []string{},
-		NoIndexes:          new(models.DefaultCommonNoIndexes),
-		NoUDFs:             new(models.DefaultCommonNoUDFs),
-		EnableChangeStream: new(models.DefaultBackupEnableChangeStream),
-		Async:              new(models.DefaultServerBackupAsync),
+		Namespace:      new(models.DefaultCommonNamespace),
+		StorageType:    new(models.DefaultServerBackupObjectStorageType),
+		Path:           new(models.DefaultServerBackupPath),
+		ModifiedAfter:  new(models.DefaultBackupModifiedAfter),
+		ModifiedBefore: new(models.DefaultBackupModifiedBefore),
+		SetList:        []string{},
+		BinList:        []string{},
+		FilterExp:      new(models.DefaultServerFilterExp),
+		NoIndexes:      new(models.DefaultCommonNoIndexes),
+		NoUDFs:         new(models.DefaultCommonNoUDFs),
+		Async:          new(models.DefaultServerBackupAsync),
 	}
 }
 
@@ -103,15 +107,17 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 	}
 
 	return &models.ServerBackup{
-		Namespace:          derefString(b.Backup.Namespace),
-		StorageType:        derefString(b.Backup.StorageType),
-		ModifiedAfter:      derefString(b.Backup.ModifiedAfter),
-		ModifiedBefore:     derefString(b.Backup.ModifiedBefore),
-		SetList:            strings.Join(b.Backup.SetList, ","),
-		NoIndexes:          derefBool(b.Backup.NoIndexes),
-		NoUDFs:             derefBool(b.Backup.NoUDFs),
-		EnableChangeStream: derefBool(b.Backup.EnableChangeStream),
-		Async:              derefBool(b.Backup.Async),
+		Namespace:      derefString(b.Backup.Namespace),
+		StorageType:    derefString(b.Backup.StorageType),
+		Path:           derefString(b.Backup.Path),
+		ModifiedAfter:  derefString(b.Backup.ModifiedAfter),
+		ModifiedBefore: derefString(b.Backup.ModifiedBefore),
+		SetList:        strings.Join(b.Backup.SetList, ","),
+		BinList:        strings.Join(b.Backup.BinList, ","),
+		FilterExp:      derefString(b.Backup.FilterExp),
+		NoIndexes:      derefBool(b.Backup.NoIndexes),
+		NoUDFs:         derefBool(b.Backup.NoUDFs),
+		Async:          derefBool(b.Backup.Async),
 	}
 }
 
@@ -141,12 +147,14 @@ func (b *ServerBackup) ToModelServerBackupList() *models.ServerBackupList {
 // "snapshot-backup validate".
 type ServerBackupValidateConfig struct {
 	JobID      *string `yaml:"backup-id"`
+	Path       *string `yaml:"path"`
 	SampleSize *int    `yaml:"sample-size"`
 }
 
 func defaultServerBackupValidateConfig() ServerBackupValidateConfig {
 	return ServerBackupValidateConfig{
 		JobID:      new(models.DefaultServerBackupJobID),
+		Path:       new(models.DefaultServerBackupPath),
 		SampleSize: new(models.DefaultServerBackupValidateSampleSize),
 	}
 }
@@ -159,6 +167,7 @@ func (b *ServerBackup) ToModelServerBackupValidate() *models.ServerBackupValidat
 
 	return &models.ServerBackupValidate{
 		JobID:      derefString(b.Validate.JobID),
+		Path:       derefString(b.Validate.Path),
 		SampleSize: derefInt(b.Validate.SampleSize),
 	}
 }
@@ -167,12 +176,14 @@ func (b *ServerBackup) ToModelServerBackupValidate() *models.ServerBackupValidat
 // "snapshot-backup progress".
 type ServerBackupProgressConfig struct {
 	JobID *string `yaml:"backup-id"`
+	Path  *string `yaml:"path"`
 	Watch *bool   `yaml:"watch"`
 }
 
 func defaultServerBackupProgressConfig() ServerBackupProgressConfig {
 	return ServerBackupProgressConfig{
 		JobID: new(models.DefaultServerBackupJobID),
+		Path:  new(models.DefaultServerBackupPath),
 		Watch: new(models.DefaultServerBackupProgressWatch),
 	}
 }
@@ -185,6 +196,7 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 
 	return &models.ServerBackupProgress{
 		JobID: derefString(b.Progress.JobID),
+		Path:  derefString(b.Progress.Path),
 		Watch: derefBool(b.Progress.Watch),
 	}
 }

@@ -19,6 +19,15 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// descSetListServerBackup differs from descSetListBackup: a server-integrated backup
+// accepts a filter expression together with several sets.
+const descSetListServerBackup = "The set(s) to be backed up. Accepts comma-separated values with no spaces: " +
+	"'set1,set2,set3'\nIf empty, include all sets."
+
+// descPathServerBackupWritten describes --path of the commands that read a backup back.
+const descPathServerBackupWritten = "Key prefix in the bucket the backup was written under.\n" +
+	"Must match the --path the backup was started with."
+
 // ServerBackup holds flags for the server backup create command.
 type ServerBackup struct {
 	models.ServerBackup
@@ -31,13 +40,16 @@ func NewServerBackup() *ServerBackup {
 func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to be backed up.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type",
 		models.DefaultServerBackupObjectStorageType,
 		"Type of object storage. "+
 			"Example: aws-s3")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		"Key prefix in the bucket to write the backup under.")
 	flagSet.StringVarP(&f.ModifiedAfter, "modified-after", "a",
 		models.DefaultBackupModifiedAfter,
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
@@ -54,16 +66,20 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 			"date and time. May combined with --modified-after to specify a range.")
 	flagSet.StringVarP(&f.SetList, "set-list", "s",
 		models.DefaultCommonSetList,
-		descSetListBackup)
-	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "i",
+		descSetListServerBackup)
+	flagSet.StringVarP(&f.BinList, "bin-list", "B",
+		models.DefaultCommonBinList,
+		descBinListBackup)
+	flagSet.StringVarP(&f.FilterExp, "filter-exp", "f",
+		models.DefaultServerFilterExp,
+		"Base64 encoded filter expression. Only live records are filtered,\n"+
+			"tombstones are always backed up.")
+	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "I",
 		models.DefaultCommonNoIndexes,
 		"Exclude indexes from the backup.")
 	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
 		models.DefaultCommonNoUDFs,
 		"Exclude user-defined functions from the backup.")
-	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
-		models.DefaultBackupEnableChangeStream,
-		"Enable backup of change stream.")
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerBackupAsync,
 		"Return as soon as the cluster accepts the backup, without\n"+
@@ -116,6 +132,9 @@ func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		descPathServerBackupWritten)
 
 	return flagSet
 }
@@ -139,6 +158,9 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		descPathServerBackupWritten)
 	flagSet.BoolVar(&f.Watch, "watch",
 		models.DefaultServerBackupProgressWatch,
 		"Watch the progress of the backup.")
