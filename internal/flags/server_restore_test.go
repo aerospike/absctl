@@ -24,7 +24,9 @@ import (
 
 const (
 	testRestoreNamespace = "test-ns"
-	testRestoreBackupID  = "backup-job-1"
+	// testRestoreBackupIDs holds several ids, so that the flag is shown to carry the
+	// list through to the model verbatim.
+	testRestoreBackupIDs = "backup-job-1,backup-job-2"
 	testRestoreJobID     = "restore-job-1"
 	flagRestoreNamespace = "--namespace"
 	flagRestoreJobID     = "--job-id"
@@ -49,7 +51,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 	want := &models.ServerRestore{
 		Namespace:         testRestoreNamespace,
 		StorageType:       testStorage,
-		BackupID:          testRestoreBackupID,
+		BackupIDs:         testRestoreBackupIDs,
 		JobID:             testRestoreJobID,
 		Path:              testPath,
 		SetList:           testSetList,
@@ -69,7 +71,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 
 	commonArgs := []string{
 		"--object-storage-type", testStorage,
-		"--backup-id", testRestoreBackupID,
+		"--backup-ids", testRestoreBackupIDs,
 		flagRestoreJobID, testRestoreJobID,
 		"--path", testPath,
 		"--filter-exp", testFilterExp,
@@ -134,7 +136,7 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 
 	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
 	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
-	assert.Equal(t, models.DefaultServerBackupJobID, result.BackupID)
+	assert.Equal(t, models.DefaultServerBackupJobID, result.BackupIDs)
 	assert.Equal(t, models.DefaultServerRestoreJobID, result.JobID)
 	assert.Equal(t, models.DefaultServerBackupPath, result.Path)
 	assert.Equal(t, models.DefaultCommonSetList, result.SetList)
@@ -269,6 +271,10 @@ func TestServerRestore_NewFlagSet_BackupIDRemoved(t *testing.T) {
 		parse func([]string) error
 	}{
 		{
+			name:  "start",
+			parse: NewServerRestore().NewFlagSet().Parse,
+		},
+		{
 			name:  "prepare",
 			parse: NewServerRestorePrepare().NewFlagSet().Parse,
 		},
@@ -282,7 +288,7 @@ func TestServerRestore_NewFlagSet_BackupIDRemoved(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Error(t, tt.parse([]string{"--backup-id", testRestoreBackupID}))
+			require.Error(t, tt.parse([]string{"--backup-id", testRestoreBackupIDs}))
 		})
 	}
 }

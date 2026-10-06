@@ -124,7 +124,9 @@ cluster:
 restore:
   namespace: test
   object-storage-type: aws-s3
-  backup-id: bkp-1
+  backup-ids:
+    - bkp-1
+    - bkp-2
   job-id: rst-1
   path: some/prefix
   set-list:
@@ -605,6 +607,15 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 			},
 		},
 		{
+			name:    "restore backup-id",
+			yaml:    "restore:\n  backup-id: bkp-1\n",
+			wantKey: "backup-id",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
+				return err
+			},
+		},
+		{
 			name:    "prepare backup-id",
 			yaml:    "prepare:\n  backup-id: bkp-1\n",
 			wantKey: "backup-id",
@@ -658,7 +669,8 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
-				assert.Equal(t, "bkp-1", cfg.Start.BackupID)
+				// The YAML carries a sequence, the model a comma separated list.
+				assert.Equal(t, "bkp-1,bkp-2", cfg.Start.BackupIDs)
 				assert.Equal(t, testServerRestoreJobID, cfg.Start.JobID)
 				assert.Equal(t, "some/prefix", cfg.Start.Path)
 				assert.Equal(t, "set1", cfg.Start.SetList)

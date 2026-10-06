@@ -30,7 +30,7 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 		Start: &models.ServerRestore{
 			Namespace:         testServerNamespace,
 			StorageType:       testServerStorage,
-			BackupID:          testServerJobID,
+			BackupIDs:         testServerJobID,
 			Parallel:          models.DefaultServerRestoreParallel,
 			MaxInflight:       models.DefaultServerRestoreMaxInflight,
 			RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
@@ -223,15 +223,15 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing backup id in start",
+			name: "missing backup ids in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
-				cfg.Start.BackupID = ""
+				cfg.Start.BackupIDs = ""
 				return cfg
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			wantErrMsg: "backup-ids is required",
 		},
 		{
 			name: "missing job id in prepare",

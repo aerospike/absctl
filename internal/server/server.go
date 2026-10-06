@@ -525,15 +525,15 @@ func (s *Service) StartRestore(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.checkBackupExists(ctx, s3Client, s.restoreCfg.AwsS3.BucketName,
-		models.NormalizeS3Prefix(start.Path), start.BackupID); err != nil {
+	if err := s.checkBackupsExist(ctx, s3Client, s.restoreCfg.AwsS3.BucketName,
+		models.NormalizeS3Prefix(start.Path), start.BackupIDList()); err != nil {
 		return err
 	}
 
 	// A prepare run before this start has to name the same job, so the fallback is
 	// reported for the user to see which id that is.
 	if start.JobID == "" {
-		s.logger.Info("job-id is not set, the backup-id is used as the restore job id",
+		s.logger.Info("job-id is not set, the backup id is used as the restore job id",
 			slog.String("job-id", start.RestoreJobID()))
 	}
 
@@ -546,7 +546,7 @@ func (s *Service) StartRestore(ctx context.Context) error {
 
 	s.logger.Info("server integrated restore started",
 		slog.String("job-id", rReq.JobID),
-		slog.String("backup-id", rReq.BackupID))
+		slog.String("backup-ids", rReq.BackupIDs))
 
 	return nil
 }
@@ -568,7 +568,7 @@ func (s *Service) restoreRequest() *infomodels.RequestRestore {
 		NoIndexes:           new(start.NoIndexes),
 		NoUDFs:              new(start.NoUDFs),
 		JobID:               start.RestoreJobID(),
-		BackupID:            start.BackupID,
+		BackupIDs:           start.BackupIDs,
 		FuzzyRestore:        new(start.FuzzyRestore),
 		AllowUnhosted:       new(start.AllowUnhosted),
 		Parallel:            start.Parallel,
@@ -1083,6 +1083,22 @@ func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecke
 
 	if !isStable {
 		return fmt.Errorf("%w: namespace %s", errClusterNotStable, namespace)
+	}
+
+	return nil
+}
+
+// checkBackupsExist validates that every backup of backupIDs, written under prefix,
+// exists and is complete. The metadata of a backup is addressed by its own id, so the
+// backups are looked for one by one, and a single missing or incomplete one stops the
+// restore before any of them is read.
+func (s *Service) checkBackupsExist(
+	ctx context.Context, client s3API, bucket, prefix string, backupIDs []string,
+) error {
+	for _, backupID := range backupIDs {
+		if err := s.checkBackupExists(ctx, client, bucket, prefix, backupID); err != nil {
+			return err
+		}
 	}
 
 	return nil

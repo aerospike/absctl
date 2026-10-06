@@ -37,13 +37,14 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.StorageType, "object-storage-type",
 		models.DefaultServerBackupObjectStorageType,
 		"Type of object storage. Example: aws-s3")
-	flagSet.StringVar(&f.BackupID, "backup-id",
+	flagSet.StringVar(&f.BackupIDs, "backup-ids",
 		models.DefaultServerBackupJobID,
-		"Id of the backup to restore from.")
+		"Comma separated list of the ids of the backups to restore from.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
 		"Id of the restore job. A cold restore must use the job id passed to\n"+
-			"the restore preparation. If empty, the backup id is used.")
+			"the restore preparation. If empty, the id of the single backup being\n"+
+			"restored is used, so it is required when several backup ids are given.")
 	flagSet.StringVar(&f.Path, "path",
 		models.DefaultServerBackupPath,
 		"Key prefix in the bucket the backup was written under.")

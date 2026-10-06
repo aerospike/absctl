@@ -72,7 +72,7 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 type ServerRestoreConfig struct {
 	Namespace         *string  `yaml:"namespace"`
 	StorageType       *string  `yaml:"object-storage-type"`
-	BackupID          *string  `yaml:"backup-id"`
+	BackupIDs         []string `yaml:"backup-ids"`
 	JobID             *string  `yaml:"job-id"`
 	Path              *string  `yaml:"path"`
 	SetList           []string `yaml:"set-list"`
@@ -94,7 +94,7 @@ func defaultServerRestoreConfig() ServerRestoreConfig {
 	return ServerRestoreConfig{
 		Namespace:         new(models.DefaultCommonNamespace),
 		StorageType:       new(models.DefaultServerBackupObjectStorageType),
-		BackupID:          new(models.DefaultServerBackupJobID),
+		BackupIDs:         []string{},
 		JobID:             new(models.DefaultServerRestoreJobID),
 		Path:              new(models.DefaultServerBackupPath),
 		SetList:           []string{},
@@ -122,7 +122,7 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 	return &models.ServerRestore{
 		Namespace:         derefString(r.Restore.Namespace),
 		StorageType:       derefString(r.Restore.StorageType),
-		BackupID:          derefString(r.Restore.BackupID),
+		BackupIDs:         strings.Join(r.Restore.BackupIDs, ","),
 		JobID:             derefString(r.Restore.JobID),
 		Path:              derefString(r.Restore.Path),
 		SetList:           strings.Join(r.Restore.SetList, ","),

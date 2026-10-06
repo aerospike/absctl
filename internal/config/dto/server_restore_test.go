@@ -41,7 +41,7 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(restore.Namespace))
 	assert.Equal(t, models.DefaultServerBackupObjectStorageType, derefString(restore.StorageType))
-	assert.Equal(t, models.DefaultServerBackupJobID, derefString(restore.BackupID))
+	assert.Empty(t, restore.BackupIDs)
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(restore.JobID))
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(restore.Path))
 	assert.Empty(t, restore.SetList)
@@ -76,7 +76,6 @@ func TestServerRestoreToModels(t *testing.T) {
 
 	namespace := "ns1"
 	storageType := "aws-s3"
-	backupID := "bkp-1"
 	jobID := "rst-1"
 	path := "some/prefix"
 	filterExp := "kwGTUQKkYmluMQE="
@@ -96,7 +95,7 @@ func TestServerRestoreToModels(t *testing.T) {
 		Restore: ServerRestoreConfig{
 			Namespace:         &namespace,
 			StorageType:       &storageType,
-			BackupID:          &backupID,
+			BackupIDs:         []string{"bkp-1", "bkp-2"},
 			JobID:             &jobID,
 			Path:              &path,
 			SetList:           []string{"set1", "set2"},
@@ -127,10 +126,10 @@ func TestServerRestoreToModels(t *testing.T) {
 	assert.Equal(t, &models.ServerRestore{
 		Namespace:   namespace,
 		StorageType: storageType,
-		BackupID:    backupID,
 		JobID:       jobID,
 		Path:        path,
 		// The model carries a comma separated list, the YAML a sequence.
+		BackupIDs:         "bkp-1,bkp-2",
 		SetList:           "set1,set2",
 		FilterExp:         filterExp,
 		NoIndexes:         true,

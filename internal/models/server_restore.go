@@ -14,7 +14,12 @@
 
 package models
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+)
 
 // Limits of the fuzzy restore settings, as enforced by the server.
 const (
@@ -25,13 +30,19 @@ const (
 	minServerRestoreRetryMultiplier = 1.0
 )
 
+// backupIDsSeparator separates the ids of the backups a single restore reads. The
+// server takes them as one comma-separated parameter, so they are carried as a
+// string rather than a slice all the way down to the request.
+const backupIDsSeparator = ","
+
 // ServerRestore contains flags that will be mapped to ServerRestore.
 type ServerRestore struct {
 	ServerCommon
-	// JobID is the id of the restore job. When empty, BackupID is used instead.
+	// JobID is the id of the restore job. When a single backup is restored and
+	// JobID is empty, the id of that backup is used instead.
 	JobID string
-	// BackupID is the id of the backup to restore from.
-	BackupID string
+	// BackupIDs is a comma-separated list of the ids of the backups to restore from.
+	BackupIDs string
 	// Path is the key prefix the backup was written under.
 	Path    string
 	SetList string
@@ -55,13 +66,23 @@ type ServerRestore struct {
 }
 
 // RestoreJobID returns the id of the restore job, which defaults to the id of the
-// backup being restored.
+// backup being restored. Validate rejects the empty JobID of a multi-backup restore,
+// so the fallback never names the job after more than one backup.
 func (s *ServerRestore) RestoreJobID() string {
 	if s.JobID != "" {
 		return s.JobID
 	}
 
-	return s.BackupID
+	return s.BackupIDs
+}
+
+// BackupIDList returns the ids of the backups to restore from, one per element.
+func (s *ServerRestore) BackupIDList() []string {
+	if s.BackupIDs == "" {
+		return nil
+	}
+
+	return strings.Split(s.BackupIDs, backupIDsSeparator)
 }
 
 func (s *ServerRestore) Validate() error {
@@ -69,8 +90,8 @@ func (s *ServerRestore) Validate() error {
 		return nil
 	}
 
-	if s.BackupID == "" {
-		return fmt.Errorf("backup-id is required")
+	if err := s.validateBackupIDs(); err != nil {
+		return err
 	}
 
 	if err := validatePath(s.Path); err != nil {
@@ -86,6 +107,26 @@ func (s *ServerRestore) Validate() error {
 	}
 
 	return s.ServerCommon.Validate()
+}
+
+// validateBackupIDs checks the backup id list the server is sent verbatim. The server
+// rejects an empty element of the list, and an id list cannot name the restore job, so
+// both are caught here rather than after the cluster and the object storage are reached.
+func (s *ServerRestore) validateBackupIDs() error {
+	if s.BackupIDs == "" {
+		return errors.New("backup-ids is required")
+	}
+
+	ids := s.BackupIDList()
+	if slices.Contains(ids, "") {
+		return errors.New("backup-ids must not contain an empty id")
+	}
+
+	if s.JobID == "" && len(ids) > 1 {
+		return errors.New("job-id is required when more than one backup id is given")
+	}
+
+	return nil
 }
 
 // validateRestoreMode checks the settings that depend on the restore mode. The server

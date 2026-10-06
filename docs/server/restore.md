@@ -69,9 +69,10 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string             The namespace to restore.
       --object-storage-type string   Type of object storage. Example: aws-s3
-      --backup-id string             Id of the backup to restore from.
+      --backup-ids string            Comma separated list of the ids of the backups to restore from.
       --job-id string                Id of the restore job. A cold restore must use the job id passed to
-                                     the restore preparation. If empty, the backup id is used.
+                                     the restore preparation. If empty, the id of the single backup being
+                                     restored is used, so it is required when several backup ids are given.
       --path string                  Key prefix in the bucket the backup was written under.
   -s, --set-list string              Only restore the given sets from the backup.
                                      Default: restore all sets.
@@ -452,11 +453,14 @@ restore:
   namespace: source-ns1
   # Type of object storage. Example: aws-s3
   object-storage-type: aws-s3
-  # Id of the backup to restore from.
-  backup-id: ""
+  # Comma separated list of the ids of the backups to restore from.
+  backup-ids:
+    - backup-id-1
+    - backup-id-2
   # Id of the restore job. A cold restore must use the job id passed to
-  # the restore preparation. If empty, the backup id is used.
-  job-id: backup-id-1
+  # the restore preparation. If empty, the id of the single backup being
+  # restored is used, so it is required when several backup ids are given.
+  job-id: restore-job-1
   # Key prefix in the bucket the backup was written under.
   path: backup_dir
   # Only restore the given sets from the backup.
@@ -491,7 +495,7 @@ prepare:
   # The namespace to restore.
   namespace: source-ns1
   # Id of the restore job. The restore must be started with the same job id.
-  job-id: backup-id-1
+  job-id: restore-job-1
   # Restore all replicas. If false, only the master is restored and
   # the other replicas are filled by migrations.
   hydrate-replica: true
@@ -502,7 +506,7 @@ abort:
   # The namespace the restore is aborted for.
   namespace: source-ns1
   # Id of the restore job to abort.
-  job-id: backup-id-1
+  job-id: restore-job-1
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP

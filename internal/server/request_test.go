@@ -42,6 +42,9 @@ const (
 	testRequestSetList   = "set1,set2"
 	testRequestFilterExp = "kwGTUQKkYmluMQE="
 	testRequestBackupID  = "bkp-1"
+	testRequestBackupID2 = "bkp-2"
+	// testRequestBackupIDs is the list form a multi-backup restore is given.
+	testRequestBackupIDs = testRequestBackupID + "," + testRequestBackupID2
 	testRequestJobID     = "rst-1"
 	testMetadataKey      = testBackupPath + "/" + testRequestBackupID
 	testModifiedAfter    = "2024-01-01_00:00:00"
@@ -169,13 +172,13 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace:   testRequestNamespace,
 				StorageType: testRequestStorage,
-				BackupID:    testRequestBackupID,
+				BackupIDs:   testRequestBackupID,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon:     testRequestCommon(),
 					JobID:             testRequestBackupID,
-					BackupID:          testRequestBackupID,
+					BackupIDs:         testRequestBackupID,
 					FuzzyRestore:      new(false),
 					AllowUnhosted:     new(false),
 					IgnoreRecordError: new(false),
@@ -187,7 +190,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace:   testRequestNamespace,
 				StorageType: testRequestStorage,
-				BackupID:    testRequestBackupID,
+				BackupIDs:   testRequestBackupID,
 				JobID:       testRequestJobID,
 				Path:        testBackupPath,
 				SetList:     testRequestSetList,
@@ -206,7 +209,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 				return &infomodels.RequestRestore{
 					RequestCommon:     common,
 					JobID:             testRequestJobID,
-					BackupID:          testRequestBackupID,
+					BackupIDs:         testRequestBackupID,
 					FuzzyRestore:      new(false),
 					AllowUnhosted:     new(false),
 					IgnoreRecordError: new(false),
@@ -218,7 +221,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace:         testRequestNamespace,
 				StorageType:       testRequestStorage,
-				BackupID:          testRequestBackupID,
+				BackupIDs:         testRequestBackupID,
 				JobID:             testRequestJobID,
 				FuzzyRestore:      true,
 				AllowUnhosted:     true,
@@ -234,7 +237,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 				return &infomodels.RequestRestore{
 					RequestCommon:       testRequestCommon(),
 					JobID:               testRequestJobID,
-					BackupID:            testRequestBackupID,
+					BackupIDs:           testRequestBackupID,
 					FuzzyRestore:        new(true),
 					AllowUnhosted:       new(true),
 					Parallel:            16,
@@ -244,6 +247,27 @@ func TestServiceRestoreRequest(t *testing.T) {
 					RetryMultiplier:     1.5,
 					RetryMaxAttempts:    3,
 					IgnoreRecordError:   new(true),
+				}
+			},
+		},
+		{
+			// The server takes the backup ids as one comma-separated parameter, so the
+			// list reaches the request unchanged.
+			name: "several backup ids",
+			give: &models.ServerRestore{
+				Namespace:   testRequestNamespace,
+				StorageType: testRequestStorage,
+				BackupIDs:   testRequestBackupIDs,
+				JobID:       testRequestJobID,
+			},
+			want: func() *infomodels.RequestRestore {
+				return &infomodels.RequestRestore{
+					RequestCommon:     testRequestCommon(),
+					JobID:             testRequestJobID,
+					BackupIDs:         testRequestBackupIDs,
+					FuzzyRestore:      new(false),
+					AllowUnhosted:     new(false),
+					IgnoreRecordError: new(false),
 				}
 			},
 		},
@@ -449,6 +473,51 @@ func TestServiceCheckBackupExistsReadsUnderPrefix(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, []string{tt.wantKey}, client.keys)
+		})
+	}
+}
+
+func TestServiceCheckBackupsExistReadsEveryBackup(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := json.Marshal(servermodels.Metadata{
+		BackupID:  testRequestBackupID,
+		Namespace: testRequestNamespace,
+		Status:    servermodels.MetadataStatusComplete,
+	})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		giveBackupIDs []string
+		wantKeys      []string
+	}{
+		{
+			name:          "single backup",
+			giveBackupIDs: []string{testRequestBackupID},
+			wantKeys:      []string{testRequestBackupID + testManifestSuffix},
+		},
+		{
+			name:          "several backups",
+			giveBackupIDs: []string{testRequestBackupID, testRequestBackupID2},
+			wantKeys: []string{
+				testRequestBackupID + testManifestSuffix,
+				testRequestBackupID2 + testManifestSuffix,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := &fakeManifestS3{manifest: manifest}
+			svc := &Service{logger: slog.New(slog.DiscardHandler)}
+
+			err := svc.checkBackupsExist(t.Context(), client, testBucket, "", tt.giveBackupIDs)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantKeys, client.keys)
 		})
 	}
 }

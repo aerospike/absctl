@@ -23,8 +23,11 @@ import (
 
 const (
 	testServerRestoreJobID = "restore-job-1"
-	errMsgJobIDRequired    = "job-id is required"
-	errMsgRequiresFuzzy    = "requires fuzzy-restore"
+	testServerSecondJobID  = "backup-job-2"
+	// testServerBackupIDs is the list form a multi-backup restore is given.
+	testServerBackupIDs = testServerJobID + "," + testServerSecondJobID
+	errMsgJobIDRequired = "job-id is required"
+	errMsgRequiresFuzzy = "requires fuzzy-restore"
 )
 
 // validServerRestore returns a cold restore with every setting at its default, as the
@@ -33,7 +36,7 @@ func validServerRestore() *ServerRestore {
 	return &ServerRestore{
 		Namespace:         testServerNamespace,
 		StorageType:       testServerStorage,
-		BackupID:          testServerJobID,
+		BackupIDs:         testServerJobID,
 		AllowUnhosted:     DefaultServerRestoreAllowUnhosted,
 		Parallel:          DefaultServerRestoreParallel,
 		RecordsPerSecond:  DefaultServerRestoreRecordsPerSecond,
@@ -71,21 +74,29 @@ func TestServerRestore_RestoreJobID(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		giveJobID    string
-		giveBackupID string
-		want         string
+		name          string
+		giveJobID     string
+		giveBackupIDs string
+		want          string
 	}{
 		{
-			name:         "job id set",
-			giveJobID:    testServerRestoreJobID,
-			giveBackupID: testServerJobID,
-			want:         testServerRestoreJobID,
+			name:          "job id set",
+			giveJobID:     testServerRestoreJobID,
+			giveBackupIDs: testServerJobID,
+			want:          testServerRestoreJobID,
 		},
 		{
-			name:         "job id defaults to backup id",
-			giveBackupID: testServerJobID,
-			want:         testServerJobID,
+			name:          "job id defaults to backup id",
+			giveBackupIDs: testServerJobID,
+			want:          testServerJobID,
+		},
+		{
+			// Validate rejects the empty job id of a multi-backup restore, so only the
+			// explicit id can reach the request here.
+			name:          "job id set with several backup ids",
+			giveJobID:     testServerRestoreJobID,
+			giveBackupIDs: testServerBackupIDs,
+			want:          testServerRestoreJobID,
 		},
 	}
 
@@ -93,9 +104,44 @@ func TestServerRestore_RestoreJobID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			restore := &ServerRestore{JobID: tt.giveJobID, BackupID: tt.giveBackupID}
+			restore := &ServerRestore{JobID: tt.giveJobID, BackupIDs: tt.giveBackupIDs}
 
 			assert.Equal(t, tt.want, restore.RestoreJobID())
+		})
+	}
+}
+
+func TestServerRestore_BackupIDList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		giveBackupIDs string
+		want          []string
+	}{
+		{
+			name:          "single id",
+			giveBackupIDs: testServerJobID,
+			want:          []string{testServerJobID},
+		},
+		{
+			name:          "several ids",
+			giveBackupIDs: testServerBackupIDs,
+			want:          []string{testServerJobID, testServerSecondJobID},
+		},
+		{
+			name: "empty",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			restore := &ServerRestore{BackupIDs: tt.giveBackupIDs}
+
+			assert.Equal(t, tt.want, restore.BackupIDList())
 		})
 	}
 }
@@ -390,14 +436,57 @@ func TestServerRestore_Validate(t *testing.T) {
 			wantErrMsg: "namespace is required",
 		},
 		{
-			name: "missing backup id",
+			name: "missing backup ids",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.BackupID = ""
+				restore.BackupIDs = ""
 				return restore
 			},
 			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			wantErrMsg: "backup-ids is required",
+		},
+		{
+			name: "empty id inside the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerJobID + ",," + testServerSecondJobID
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-ids must not contain an empty id",
+		},
+		{
+			name: "trailing separator in the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerBackupIDs + ","
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-ids must not contain an empty id",
+		},
+		{
+			// The job id cannot fall back to a list of backup ids.
+			name: "several backup ids without a job id",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "job-id is required when more than one backup id is given",
+		},
+		{
+			name: "several backup ids with a job id",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerBackupIDs
+				return restore
+			},
+			wantErr: false,
 		},
 		{
 			name: "explicit job id",
