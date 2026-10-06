@@ -71,8 +71,9 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Backup Flags:
-      --namespace string             The namespace to be backed up.
+  -n, --namespace string             The namespace to be backed up.
       --object-storage-type string   Type of object storage. Example: aws-s3
+      --path string                  Key prefix in the bucket to write the backup under.
   -a, --modified-after string        <YYYY-MM-DD_HH:MM:SS>
                                      Perform an incremental backup; only include records
                                      that changed after the given date and time. The system's
@@ -84,11 +85,14 @@ Backup Flags:
                                      Only include records that last changed before the given
                                      date and time. May combined with --modified-after to specify a range.
   -s, --set-list string              The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
-                                     If multiple sets are being backed up, filter-exp cannot be used.
                                      If empty, include all sets.
-  -i, --no-indexes                   Exclude indexes from the backup.
+  -B, --bin-list string              Only include the given bins in the backup.
+                                     Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
+                                     If empty include all bins.
+  -f, --filter-exp string            Base64 encoded filter expression. Only live records are filtered,
+                                     tombstones are always backed up.
+  -I, --no-indexes                   Exclude indexes from the backup.
   -u, --no-udfs                      Exclude user-defined functions from the backup.
-      --enable-change-stream         Enable backup of change stream.
       --async                        Return as soon as the cluster accepts the backup, without
                                      following its progress. Use the progress command to follow
                                      the backup later.
@@ -241,6 +245,8 @@ Aerospike Client Flags:
 
 Backup Flags:
       --backup-id string   Backup id
+      --path string        Key prefix in the bucket the backup was written under.
+                           Must match the --path the backup was started with.
       --watch              Watch the progress of the backup.
 
 AWS Storage Flags:
@@ -315,6 +321,8 @@ General Flags:
 Backup Flags:
       --sample-size int    Number of segments for random validation. 0 means validate all segments. (default 10000)
       --backup-id string   Backup id
+      --path string        Key prefix in the bucket the backup was written under.
+                           Must match the --path the backup was started with.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -509,6 +517,8 @@ backup:
   namespace: source-ns1
   # Type of object storage. Example: aws-s3
   object-storage-type: aws-s3
+  # Key prefix in the bucket to write the backup under.
+  path: ""
   # <YYYY-MM-DD_HH:MM:SS>
   # Perform an incremental backup; only include records
   # that changed after the given date and time. The system's
@@ -521,17 +531,21 @@ backup:
   # date and time. May combined with modified-after to specify a range.
   modified-before: ""
   # The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
-  # If multiple sets are being backed up, filter-exp cannot be used.
   # If empty, include all sets.
   set-list:
     - set1
     - set2
+  # Only include the given bins in the backup.
+  # Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
+  # If empty include all bins.
+  bin-list: []
+  # Base64 encoded filter expression. Only live records are filtered,
+  # tombstones are always backed up.
+  filter-exp: ""
   # Exclude indexes from the backup.
   no-indexes: false
   # Exclude user-defined functions from the backup.
   no-udfs: false
-  # Enable backup of change stream.
-  enable-change-stream: false
   # Return as soon as the cluster accepts the backup, without
   # following its progress. Use the progress command to follow
   # the backup later.
@@ -542,11 +556,17 @@ list:
 validate:
   # Backup id
   backup-id: backup-id-1
+  # Key prefix in the bucket the backup was written under.
+  # Must match the path the backup was started with.
+  path: ""
   # Number of segments for random validation. 0 means validate all segments.
   sample-size: 10000
 progress:
   # Backup id
   backup-id: backup-id-1
+  # Key prefix in the bucket the backup was written under.
+  # Must match the path the backup was started with.
+  path: ""
   # Watch the progress of the backup.
   watch: false
 abort:

@@ -16,8 +16,11 @@ package models
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
+
+	"github.com/aerospike/aerospike-client-go/v8"
 )
 
 // StorageTypeAwsS3 is the object storage type of the server-integrated backup and restore.
@@ -49,4 +52,38 @@ func (s *ServerCommon) Validate() error {
 	}
 
 	return nil
+}
+
+// validateFilterExp checks that exp, when set, is valid base64. Only the encoding can be
+// checked locally: the cluster validates the expression itself once the job is submitted.
+// The decoding error is not wrapped, as it carries client result codes that say nothing
+// more to the user than the message below.
+func validateFilterExp(exp string) error {
+	if exp == "" {
+		return nil
+	}
+
+	if _, err := aerospike.ExpFromBase64(exp); err != nil {
+		return fmt.Errorf("invalid filter-exp: must be a base64-encoded filter expression")
+	}
+
+	return nil
+}
+
+// validatePath rejects a path with ".." segments. The path is an S3 key prefix, where
+// ".." has no meaning, and resolving it locally would write the backup somewhere other
+// than the user asked for.
+func validatePath(p string) error {
+	if slices.Contains(strings.Split(p, "/"), "..") {
+		return fmt.Errorf("invalid path %q: must not contain '..'", p)
+	}
+
+	return nil
+}
+
+// NormalizeS3Prefix returns p as the S3 key prefix it names: without empty or "." segments
+// and without leading or trailing slashes. The manifest reader drops a leading slash, so
+// the backup has to be written under the same normalized prefix to be found afterwards.
+func NormalizeS3Prefix(p string) string {
+	return strings.Trim(path.Clean("/"+p), "/")
 }

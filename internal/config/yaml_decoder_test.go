@@ -15,6 +15,7 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,6 +67,12 @@ invalid: yaml: content:
     - yaml format
 `
 
+	testServerRestoreJobID = "rst-1"
+	// testServerBackupID and testServerBackupKeyPrefix are the backup the
+	// snapshot-backup sections of the fixtures below name.
+	testServerBackupID        = "bkp-1"
+	testServerBackupKeyPrefix = "backups/daily"
+
 	// validServerBackupYAML describes the whole snapshot-backup command tree:
 	// each subcommand reads only its own section.
 	validServerBackupYAML = `
@@ -78,18 +85,25 @@ cluster:
 backup:
   namespace: test
   object-storage-type: aws-s3
+  path: backups/daily
   set-list:
     - set1
     - set2
+  bin-list:
+    - bin1
+    - bin2
+  filter-exp: kwGTUQKkYmluMQE=
   no-indexes: true
   async: true
 list:
   path: some/prefix
 validate:
   backup-id: bkp-1
+  path: backups/daily
   sample-size: 500
 progress:
   backup-id: bkp-1
+  path: backups/daily
   watch: true
 abort:
   backup-id: bkp-1
@@ -110,17 +124,33 @@ cluster:
 restore:
   namespace: test
   object-storage-type: aws-s3
-  backup-id: bkp-1
+  backup-ids:
+    - bkp-1
+    - bkp-2
+  job-id: rst-1
   path: some/prefix
+  set-list:
+    - set1
+  no-indexes: true
+  no-udfs: true
   fuzzy-restore: true
+  allow-unhosted: true
+  parallel: 16
+  records-per-second: 1000
+  max-inflight: 500
+  retry-base-interval: 2000
+  retry-multiplier: 1.5
+  retry-max-attempts: 3
+  ignore-record-error: true
 prepare:
   namespace: test
-  backup-id: bkp-1
+  job-id: rst-1
+  hydrate-replica: false
 progress:
   namespace: test
 abort:
   namespace: test
-  backup-id: bkp-1
+  job-id: rst-1
 aws:
   s3:
     bucket-name: my-bucket
@@ -462,7 +492,10 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
+				assert.Equal(t, "backups/daily", cfg.Start.Path)
 				assert.Equal(t, "set1,set2", cfg.Start.SetList)
+				assert.Equal(t, "bin1,bin2", cfg.Start.BinList)
+				assert.Equal(t, "kwGTUQKkYmluMQE=", cfg.Start.FilterExp)
 				assert.True(t, cfg.Start.NoIndexes)
 				assert.True(t, cfg.Start.Async)
 			},
@@ -492,7 +525,8 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.List)
 				assert.Nil(t, cfg.Progress)
 
-				assert.Equal(t, "bkp-1", cfg.Validation.JobID)
+				assert.Equal(t, testServerBackupID, cfg.Validation.JobID)
+				assert.Equal(t, testServerBackupKeyPrefix, cfg.Validation.Path)
 				assert.Equal(t, 500, cfg.Validation.SampleSize)
 			},
 		},
@@ -508,7 +542,8 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Validation)
 				assert.Nil(t, cfg.Abort)
 
-				assert.Equal(t, "bkp-1", cfg.Progress.JobID)
+				assert.Equal(t, testServerBackupID, cfg.Progress.JobID)
+				assert.Equal(t, testServerBackupKeyPrefix, cfg.Progress.Path)
 				assert.True(t, cfg.Progress.Watch)
 			},
 		},
@@ -553,6 +588,64 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 	}
 }
 
+func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		yaml    string
+		decode  func(ctx context.Context, filename string) error
+		wantKey string
+	}{
+		{
+			name:    "backup enable-change-stream",
+			yaml:    "backup:\n  enable-change-stream: true\n",
+			wantKey: "enable-change-stream",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerBackupServiceConfig(ctx, filename, ServerBackupCommandStart)
+				return err
+			},
+		},
+		{
+			name:    "restore backup-id",
+			yaml:    "restore:\n  backup-id: bkp-1\n",
+			wantKey: "backup-id",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
+				return err
+			},
+		},
+		{
+			name:    "prepare backup-id",
+			yaml:    "prepare:\n  backup-id: bkp-1\n",
+			wantKey: "backup-id",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandPrepare)
+				return err
+			},
+		},
+		{
+			name:    "abort backup-id",
+			yaml:    "abort:\n  backup-id: bkp-1\n",
+			wantKey: "backup-id",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandAbort)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			filename := createTempFile(t, "removed_key.yaml", tt.yaml)
+
+			require.ErrorContains(t, tt.decode(t.Context(), filename), tt.wantKey)
+		})
+	}
+}
+
 func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 	t.Parallel()
 
@@ -576,9 +669,22 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
-				assert.Equal(t, "bkp-1", cfg.Start.JobID)
+				// The YAML carries a sequence, the model a comma separated list.
+				assert.Equal(t, "bkp-1,bkp-2", cfg.Start.BackupIDs)
+				assert.Equal(t, testServerRestoreJobID, cfg.Start.JobID)
 				assert.Equal(t, "some/prefix", cfg.Start.Path)
+				assert.Equal(t, "set1", cfg.Start.SetList)
+				assert.True(t, cfg.Start.NoIndexes)
+				assert.True(t, cfg.Start.NoUDFs)
 				assert.True(t, cfg.Start.FuzzyRestore)
+				assert.True(t, cfg.Start.AllowUnhosted)
+				assert.Equal(t, 16, cfg.Start.Parallel)
+				assert.Equal(t, 1000, cfg.Start.RecordsPerSecond)
+				assert.Equal(t, 500, cfg.Start.MaxInflight)
+				assert.Equal(t, 2000, cfg.Start.RetryBaseInterval)
+				assert.InDelta(t, 1.5, cfg.Start.RetryMultiplier, 0)
+				assert.Equal(t, 3, cfg.Start.RetryMaxAttempts)
+				assert.True(t, cfg.Start.IgnoreRecordError)
 			},
 		},
 		{
@@ -593,7 +699,8 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Prepare.Namespace)
-				assert.Equal(t, "bkp-1", cfg.Prepare.JobID)
+				assert.Equal(t, testServerRestoreJobID, cfg.Prepare.JobID)
+				assert.False(t, cfg.Prepare.HydrateReplica)
 			},
 		},
 		{
@@ -622,7 +729,7 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Progress)
 
 				assert.Equal(t, "test", cfg.Abort.Namespace)
-				assert.Equal(t, "bkp-1", cfg.Abort.JobID)
+				assert.Equal(t, testServerRestoreJobID, cfg.Abort.JobID)
 			},
 		},
 	}

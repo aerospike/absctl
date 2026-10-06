@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path"
 	"strconv"
 	"time"
 
@@ -229,6 +230,8 @@ type Service struct {
 	// and abortTimeout bounds how long they are made for.
 	abortPollInterval time.Duration
 	abortTimeout      time.Duration
+	// metadataS3Client opens the storage client backup manifests are read with.
+	metadataS3Client func(ctx context.Context, cfg *models.AwsS3) (s3API, error)
 }
 
 // NewService initializes and returns a new Service instance. Exactly one of backupCfg and
@@ -260,7 +263,20 @@ func NewService(
 		vanishedPollInterval: vanishedJobPollInterval,
 		abortPollInterval:    abortStatusPollInterval,
 		abortTimeout:         abortStatusTimeout,
+		metadataS3Client:     newMetadataS3Client,
 	}, nil
+}
+
+// newMetadataS3Client opens an S3 client for reading backup manifests. Its requests get
+// the bounded manifest timeout, so an unreachable storage fails the command instead of
+// holding it.
+func newMetadataS3Client(ctx context.Context, cfg *models.AwsS3) (s3API, error) {
+	client, err := storage.NewS3Client(ctx, metadataS3Config(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	return client, nil
 }
 
 // clientConfig returns the cluster to connect to, from whichever of the two command
@@ -357,13 +373,14 @@ func (s *Service) ListBackups(ctx context.Context) error {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, s.backupCfg.List.Path, lister.WithLogger(s.logger))
+	listPath := models.NormalizeS3Prefix(s.backupCfg.List.Path)
+	l := lister.NewLister(client, s.backupCfg.AwsS3.BucketName, listPath, lister.WithLogger(s.logger))
 
-	return s.listBackups(ctx, l, s.backupCfg.List.Path)
+	return s.listBackups(ctx, l, listPath)
 }
 
-// listBackups prints the manifests of the backups under path.
-func (s *Service) listBackups(ctx context.Context, l backupLister, path string) error {
+// listBackups prints the manifests of the backups under listPath.
+func (s *Service) listBackups(ctx context.Context, l backupLister, listPath string) error {
 	mds, err := l.FetchAllMetadata(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
@@ -372,7 +389,7 @@ func (s *Service) listBackups(ctx context.Context, l backupLister, path string) 
 	// Nothing under the path can also mean that the path names a single backup rather
 	// than a prefix holding several, so it is read as one before it is called empty.
 	if len(mds) == 0 {
-		md, err := l.GetMetadata(ctx, path)
+		md, err := l.GetMetadata(ctx, listPath)
 		if err != nil {
 			if errors.Is(err, errclass.ErrNotFound) {
 				s.logger.Info("backups not found")
@@ -403,53 +420,19 @@ func (s *Service) StartBackup(ctx context.Context) error {
 		return err
 	}
 
-	var mb, ma string
-
-	if s.backupCfg.Start.ModifiedBefore != "" {
-		mbt, err := s.backupCfg.Start.ModifiedBeforeTime()
-		if err != nil {
-			return fmt.Errorf("failed to parse modified-before time: %w", err)
-		}
-		mb = strconv.FormatInt(mbt.Unix(), 10)
-	}
-
-	if s.backupCfg.Start.ModifiedAfter != "" {
-		mat, err := s.backupCfg.Start.ModifiedAfterTime()
-		if err != nil {
-			return fmt.Errorf("failed to parse modified-after time: %w", err)
-		}
-		ma = strconv.FormatInt(mat.Unix(), 10)
-	}
-
-	bReq := &infomodels.RequestBackup{
-		Namespace:          s.backupCfg.Start.Namespace,
-		Storage:            s.backupCfg.Start.StorageType,
-		Bucket:             s.backupCfg.AwsS3.BucketName,
-		Region:             s.backupCfg.AwsS3.Region,
-		Profile:            s.backupCfg.AwsS3.Profile,
-		AccessKey:          s.backupCfg.AwsS3.AccessKeyID,
-		SecretKey:          s.backupCfg.AwsS3.SecretAccessKey,
-		Endpoint:           s.backupCfg.AwsS3.Endpoint,
-		ModifiedAfter:      ma,
-		ModifiedBefore:     mb,
-		SetList:            s.backupCfg.Start.SetList,
-		NoIndexes:          s.backupCfg.Start.NoIndexes,
-		NoUDFs:             s.backupCfg.Start.NoUDFs,
-		EnableChangeStream: s.backupCfg.Start.EnableChangeStream,
+	bReq, err := s.backupRequest()
+	if err != nil {
+		return err
 	}
 
 	// Following the backup ends by reading its manifest, so the storage is opened before
 	// the backup is requested: an unusable configuration has to fail the command now,
 	// not once there is a running backup that cannot be followed. It is the same
 	// configuration the cluster writes the backup with, so a backup started without it
-	// would not get far either. An asynchronous start reads nothing and needs none of it.
-	var l *lister.Lister
-
-	if !s.backupCfg.Start.Async {
-		l, err = s.newMetadataLister(ctx)
-		if err != nil {
-			return err
-		}
+	// would not get far either.
+	l, err := s.startedBackupMetadataLister(ctx)
+	if err != nil {
+		return err
 	}
 
 	jobID, err := client.StartBackup(ctx, bReq)
@@ -470,7 +453,59 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	return s.reportBackupProgress(ctx, client, l, jobID, followStartedJob)
 }
 
-// StartRestore initiates a restore process for the specified job ID using the service's backup configuration.
+// startedBackupMetadataLister returns the reader of the manifest of the backup being
+// started, which is written under the configured path. An asynchronous start reads
+// nothing, and gets nil.
+func (s *Service) startedBackupMetadataLister(ctx context.Context) (metadataGetter, error) {
+	if s.backupCfg.Start.Async {
+		return nil, nil
+	}
+
+	return s.newMetadataLister(ctx, models.NormalizeS3Prefix(s.backupCfg.Start.Path))
+}
+
+// backupRequest maps the backup configuration onto the request the cluster is sent.
+func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
+	start := s.backupCfg.Start
+
+	var mb, ma string
+
+	if start.ModifiedBefore != "" {
+		mbt, err := start.ModifiedBeforeTime()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse modified-before time: %w", err)
+		}
+		mb = strconv.FormatInt(mbt.Unix(), 10)
+	}
+
+	if start.ModifiedAfter != "" {
+		mat, err := start.ModifiedAfterTime()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse modified-after time: %w", err)
+		}
+		ma = strconv.FormatInt(mat.Unix(), 10)
+	}
+
+	return &infomodels.RequestBackup{
+		Namespace:      start.Namespace,
+		Storage:        start.StorageType,
+		Path:           models.NormalizeS3Prefix(start.Path),
+		Bucket:         s.backupCfg.AwsS3.BucketName,
+		Region:         s.backupCfg.AwsS3.Region,
+		Profile:        s.backupCfg.AwsS3.Profile,
+		Endpoint:       s.backupCfg.AwsS3.Endpoint,
+		SetList:        start.SetList,
+		FilterExp:      start.FilterExp,
+		NoIndexes:      new(start.NoIndexes),
+		NoUDFs:         new(start.NoUDFs),
+		BinList:        start.BinList,
+		ModifiedAfter:  ma,
+		ModifiedBefore: mb,
+	}, nil
+}
+
+// StartRestore checks that the configured backup exists and is complete, then starts
+// restoring it as the configured restore job.
 func (s *Service) StartRestore(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
 	if err != nil {
@@ -478,36 +513,31 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	if err := s.checkClusterStable(ctx, client, s.restoreCfg.Start.Namespace); err != nil {
+	start := s.restoreCfg.Start
+
+	if err := s.checkClusterStable(ctx, client, start.Namespace); err != nil {
 		return err
 	}
 
-	// The backup is looked for before the restore is requested, so the lookup gets the
-	// same bounded request timeout the other manifest reads use: an unreachable storage
-	// has to fail the command instead of holding it.
-	s3Client, err := storage.NewS3Client(ctx, metadataS3Config(s.restoreCfg.AwsS3))
+	// The backup is looked for before the restore is requested.
+	s3Client, err := s.metadataS3Client(ctx, s.restoreCfg.AwsS3)
 	if err != nil {
-		return fmt.Errorf("failed to create s3 client: %w", err)
-	}
-
-	if err := s.checkBackupExists(ctx, s3Client,
-		s.restoreCfg.AwsS3.BucketName, s.restoreCfg.Start.JobID); err != nil {
 		return err
 	}
 
-	rReq := &infomodels.RequestRestore{
-		Namespace:    s.restoreCfg.Start.Namespace,
-		Storage:      s.restoreCfg.Start.StorageType,
-		Bucket:       s.restoreCfg.AwsS3.BucketName,
-		Region:       s.restoreCfg.AwsS3.Region,
-		Profile:      s.restoreCfg.AwsS3.Profile,
-		AccessKey:    s.restoreCfg.AwsS3.AccessKeyID,
-		SecretKey:    s.restoreCfg.AwsS3.SecretAccessKey,
-		Endpoint:     s.restoreCfg.AwsS3.Endpoint,
-		JobID:        s.restoreCfg.Start.JobID,
-		Path:         s.restoreCfg.Start.Path,
-		FuzzyRestore: s.restoreCfg.Start.FuzzyRestore,
+	if err := s.checkBackupsExist(ctx, s3Client, s.restoreCfg.AwsS3.BucketName,
+		models.NormalizeS3Prefix(start.Path), start.BackupIDList()); err != nil {
+		return err
 	}
+
+	// A prepare run before this start has to name the same job, so the fallback is
+	// reported for the user to see which id that is.
+	if start.JobID == "" {
+		s.logger.Info("job-id is not set, the backup id is used as the restore job id",
+			slog.String("job-id", start.RestoreJobID()))
+	}
+
+	rReq := s.restoreRequest()
 
 	err = client.StartRestore(ctx, rReq)
 	if err != nil {
@@ -515,9 +545,40 @@ func (s *Service) StartRestore(ctx context.Context) error {
 	}
 
 	s.logger.Info("server integrated restore started",
-		slog.String("backup-id", s.restoreCfg.Start.JobID))
+		slog.String("job-id", rReq.JobID),
+		slog.String("backup-ids", rReq.BackupIDs))
 
 	return nil
+}
+
+// restoreRequest maps the restore configuration onto the request the cluster is sent.
+func (s *Service) restoreRequest() *infomodels.RequestRestore {
+	start := s.restoreCfg.Start
+
+	return &infomodels.RequestRestore{
+		Namespace:           start.Namespace,
+		Storage:             start.StorageType,
+		Path:                models.NormalizeS3Prefix(start.Path),
+		Bucket:              s.restoreCfg.AwsS3.BucketName,
+		Region:              s.restoreCfg.AwsS3.Region,
+		Profile:             s.restoreCfg.AwsS3.Profile,
+		Endpoint:            s.restoreCfg.AwsS3.Endpoint,
+		SetList:             start.SetList,
+		FilterExp:           start.FilterExp,
+		NoIndexes:           new(start.NoIndexes),
+		NoUDFs:              new(start.NoUDFs),
+		JobID:               start.RestoreJobID(),
+		BackupIDs:           start.BackupIDs,
+		FuzzyRestore:        new(start.FuzzyRestore),
+		AllowUnhosted:       new(start.AllowUnhosted),
+		Parallel:            start.Parallel,
+		RecordsPerSecond:    start.RecordsPerSecond,
+		MaxInflight:         start.MaxInflight,
+		RetryBaseIntervalMs: start.RetryBaseInterval,
+		RetryMultiplier:     start.RetryMultiplier,
+		RetryMaxAttempts:    start.RetryMaxAttempts,
+		IgnoreRecordError:   new(start.IgnoreRecordError),
+	}
 }
 
 // PrepareRestore initiates a restore preparation process for the specified job ID.
@@ -532,19 +593,24 @@ func (s *Service) PrepareRestore(ctx context.Context) error {
 		return err
 	}
 
-	err = client.PrepareRestore(
-		ctx,
-		s.restoreCfg.Prepare.JobID,
-		s.restoreCfg.Prepare.Namespace,
-	)
+	err = client.PrepareRestore(ctx, s.prepareRestoreRequest())
 	if err != nil {
 		return fmt.Errorf("failed to prepare restore: %w", err)
 	}
 
 	s.logger.Info("restore preparation started",
-		slog.String("backup-id", s.restoreCfg.Prepare.JobID))
+		slog.String("job-id", s.restoreCfg.Prepare.JobID))
 
 	return nil
+}
+
+// prepareRestoreRequest maps the prepare configuration onto the request the cluster is sent.
+func (s *Service) prepareRestoreRequest() *infomodels.RequestPrepareRestore {
+	return &infomodels.RequestPrepareRestore{
+		Namespace:      s.restoreCfg.Prepare.Namespace,
+		JobID:          s.restoreCfg.Prepare.JobID,
+		HydrateReplica: new(s.restoreCfg.Prepare.HydrateReplica),
+	}
 }
 
 // BackupProgress returns the progress of the currently running backup.
@@ -557,7 +623,7 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 
 	// The storage client is created before the watch loop on purpose: a wrong endpoint
 	// or wrong credentials must fail now, not after hours of watching a backup.
-	l, err := s.newMetadataLister(ctx)
+	l, err := s.newMetadataLister(ctx, models.NormalizeS3Prefix(s.backupCfg.Progress.Path))
 	if err != nil {
 		return err
 	}
@@ -570,14 +636,37 @@ func (s *Service) BackupProgress(ctx context.Context) error {
 	return s.reportBackupProgress(ctx, client, l, s.backupCfg.Progress.JobID, mode)
 }
 
-// newMetadataLister returns the reader of backup manifests in the configured bucket.
-func (s *Service) newMetadataLister(ctx context.Context) (*lister.Lister, error) {
-	s3Client, err := storage.NewS3Client(ctx, metadataS3Config(s.backupCfg.AwsS3))
+// newMetadataLister returns the reader of backup manifests stored under prefix in the
+// configured bucket.
+func (s *Service) newMetadataLister(ctx context.Context, prefix string) (metadataGetter, error) {
+	s3Client, err := s.metadataS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create s3 client: %w", err)
+		return nil, err
 	}
 
-	return lister.NewLister(s3Client, s.backupCfg.AwsS3.BucketName, "", lister.WithLogger(s.logger)), nil
+	return newPrefixedMetadataGetter(s3Client, s.backupCfg.AwsS3.BucketName, prefix, s.logger), nil
+}
+
+// prefixedMetadataGetter reads the manifests of backups written under a key prefix.
+// lister.Lister applies its prefix to listing only, so a single manifest is addressed
+// by its full key.
+type prefixedMetadataGetter struct {
+	metadataGetter
+	prefix string
+}
+
+// newPrefixedMetadataGetter returns the reader of manifests under prefix in bucket. The
+// lister gets no prefix of its own, so that the prefix is applied in one place only.
+func newPrefixedMetadataGetter(client s3API, bucket, prefix string, logger *slog.Logger) prefixedMetadataGetter {
+	return prefixedMetadataGetter{
+		metadataGetter: lister.NewLister(client, bucket, "", lister.WithLogger(logger)),
+		prefix:         prefix,
+	}
+}
+
+// GetMetadata reads the manifest of backupID under the prefix.
+func (g prefixedMetadataGetter) GetMetadata(ctx context.Context, backupID string) (servermodels.Metadata, error) {
+	return g.metadataGetter.GetMetadata(ctx, path.Join(g.prefix, backupID))
 }
 
 // progressMode says how long the watcher stays with a job, and how much it trusts the
@@ -914,21 +1003,35 @@ func (s *Service) RestoreProgress(ctx context.Context) error {
 	return nil
 }
 
-// BackupValidate validates the backup identified by the configured job ID.
+// BackupValidate validates the backup identified by the configured job ID, read from
+// under the configured path.
 func (s *Service) BackupValidate(ctx context.Context) error {
+	prefix := models.NormalizeS3Prefix(s.backupCfg.Validation.Path)
+
+	// The manifest is read with the bounded manifest timeout, so that an unreachable
+	// storage fails the command right away. Validation itself streams whole segments
+	// and gets a client without that timeout.
+	metaClient, err := s.metadataS3Client(ctx, s.backupCfg.AwsS3)
+	if err != nil {
+		return err
+	}
+
+	if err := s.checkBackupExists(ctx, metaClient, s.backupCfg.AwsS3.BucketName, prefix,
+		s.backupCfg.Validation.JobID); err != nil {
+		return err
+	}
+
 	client, err := storage.NewS3Client(ctx, s.backupCfg.AwsS3)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 client: %w", err)
 	}
 
-	if err := s.checkBackupExists(ctx, client, s.backupCfg.AwsS3.BucketName, s.backupCfg.Validation.JobID); err != nil {
-		return err
-	}
-
+	// The streamer addresses a backup by a single key, so the path it was written under
+	// is part of that key.
 	streamer, err := streamers.NewS3(
 		client,
 		s.backupCfg.AwsS3.BucketName,
-		s.backupCfg.Validation.JobID,
+		path.Join(prefix, s.backupCfg.Validation.JobID),
 		streamers.WithLogger(s.logger),
 	)
 	if err != nil {
@@ -985,17 +1088,32 @@ func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecke
 	return nil
 }
 
-// checkBackupExists validates the backup exists for RESTORE only.
-func (s *Service) checkBackupExists(ctx context.Context, client s3API, bucket, jobID string) error {
-	l := lister.NewLister(client, bucket, "", lister.WithLogger(s.logger))
+// checkBackupsExist validates that every backup of backupIDs, written under prefix,
+// exists and is complete. The metadata of a backup is addressed by its own id, so the
+// backups are looked for one by one, and a single missing or incomplete one stops the
+// restore before any of them is read.
+func (s *Service) checkBackupsExist(
+	ctx context.Context, client s3API, bucket, prefix string, backupIDs []string,
+) error {
+	for _, backupID := range backupIDs {
+		if err := s.checkBackupExists(ctx, client, bucket, prefix, backupID); err != nil {
+			return err
+		}
+	}
 
-	md, err := l.GetMetadata(ctx, jobID)
+	return nil
+}
+
+// checkBackupExists validates that the backup backupID, written under prefix, exists and
+// is complete.
+func (s *Service) checkBackupExists(ctx context.Context, client s3API, bucket, prefix, backupID string) error {
+	md, err := newPrefixedMetadataGetter(client, bucket, prefix, s.logger).GetMetadata(ctx, backupID)
 	if err != nil {
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
 	if md.Status != servermodels.MetadataStatusComplete {
-		return fmt.Errorf("backup %s is not complete, has status %s", jobID, md.Status)
+		return fmt.Errorf("backup %s is not complete, has status %s", backupID, md.Status)
 	}
 
 	s.logger.Info("backup found",
@@ -1228,10 +1346,10 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 
 	s.logger.Info("aborting restore",
 		slog.String("namespace", namespace),
-		slog.String("backup-id", jobID))
+		slog.String("job-id", jobID))
 
 	if _, err := s.waitForAbort(ctx,
-		fmt.Errorf("%w: namespace %s, backup-id %s", errAbortRestoreStatusTimeout, namespace, jobID),
+		fmt.Errorf("%w: namespace %s, job-id %s", errAbortRestoreStatusTimeout, namespace, jobID),
 		func(ctx context.Context) (abortOutcome, string, error) {
 			return restoreAbortState(ctx, client, namespace)
 		}); err != nil {
