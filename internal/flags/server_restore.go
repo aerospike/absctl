@@ -31,21 +31,63 @@ func NewServerRestore() *ServerRestore {
 func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to restore.")
 	flagSet.StringVar(&f.StorageType, "object-storage-type",
 		models.DefaultServerBackupObjectStorageType,
 		"Type of object storage. Example: aws-s3")
-	flagSet.StringVar(&f.JobID, "backup-id",
+	flagSet.StringVar(&f.BackupIDs, "backup-ids",
 		models.DefaultServerBackupJobID,
-		"Job id used for restore.")
+		"Comma separated list of the ids of the backups to restore from.")
+	flagSet.StringVar(&f.JobID, "job-id",
+		models.DefaultServerRestoreJobID,
+		"Id of the restore job. A cold restore must use the job id passed to\n"+
+			"the restore preparation. If empty, the id of the single backup being\n"+
+			"restored is used, so it is required when several backup ids are given.")
 	flagSet.StringVar(&f.Path, "path",
 		models.DefaultServerBackupPath,
-		"Path to restore from.")
+		"Key prefix in the bucket the backup was written under.")
+	flagSet.StringVarP(&f.SetList, "set-list", "s",
+		models.DefaultCommonSetList,
+		descSetListRestore)
+	flagSet.StringVar(&f.FilterExp, "filter-exp",
+		models.DefaultServerFilterExp,
+		"Base64 encoded filter expression. Cold restore only.")
+	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "I",
+		models.DefaultCommonNoIndexes,
+		descNoIndexesRestore)
+	flagSet.BoolVar(&f.NoUDFs, "no-udfs",
+		models.DefaultCommonNoUDFs,
+		descNoUDFsRestore)
 	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore",
 		models.DefaultServerRestoreFuzzyRestore,
-		"Fuzzy restore.")
+		"Restore by writing records into the live namespace instead of\n"+
+			"the cold partition hydration. The flags below apply to a fuzzy restore only.")
+	flagSet.BoolVar(&f.AllowUnhosted, "allow-unhosted",
+		models.DefaultServerRestoreAllowUnhosted,
+		"Allow the restore even if the principal does not host the namespace.")
+	flagSet.IntVarP(&f.Parallel, "parallel", "w",
+		models.DefaultServerRestoreParallel,
+		"Number of worker threads, from 1 to 128.")
+	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
+		models.DefaultServerRestoreRecordsPerSecond,
+		"Limit total written records per second. If 0, no limit is applied.")
+	flagSet.IntVar(&f.MaxInflight, "max-inflight",
+		models.DefaultServerRestoreMaxInflight,
+		"Maximum number of concurrent writes, up to 100000.")
+	flagSet.IntVar(&f.RetryBaseInterval, "retry-base-interval",
+		models.DefaultServerRestoreRetryBaseInterval,
+		"Base delay before a retry (in ms).")
+	flagSet.Float64Var(&f.RetryMultiplier, "retry-multiplier",
+		models.DefaultServerRestoreRetryMultiplier,
+		"Backoff multiplier of the retry delay. Must be at least 1.0.")
+	flagSet.IntVar(&f.RetryMaxAttempts, "retry-max-attempts",
+		models.DefaultServerRestoreRetryMaxAttempts,
+		"Maximum number of attempts per record.")
+	flagSet.BoolVar(&f.IgnoreRecordError, "ignore-record-error",
+		models.DefaultServerRestoreIgnoreRecordError,
+		"Continue the restore on errors of individual records.")
 
 	return flagSet
 }
@@ -66,12 +108,16 @@ func NewServerRestorePrepare() *ServerRestorePrepare {
 func (f *ServerRestorePrepare) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to restore.")
-	flagSet.StringVar(&f.JobID, "backup-id",
-		models.DefaultServerBackupJobID,
-		"Job id used for restore.")
+	flagSet.StringVar(&f.JobID, "job-id",
+		models.DefaultServerRestoreJobID,
+		"Id of the restore job. The restore must be started with the same job id.")
+	flagSet.BoolVar(&f.HydrateReplica, "hydrate-replica",
+		models.DefaultServerRestoreHydrateReplica,
+		"Restore all replicas. If false, only the master is restored and\n"+
+			"the other replicas are filled by migrations.")
 
 	return flagSet
 }
@@ -91,7 +137,7 @@ func NewServerRestoreProgress() *ServerRestoreProgress {
 func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to check progress.")
 
@@ -115,12 +161,12 @@ func NewServerRestoreAbort() *ServerRestoreAbort {
 func (f *ServerRestoreAbort) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace the restore is aborted for.")
-	flagSet.StringVar(&f.JobID, "backup-id",
-		models.DefaultServerBackupJobID,
-		"Job id of the restore to abort.")
+	flagSet.StringVar(&f.JobID, "job-id",
+		models.DefaultServerRestoreJobID,
+		"Id of the restore job to abort.")
 
 	return flagSet
 }

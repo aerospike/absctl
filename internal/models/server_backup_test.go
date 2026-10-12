@@ -27,6 +27,12 @@ const (
 	testServerListPath     = "/backups"
 	testServerStorage      = StorageTypeAwsS3
 	testUnsupportedStorage = "gcp-storage"
+	testServerFilterExp    = "kwGTUQKkYmluMQE="
+	testInvalidFilterExp   = "not-base64!"
+	errMsgInvalidFilterExp = "invalid filter-exp: must be a base64-encoded filter expression"
+	testServerPath         = "backups/daily"
+	testParentPath         = "backups/../other"
+	errMsgParentPath       = `invalid path "backups/../other": must not contain '..'`
 )
 
 func validServerBackup() *ServerBackup {
@@ -128,6 +134,44 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "valid filter expression",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.FilterExp = testServerFilterExp
+				return backup
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid filter expression",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.FilterExp = testInvalidFilterExp
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgInvalidFilterExp,
+		},
+		{
+			name: "valid path",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.Path = testServerPath
+				return backup
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.Path = testParentPath
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
+		},
 	}
 
 	for _, tt := range tests {
@@ -168,6 +212,14 @@ func TestServerBackupList_Validate(t *testing.T) {
 			name:    "nil list",
 			list:    nil,
 			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			list: &ServerBackupList{
+				Path: testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 
@@ -223,6 +275,23 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 				Watch: true,
 			},
 			wantErr: false,
+		},
+		{
+			name: "valid path",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+				Path:  testServerPath,
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+				Path:  testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 
@@ -334,6 +403,23 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "sample-size must be non-negative",
+		},
+		{
+			name: "valid path",
+			validation: &ServerBackupValidate{
+				JobID: testServerJobID,
+				Path:  testServerPath,
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			validation: &ServerBackupValidate{
+				JobID: testServerJobID,
+				Path:  testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 

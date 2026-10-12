@@ -82,3 +82,29 @@ func TestServerCommon_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeS3Prefix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		give string
+		want string
+	}{
+		{name: "empty", give: "", want: ""},
+		{name: "root", give: "/", want: ""},
+		{name: "already normalized", give: testServerPath, want: testServerPath},
+		{name: "leading slash", give: "/" + testServerPath, want: testServerPath},
+		{name: "trailing slash", give: testServerPath + "/", want: testServerPath},
+		{name: "duplicate slashes", give: "backups//daily", want: testServerPath},
+		{name: "current directory segment", give: "./backups/./daily", want: testServerPath},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, NormalizeS3Prefix(tt.give))
+		})
+	}
+}

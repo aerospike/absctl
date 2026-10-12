@@ -52,7 +52,6 @@ func printServerValidationReport(r *sModels.ValidationReport) {
 	printMetric("Unreadable Segments", r.InvalidSegments)
 	printMetric("Records Read", r.TotalRecords)
 	printMetric("Bytes Parsed", r.TotalBytes)
-	printMetric("Skipped Compressed Records", r.SkippedCompressed)
 	printToOutWriter("")
 
 	printManifestMetrics(&r.Manifests)
@@ -149,7 +148,6 @@ func logServerValidationReport(r *sModels.ValidationReport, logger *slog.Logger)
 		slog.Int64("unreadable-segments", r.InvalidSegments),
 		slog.Int64("records-read", r.TotalRecords),
 		slog.Int64("bytes-parsed", r.TotalBytes),
-		slog.Int64("skipped-compressed", r.SkippedCompressed),
 		slog.Int64("total-manifests", r.Manifests.Total),
 		slog.Int64("checked-manifests", r.Manifests.Checked),
 		slog.Int64("checked-segment-records", r.Manifests.CheckedSegments),
