@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/aerospike/absctl/internal/cli/scan"
+	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/spf13/cobra"
@@ -76,16 +77,14 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	scanBackupCmd, _ := scan.NewExportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	scanRestoreCmd, _ := scan.NewImportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	// Unreleased features:
-	// serverBackupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
-	// serverRestoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	serverBackupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
+	serverRestoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
 	rootCmd.AddCommand(scanBackupCmd)
 	rootCmd.AddCommand(scanRestoreCmd)
 
-	// Unreleased features:
-	// rootCmd.AddCommand(serverBackupCmd)
-	// rootCmd.AddCommand(serverRestoreCmd)
+	rootCmd.AddCommand(serverBackupCmd)
+	rootCmd.AddCommand(serverRestoreCmd)
 
 	helpFunc := newHelpFunction(rootFlagSet)
 
