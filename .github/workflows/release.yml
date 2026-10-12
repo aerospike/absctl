@@ -1,5 +1,15 @@
 name: Publish Aerospike Backup Tools Release (Shared Workflows)
 
+# PLACEHOLDER -- this file exists only to register the workflow path
+# `.github/workflows/release.yml` on the default branch. GitHub exposes a
+# `workflow_dispatch` trigger only for workflows present on the default branch; once this
+# path is registered, dispatching it with a different `ref` runs THAT ref's version of the
+# file. That is how the real release workflow on `switch-to-sharedworkflows` can be
+# rehearsed before it is merged.
+#
+# The `version` input below mirrors the real workflow's input so a dispatch carrying it is
+# accepted. Replace this whole file with the real release workflow when that branch merges.
+
 on:
   workflow_dispatch:
     inputs:
@@ -47,7 +57,7 @@ jobs:
 
       - name: Login to JFrog
         id: jfrog-login
-        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        uses: step-security/setup-jfrog-cli@f67dd6dcfe5fab8d1ebd695c456631275009a39d # v5.2.0
         env:
           JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
           JF_PROJECT: ${{ vars.JF_PROJECT }}
@@ -130,7 +140,7 @@ jobs:
           egress-policy: audit
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        uses: step-security/setup-jfrog-cli@f67dd6dcfe5fab8d1ebd695c456631275009a39d # v5.2.0
         env:
           JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
           JF_PROJECT: ${{ vars.JF_PROJECT }}
