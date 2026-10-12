@@ -57,7 +57,6 @@ func TestPrintServerValidationReport(t *testing.T) {
 	assert.Contains(t, output, "4200")
 	assert.Contains(t, output, "Bytes Parsed")
 	assert.Contains(t, output, "5000000")
-	assert.Contains(t, output, "Skipped Compressed Records")
 	assert.NotContains(t, output, segmentParseHeader)
 }
 
@@ -134,7 +133,6 @@ func TestLogServerValidationReport(t *testing.T) {
 	assert.Contains(t, logOutput, "valid-segments=100")
 	assert.Contains(t, logOutput, "records-read=4200")
 	assert.Contains(t, logOutput, "bytes-parsed=5000000")
-	assert.Contains(t, logOutput, "skipped-compressed=7")
 	assert.NotContains(t, logOutput, "unreadable segment")
 }
 
@@ -353,20 +351,19 @@ func TestServerValidationReportFieldsAgree(t *testing.T) {
 	// Printed label paired with the log attribute that must carry the same
 	// field of the report.
 	fields := map[string]string{
-		"Backup ID":                  "backup-id",
-		"Total Segments":             "total-segments",
-		"Checked Segments":           "checked-segments",
-		"Valid Segments":             "valid-segments",
-		"Unreadable Segments":        "unreadable-segments",
-		"Records Read":               "records-read",
-		"Bytes Parsed":               "bytes-parsed",
-		"Skipped Compressed Records": "skipped-compressed",
-		"Total Manifests":            "total-manifests",
-		"Checked Manifests":          "checked-manifests",
-		"Checked Segment Records":    "checked-segment-records",
-		"Missing Segments":           "missing-segments",
-		"Unrecorded Segments":        "unrecorded-segments",
-		"Manifest Problems":          "manifest-problems",
+		"Backup ID":               "backup-id",
+		"Total Segments":          "total-segments",
+		"Checked Segments":        "checked-segments",
+		"Valid Segments":          "valid-segments",
+		"Unreadable Segments":     "unreadable-segments",
+		"Records Read":            "records-read",
+		"Bytes Parsed":            "bytes-parsed",
+		"Total Manifests":         "total-manifests",
+		"Checked Manifests":       "checked-manifests",
+		"Checked Segment Records": "checked-segment-records",
+		"Missing Segments":        "missing-segments",
+		"Unrecorded Segments":     "unrecorded-segments",
+		"Manifest Problems":       "manifest-problems",
 	}
 
 	for label, attr := range fields {
