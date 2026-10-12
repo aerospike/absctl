@@ -29,13 +29,12 @@ var errSegmentUnreadable = errors.New("bad record magic")
 // newSampleValidationReport builds a report of a backup that validated clean.
 func newSampleValidationReport() *sModels.ValidationReport {
 	return &sModels.ValidationReport{
-		BackupID:          "519118324",
-		TotalSegments:     1000,
-		CheckedSegments:   100,
-		ValidSegments:     100,
-		TotalRecords:      4200,
-		TotalBytes:        5000000,
-		SkippedCompressed: 7,
+		BackupID:        "519118324",
+		TotalSegments:   1000,
+		CheckedSegments: 100,
+		ValidSegments:   100,
+		TotalRecords:    4200,
+		TotalBytes:      5000000,
 	}
 }
 
