@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -139,7 +139,7 @@ func TestGcpStorage_Validate(t *testing.T) {
 				RetryBackoffInit:       1,
 				RetryBackoffMultiplier: 2.0,
 				ChunkSize:              1024,
-				StorageCommon:          StorageCommon{MaxConnsPerHost: -1},
+				MaxConnsPerHost:        -1,
 			},
 			wantErr: "max connections per host must be non-negative",
 		},
@@ -152,7 +152,7 @@ func TestGcpStorage_Validate(t *testing.T) {
 				RetryBackoffInit:       1,
 				RetryBackoffMultiplier: 2.0,
 				ChunkSize:              1024,
-				StorageCommon:          StorageCommon{RequestTimeout: -1},
+				RequestTimeout:         -1,
 			},
 			wantErr: "request timeout must be non-negative",
 		},

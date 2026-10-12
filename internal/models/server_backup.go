@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,134 @@
 
 package models
 
+import (
+	"fmt"
+	"time"
+)
+
 // ServerBackup contains flags that will be mapped to ServerBackup.
 type ServerBackup struct {
-	ListPath    string
-	Namespace   string
-	JobID       string
-	StorageType string
+	ServerCommon
+
+	ModifiedBefore     string
+	ModifiedAfter      string
+	SetList            string
+	NoIndexes          bool
+	NoUDFs             bool
+	EnableChangeStream bool
+	// Async returns from the start command as soon as the cluster accepts the job,
+	// instead of following the backup until it ends.
+	Async bool
+}
+
+func (s *ServerBackup) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	var modifiedAfter, modifiedBefore time.Time
+
+	if s.ModifiedAfter != "" {
+		ma, err := s.ModifiedAfterTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified after: %w", err)
+		}
+		modifiedAfter = ma
+	}
+
+	if s.ModifiedBefore != "" {
+		mb, err := s.ModifiedBeforeTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified before: %w", err)
+		}
+		modifiedBefore = mb
+	}
+
+	if s.ModifiedAfter != "" && s.ModifiedBefore != "" && !modifiedBefore.After(modifiedAfter) {
+		return fmt.Errorf("modified-before must be strictly greater than modified-after")
+	}
+
+	return s.ServerCommon.Validate()
+}
+
+// ModifiedBeforeTime maps the ModifiedBefore string into a UTC time.
+func (s *ServerBackup) ModifiedBeforeTime() (time.Time, error) {
+	return ParseLocalTimeToUTC(s.ModifiedBefore)
+}
+
+// ModifiedAfterTime maps the ModifiedAfter string into a UTC time.
+func (s *ServerBackup) ModifiedAfterTime() (time.Time, error) {
+	return ParseLocalTimeToUTC(s.ModifiedAfter)
+}
+
+type ServerBackupList struct {
+	// Path is the path to list backups from.
+	Path string
+}
+
+func (s *ServerBackupList) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	return nil
+}
+
+type ServerBackupValidate struct {
+	// JobID is the id of the backup to validate.
+	JobID string
+	// SampleSize specifies the sample size limit for validation operations.
+	// Zero means that every segment is validated.
+	SampleSize int
+}
+
+func (s *ServerBackupValidate) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	if s.SampleSize < 0 {
+		return fmt.Errorf("sample-size must be non-negative")
+	}
+
+	return nil
+}
+
+// ServerBackupProgress contains flags that will be mapped to ServerBackupProgress.
+type ServerBackupProgress struct {
+	JobID string
+	Watch bool
+}
+
+func (s *ServerBackupProgress) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	return nil
+}
+
+// ServerBackupAbort contains flags that will be mapped to ServerBackupAbort.
+type ServerBackupAbort struct {
+	JobID string
+}
+
+func (s *ServerBackupAbort) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.JobID == "" {
+		return fmt.Errorf("backup-id is required")
+	}
+
+	return nil
 }

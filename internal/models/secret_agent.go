@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/aerospike/backup-go"
-	sa "github.com/aerospike/backup-go/pkg/secret-agent"
+	sa "github.com/aerospike/backup-go/pkg/secretagent"
 )
 
 // SecretAgent contains flags that will be mapped to SecretAgentConfig for backup and restore operations.

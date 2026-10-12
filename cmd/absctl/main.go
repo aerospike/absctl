@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,7 +39,9 @@ func main() {
 
 	go func() {
 		sig := <-sigChan
-		log.Printf("stopping backup: %v\n", sig)
+		// Only the local command is stopped here. A server-side job keeps running, and
+		// saying otherwise makes an interrupted "progress" look like an aborted backup.
+		log.Printf("stopping absctl: %v\n", sig)
 		cancel()
 	}()
 

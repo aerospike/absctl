@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,11 +23,55 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testServerNamespace = "test-ns"
+	testServerJobID     = "backup-job-1"
+	testServerListPath  = "/backups"
+	testServerStorage   = models.StorageTypeAwsS3
+)
+
+// validServerObjectStorage returns the S3 section a server-integrated command
+// needs to pass validation in both backup and restore mode.
+func validServerObjectStorage() *models.AwsS3 {
+	return &models.AwsS3{
+		BucketName:          testBucket,
+		RestorePollDuration: 1,
+		ChunkSize:           5,
+		RetryReadBackoff:    100,
+		RetryReadMultiplier: 2,
+	}
+}
+
+func validServerBackupServiceConfig() *ServerBackupServiceConfig {
+	return &ServerBackupServiceConfig{
+		Start: &models.ServerBackup{
+			Namespace:   testServerNamespace,
+			StorageType: testServerStorage,
+		},
+		List: &models.ServerBackupList{
+			Path: testServerListPath,
+		},
+		Validation: &models.ServerBackupValidate{
+			JobID: testServerJobID,
+		},
+		App:          &models.App{},
+		ClientConfig: &client.AerospikeConfig{},
+		ClientPolicy: &models.ClientPolicy{},
+		Encryption:   &models.Encryption{},
+		Compression:  &models.Compression{},
+		AwsS3:        validServerObjectStorage(),
+	}
+}
+
 func TestNewServerBackupServiceConfig(t *testing.T) {
 	t.Parallel()
 
 	var (
-		serverBackup = &models.ServerBackup{}
+		start        = &models.ServerBackup{}
+		list         = &models.ServerBackupList{}
+		validation   = &models.ServerBackupValidate{}
+		progress     = &models.ServerBackupProgress{}
+		abort        = &models.ServerBackupAbort{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -36,31 +80,39 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 	)
 
 	tests := []struct {
-		name             string
-		integratedBackup *models.ServerBackup
-		app              *models.App
-		clientConfig     *client.AerospikeConfig
-		clientPolicy     *models.ClientPolicy
-		secretAgent      *models.SecretAgent
-		awsS3            *models.AwsS3
+		name       string
+		start      *models.ServerBackup
+		list       *models.ServerBackupList
+		validation *models.ServerBackupValidate
+		progress   *models.ServerBackupProgress
+		abort      *models.ServerBackupAbort
+		app        *models.App
+		clientCfg  *client.AerospikeConfig
+		clientPol  *models.ClientPolicy
+		secret     *models.SecretAgent
+		awsS3      *models.AwsS3
 	}{
 		{
-			name:             "all fields set",
-			integratedBackup: serverBackup,
-			app:              app,
-			clientConfig:     clientCfg,
-			clientPolicy:     clientPolicy,
-			secretAgent:      secretAgent,
-			awsS3:            awsS3,
+			name:       "all fields set",
+			start:      start,
+			list:       list,
+			validation: validation,
+			progress:   progress,
+			abort:      abort,
+			app:        app,
+			clientCfg:  clientCfg,
+			clientPol:  clientPolicy,
+			secret:     secretAgent,
+			awsS3:      awsS3,
 		},
 		{
 			name: "all fields nil",
 		},
 		{
-			name:             "only mandatory-looking fields",
-			integratedBackup: serverBackup,
-			app:              app,
-			clientConfig:     clientCfg,
+			name:      "only mandatory-looking fields",
+			start:     start,
+			app:       app,
+			clientCfg: clientCfg,
 		},
 		{
 			name:  "only cloud storage fields set",
@@ -73,22 +125,30 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			t.Parallel()
 
 			got := NewServerBackupServiceConfig(
-				tt.integratedBackup,
+				tt.start,
+				tt.list,
+				tt.validation,
+				tt.progress,
+				tt.abort,
 				tt.app,
-				tt.clientConfig,
-				tt.clientPolicy,
-				tt.secretAgent,
+				tt.clientCfg,
+				tt.clientPol,
+				tt.secret,
 				tt.awsS3,
 			)
 
 			require.NotNil(t, got)
 
-			assert.Same(t, tt.integratedBackup, got.ServerBackup, "ServerBackup")
-			assert.Same(t, tt.app, got.App, "App")
-			assert.Same(t, tt.clientConfig, got.ClientConfig, "ClientConfig")
-			assert.Same(t, tt.clientPolicy, got.ClientPolicy, "ClientPolicy")
-			assert.Same(t, tt.secretAgent, got.SecretAgent, "SecretAgent")
-			assert.Same(t, tt.awsS3, got.AwsS3, "AwsS3")
+			assert.Same(t, tt.start, got.Start)
+			assert.Same(t, tt.list, got.List)
+			assert.Same(t, tt.validation, got.Validation)
+			assert.Same(t, tt.progress, got.Progress)
+			assert.Same(t, tt.abort, got.Abort)
+			assert.Same(t, tt.app, got.App)
+			assert.Same(t, tt.clientCfg, got.ClientConfig)
+			assert.Same(t, tt.clientPol, got.ClientPolicy)
+			assert.Same(t, tt.secret, got.SecretAgent)
+			assert.Same(t, tt.awsS3, got.AwsS3)
 		})
 	}
 }
@@ -96,37 +156,145 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 func TestServerBackupServiceConfig_Validate(t *testing.T) {
 	t.Parallel()
 
-	validConfig := func() *ServerBackupServiceConfig {
-		return &ServerBackupServiceConfig{
-			ServerBackup: &models.ServerBackup{},
-			ServiceConfigCommon: ServiceConfigCommon{
-				App:          &models.App{},
-				ClientConfig: &client.AerospikeConfig{},
-				ClientPolicy: &models.ClientPolicy{},
-				Encryption:   &models.Encryption{},
-				Compression:  &models.Compression{},
-			},
-		}
-	}
-
 	tests := []struct {
 		name       string
-		cfg        *ServerBackupServiceConfig
+		cfg        func() *ServerBackupServiceConfig
 		isBackup   bool
 		wantErr    bool
 		wantErrMsg string
 	}{
 		{
 			name:     "valid config in backup mode",
-			cfg:      validConfig(),
+			cfg:      validServerBackupServiceConfig,
 			isBackup: true,
 			wantErr:  false,
 		},
 		{
 			name:     "valid config in restore mode",
-			cfg:      validConfig(),
+			cfg:      validServerBackupServiceConfig,
 			isBackup: false,
 			wantErr:  false,
+		},
+		{
+			name: "nil start skips start validation",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.Start = nil
+				return cfg
+			},
+			isBackup: true,
+			wantErr:  false,
+		},
+		{
+			name: "missing storage type",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.Start.StorageType = ""
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "storage-type is required",
+		},
+		{
+			name: "nil list skips list validation",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.List = nil
+				return cfg
+			},
+			isBackup: true,
+			wantErr:  false,
+		},
+		{
+			name: "nil validation skips validation config check",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.Validation = nil
+				return cfg
+			},
+			isBackup: true,
+			wantErr:  false,
+		},
+		{
+			name: "missing validation backup id",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.Validation.JobID = ""
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "missing bucket name",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "nil object storage",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3 = nil
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "s3-bucket-name is required",
+		},
+		{
+			name: "valid abort config without object storage",
+			cfg: func() *ServerBackupServiceConfig {
+				return &ServerBackupServiceConfig{
+					Abort: &models.ServerBackupAbort{
+						JobID: testServerJobID,
+					},
+					App:          &models.App{},
+					ClientConfig: &client.AerospikeConfig{},
+					ClientPolicy: &models.ClientPolicy{},
+				}
+			},
+			isBackup: true,
+			wantErr:  false,
+		},
+		{
+			name: "missing abort backup id",
+			cfg: func() *ServerBackupServiceConfig {
+				return &ServerBackupServiceConfig{
+					Abort: &models.ServerBackupAbort{},
+					App:   &models.App{},
+				}
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "multiple cloud providers configured",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3 = &models.AwsS3{
+					BucketName: testBucket,
+					Region:     "us-west-2",
+					ChunkSize:  5,
+				}
+				cfg.GcpStorage = &models.GcpStorage{
+					BucketName:             testBucket,
+					RetryBackoffMultiplier: 2,
+					ChunkSize:              5,
+				}
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "only one cloud provider can be configured",
 		},
 	}
 
@@ -134,7 +302,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.cfg.Validate(tt.isBackup)
+			err := tt.cfg().Validate(tt.isBackup)
 
 			if tt.wantErr {
 				require.Error(t, err)

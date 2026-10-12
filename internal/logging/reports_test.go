@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,22 +34,22 @@ func TestIndent(t *testing.T) {
 		{
 			name:     "Empty key",
 			key:      "",
-			expected: ":" + strings.Repeat(" ", 21),
+			expected: ":" + strings.Repeat(" ", metricIndent),
 		},
 		{
 			name:     "Short key",
 			key:      "Key",
-			expected: "Key:" + strings.Repeat(" ", 18),
+			expected: "Key:" + strings.Repeat(" ", metricIndent-len("Key")),
 		},
 		{
 			name:     "Long key",
 			key:      "ThisIsAVeryLongKey",
-			expected: "ThisIsAVeryLongKey:" + strings.Repeat(" ", 3),
+			expected: "ThisIsAVeryLongKey:" + strings.Repeat(" ", metricIndent-len("ThisIsAVeryLongKey")),
 		},
 		{
 			name:     "Exact 20 character key",
 			key:      "12345678901234567890",
-			expected: "12345678901234567890:" + strings.Repeat(" ", 1),
+			expected: "12345678901234567890:" + strings.Repeat(" ", metricIndent-len("12345678901234567890")),
 		},
 	}
 
@@ -68,9 +68,9 @@ func TestPrintMetric(t *testing.T) {
 		printMetric("FloatKey", 123.456)
 	})
 
-	assert.Contains(t, output, "TestKey:"+strings.Repeat(" ", 21-len("TestKey"))+"TestValue")
-	assert.Contains(t, output, "IntKey:"+strings.Repeat(" ", 21-len("IntKey"))+"123")
-	assert.Contains(t, output, "FloatKey:"+strings.Repeat(" ", 21-len("FloatKey"))+"123.456")
+	assert.Contains(t, output, "TestKey:"+strings.Repeat(" ", metricIndent-len("TestKey"))+"TestValue")
+	assert.Contains(t, output, "IntKey:"+strings.Repeat(" ", metricIndent-len("IntKey"))+"123")
+	assert.Contains(t, output, "FloatKey:"+strings.Repeat(" ", metricIndent-len("FloatKey"))+"123.456")
 }
 
 // newSampleBackupStats returns BackupStats populated with the same numbers
@@ -128,7 +128,7 @@ func TestPrintBackupReport(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	output := captureOutput(t, func() {
-		printBackupReport(stats, false)
+		printBackupReport(stats)
 	})
 
 	assert.Contains(t, output, headerBackupReport)
@@ -147,25 +147,13 @@ func TestPrintBackupReport(t *testing.T) {
 	assert.Contains(t, output, "10")
 }
 
-func TestPrintBackupReportXdr(t *testing.T) {
-	stats := newSampleBackupStats()
-
-	output := captureOutput(t, func() {
-		printBackupReport(stats, true)
-	})
-
-	assert.Contains(t, output, headerBackupReport)
-	assert.Contains(t, output, "Records Received")
-	assert.NotContains(t, output, "Records Read")
-}
-
 func TestLogBackupReport(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	var buf bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logBackupReport(stats, false, logger)
+	logBackupReport(stats, logger)
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "backup report")
@@ -178,26 +166,12 @@ func TestLogBackupReport(t *testing.T) {
 	assert.Contains(t, logOutput, "files-written=10")
 }
 
-func TestLogBackupReportXdr(t *testing.T) {
-	stats := newSampleBackupStats()
-
-	var buf bytes.Buffer
-
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logBackupReport(stats, true, logger)
-
-	logOutput := buf.String()
-	assert.Contains(t, logOutput, "backup report")
-	assert.Contains(t, logOutput, "records-received=1000")
-	assert.NotContains(t, logOutput, "records-read=")
-}
-
 func TestReportBackup(t *testing.T) {
 	stats := newSampleBackupStats()
 
 	t.Run("Console output", func(t *testing.T) {
 		output := captureOutput(t, func() {
-			ReportBackup(stats, false, false, nil)
+			ReportBackup(stats, false, nil)
 		})
 
 		assert.Contains(t, output, headerBackupReport)
@@ -208,7 +182,7 @@ func TestReportBackup(t *testing.T) {
 		var buf bytes.Buffer
 
 		logger := slog.New(slog.NewTextHandler(&buf, nil))
-		ReportBackup(stats, false, true, logger)
+		ReportBackup(stats, true, logger)
 
 		logOutput := buf.String()
 		assert.Contains(t, logOutput, "backup report")

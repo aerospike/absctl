@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 	"github.com/aerospike/tools-common-go/client"
@@ -35,15 +36,8 @@ import (
 const (
 	testNamespace       = "test"
 	testSet             = "test"
-	testSetXDR          = "test-xdr"
 	testStateFile       = "state"
 	testASLoginPassword = "admin"
-	testDC              = "dc1"
-	testXDRHost         = "172.17.0.1"
-	testXDRPort         = 8066
-	testAckQueueSize    = 256
-	testResultQueueSize = 256
-	testRewind          = "all"
 	testHost            = "127.0.0.1"
 	testPort            = 3000
 )
@@ -57,42 +51,39 @@ func testHostPort() *client.HostTLSPort {
 
 func Test_BackupWithState(t *testing.T) {
 	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
 
 	ctx := t.Context()
 	dir := path.Join(t.TempDir(), "plain")
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
+		},
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
 		},
 		Backup: &models.Backup{
-			StateFileDst: testStateFile,
-			ScanPageSize: 10,
-			FileLimit:    100000,
-			Common: models.Common{
-				Directory:                     dir,
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
+			StateFileDst:                  testStateFile,
+			ScanPageSize:                  10,
+			FileLimit:                     100000,
+			Directory:                     dir,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
+			InfoMaxRetries:                3,
+			InfoRetriesMultiplier:         1,
+			InfoRetryIntervalMilliseconds: 1000,
 		},
 	}
 
@@ -108,106 +99,45 @@ func Test_BackupWithState(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_BackupXDR(t *testing.T) {
-	// Do not parallel this test. We have multiply xdr tests, so they should be executed sequentially.
+func Test_BackupEstimates(t *testing.T) {
+	t.Parallel()
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
+
 	ctx := t.Context()
-	dir := path.Join(t.TempDir(), "xdr")
 	hostPort := testHostPort()
 
 	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds: client.HostTLSPortSlice{
+				hostPort,
 			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
 		},
-		BackupXDR: &models.BackupXDR{
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{
+			Mode: backup.CompressNone,
+		},
+		Encryption:  nil,
+		SecretAgent: nil,
+		AwsS3:       nil,
+		GcpStorage:  nil,
+		AzureBlob:   nil,
+		Local:       nil,
+		Backup: &models.Backup{
 			FileLimit:                     100000,
+			Namespace:                     testNamespace,
+			Parallel:                      1,
 			InfoMaxRetries:                3,
 			InfoRetriesMultiplier:         1,
 			InfoRetryIntervalMilliseconds: 1000,
-			Directory:                     dir,
-			Namespace:                     testNamespace,
-			DC:                            testDC,
-			LocalAddress:                  testXDRHost,
-			LocalPort:                     testXDRPort,
-			MaxConnections:                10,
-			Rewind:                        testRewind,
-			InfoPolingPeriodMilliseconds:  100,
-			ReadTimeoutMilliseconds:       10000,
-			WriteTimeoutMilliseconds:      10000,
-			ResultQueueSize:               testAckQueueSize,
-			AckQueueSize:                  testResultQueueSize,
-			StartTimeoutMilliseconds:      10000,
-		},
-	}
-
-	err := createRecords(t, asbParams.ClientConfig, asbParams.ClientPolicy, testNamespace, testSetXDR)
-	require.NoError(t, err)
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	asb, err := NewService(ctx, asbParams, logger)
-	require.NoError(t, err)
-
-	err = asb.Run(ctx)
-	require.NoError(t, err)
-}
-
-func Test_BackupEstimates(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	hostPort := testHostPort()
-
-	asbParams := &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds: client.HostTLSPortSlice{
-					hostPort,
-				},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
-			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{
-				Mode: backup.CompressNone,
-			},
-			Encryption:  nil,
-			SecretAgent: nil,
-			AwsS3:       nil,
-			GcpStorage:  nil,
-			AzureBlob:   nil,
-			Local:       nil,
-		},
-		Backup: &models.Backup{
-			FileLimit: 100000,
-			Common: models.Common{
-				Namespace:                     testNamespace,
-				Parallel:                      1,
-				InfoMaxRetries:                3,
-				InfoRetriesMultiplier:         1,
-				InfoRetryIntervalMilliseconds: 1000,
-			},
-			Estimate:        true,
-			EstimateSamples: 100,
+			Estimate:                      true,
+			EstimateSamples:               100,
 		},
 	}
 
@@ -229,29 +159,20 @@ func quietLogger() *slog.Logger {
 
 func newBackupCfg(b *models.Backup) *config.BackupServiceConfig {
 	return &config.BackupServiceConfig{
-		ServiceConfigCommon: config.ServiceConfigCommon{
-			App: &models.App{},
-			ClientConfig: &client.AerospikeConfig{
-				Seeds:    client.HostTLSPortSlice{testHostPort()},
-				User:     testASLoginPassword,
-				Password: testASLoginPassword,
-			},
-			ClientPolicy: &models.ClientPolicy{
-				Timeout:      1000,
-				IdleTimeout:  1000,
-				LoginTimeout: 1000,
-			},
-			Compression: &models.Compression{Mode: backup.CompressNone},
+		App: &models.App{},
+		ClientConfig: &client.AerospikeConfig{
+			Seeds:    client.HostTLSPortSlice{testHostPort()},
+			User:     testASLoginPassword,
+			Password: testASLoginPassword,
 		},
-		Backup: b,
+		ClientPolicy: &models.ClientPolicy{
+			Timeout:      1000,
+			IdleTimeout:  1000,
+			LoginTimeout: 1000,
+		},
+		Compression: &models.Compression{Mode: backup.CompressNone},
+		Backup:      b,
 	}
-}
-
-func Test_RunNilService(t *testing.T) {
-	t.Parallel()
-
-	var s *Service
-	require.NoError(t, s.Run(t.Context()))
 }
 
 func Test_ErrHumanize(t *testing.T) {
@@ -298,21 +219,19 @@ func Test_ErrHumanize(t *testing.T) {
 	}
 }
 
-func Test_GetInfoPolicies_BackupScan(t *testing.T) {
+func Test_BackupInfoPolicies(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.BackupServiceConfig{
 		Backup: &models.Backup{
-			Common: models.Common{
-				InfoTimeout:                   1500,
-				InfoMaxRetries:                4,
-				InfoRetriesMultiplier:         2.0,
-				InfoRetryIntervalMilliseconds: 250,
-			},
+			InfoTimeout:                   1500,
+			InfoMaxRetries:                4,
+			InfoRetriesMultiplier:         2.0,
+			InfoRetryIntervalMilliseconds: 250,
 		},
 	}
 
-	info, retry := getInfoPolicies(cfg)
+	info, retry := cfg.Backup.InfoPolicy(), cfg.Backup.RetryPolicy()
 	require.NotNil(t, info)
 	require.NotNil(t, retry)
 	require.Equal(t, 1500*time.Millisecond, info.Timeout)
@@ -321,52 +240,14 @@ func Test_GetInfoPolicies_BackupScan(t *testing.T) {
 	require.EqualValues(t, 4, retry.MaxRetries)
 }
 
-func Test_GetInfoPolicies_BackupXDR(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.BackupServiceConfig{
-		BackupXDR: &models.BackupXDR{
-			InfoTimeout:                   5000,
-			InfoMaxRetries:                3,
-			InfoRetriesMultiplier:         1.5,
-			InfoRetryIntervalMilliseconds: 200,
-		},
-	}
-
-	info, retry := getInfoPolicies(cfg)
-	require.NotNil(t, info)
-	require.NotNil(t, retry)
-	require.Equal(t, 5*time.Second, info.Timeout)
-	require.Equal(t, 200*time.Millisecond, retry.BaseTimeout)
-	require.InDelta(t, 1.5, retry.Multiplier, 0.0001)
-	require.EqualValues(t, 3, retry.MaxRetries)
-}
-
-func Test_GetInfoPolicies_XDRTakesPrecedence(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.BackupServiceConfig{
-		Backup: &models.Backup{
-			Common: models.Common{InfoTimeout: 1000},
-		},
-		BackupXDR: &models.BackupXDR{InfoTimeout: 7000},
-	}
-
-	info, _ := getInfoPolicies(cfg)
-	require.Equal(t, 7*time.Second, info.Timeout,
-		"BackupXDR config must be used when both Backup and BackupXDR are set")
-}
-
 func Test_NewService_InvalidRackList(t *testing.T) {
 	t.Parallel()
 
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit: 1,
 		RackList:  "not-a-number",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace: testNamespace,
+		Parallel:  1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -381,10 +262,8 @@ func Test_NewService_NegativeRackID(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit: 1,
 		RackList:  "-1",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace: testNamespace,
+		Parallel:  1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -398,10 +277,8 @@ func Test_NewService_InvalidPartitionList(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:     1,
 		PartitionList: "not-a-partition",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:     testNamespace,
+		Parallel:      1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -416,10 +293,8 @@ func Test_NewService_InvalidFilterExpression(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:        1,
 		FilterExpression: "!!!not-base64!!!",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:        testNamespace,
+		Parallel:         1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -434,10 +309,8 @@ func Test_NewService_InvalidModifiedBefore(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:      1,
 		ModifiedBefore: "not-a-date",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:      testNamespace,
+		Parallel:       1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())
@@ -452,10 +325,8 @@ func Test_NewService_InvalidModifiedAfter(t *testing.T) {
 	cfg := newBackupCfg(&models.Backup{
 		FileLimit:     1,
 		ModifiedAfter: "not-a-date",
-		Common: models.Common{
-			Namespace: testNamespace,
-			Parallel:  1,
-		},
+		Namespace:     testNamespace,
+		Parallel:      1,
 	})
 
 	svc, err := NewService(t.Context(), cfg, quietLogger())

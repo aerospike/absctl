@@ -1,4 +1,4 @@
-// Copyright 2024 Aerospike, Inc.
+// Copyright 2026 Aerospike, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -177,6 +177,12 @@ func (f *Backup) NewFlagSet() *pflag.FlagSet {
 		"Number of records will be read on one iteration for continuation backup.\n"+
 			"Affects size if overlap on resuming backup after an error.\n"+
 			"Used only with --state-file-dst or --continue.")
+
+	flagSet.BoolVar(&f.UseScanCompression, "use-scan-compression",
+		models.DefaultBackupUseScanCompression,
+		"Uses zlib compression on command buffers sent to the server and responses received from the server.\n"+
+			"This option will increase cpu and memory usage, but decrease the size of data sent over the network.\n"+
+			"Valid for Aerospike Server Enterprise Edition only.")
 
 	return flagSet
 }
