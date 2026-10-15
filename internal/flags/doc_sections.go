@@ -44,14 +44,14 @@ const (
 		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 		"from the Aerospike Secret Agent.\n" +
 		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-		"Example: absctl backup --azure-account-name secret:resource1:azaccount"
+		"Example: absctl backup --azure-account-name secrets:resource1:azaccount"
 	SectionTextSecretAgentRestore = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
 		"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
 		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 		"from the Aerospike Secret Agent.\n" +
 		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-		"Example: absctl restore --azure-account-name secret:resource1:azaccount"
+		"Example: absctl restore --azure-account-name secrets:resource1:azaccount"
 
 	SectionTextSecretAgentSnapshotBackup = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
@@ -59,14 +59,14 @@ const (
 		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 		"from the Aerospike Secret Agent.\n" +
 		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-		"Example: absctl snapshot-backup --azure-account-name secret:resource1:azaccount"
+		"Example: absctl snapshot-backup --azure-account-name secrets:resource1:azaccount"
 	SectionTextSecretAgentSnapshotRestore = "\nSecret Agent Flags:\n" +
 		"Options pertaining to the Aerospike Secret Agent.\n" +
 		"See documentation here: https://aerospike.com/docs/tools/secret-agent.\n" +
 		"Both backup and restore commands support getting all the cloud configuration parameters\n" +
 		"from the Aerospike Secret Agent.\n" +
 		"To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>' \n" +
-		"Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount"
+		"Example: absctl snapshot-restore --azure-account-name secrets:resource1:azaccount"
 
 	SectionTextBackup  = "\nBackup Flags:"
 	SectionTextRestore = "\nRestore Flags:"

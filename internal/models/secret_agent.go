@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/aerospike/backup-go"
-	sa "github.com/aerospike/backup-go/pkg/secretagent"
+	sa "github.com/aerospike/tools-common-go/secretagent"
 )
 
 // SecretAgent contains flags that will be mapped to SecretAgentConfig for backup and restore operations.
