@@ -50,6 +50,9 @@ const (
 	testModifiedAfter    = "2024-01-01_00:00:00"
 	testRequestBinList   = "bin1"
 	testManifestSuffix   = "/metadata.json"
+	// testDownloadThreads differs from the default, so a value lost on the way to the
+	// request is caught.
+	testDownloadThreads = 32
 )
 
 // testRequestS3 returns the storage settings the request tests share. The access keys
@@ -197,6 +200,8 @@ func TestServiceRestoreRequest(t *testing.T) {
 				FilterExp:   testRequestFilterExp,
 				NoIndexes:   true,
 				NoUDFs:      true,
+
+				RestoreDownloadThreads: testDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				common := testRequestCommon()
@@ -207,12 +212,13 @@ func TestServiceRestoreRequest(t *testing.T) {
 				common.NoUDFs = new(true)
 
 				return &infomodels.RequestRestore{
-					RequestCommon:     common,
-					JobID:             testRequestJobID,
-					BackupIDs:         testRequestBackupID,
-					FuzzyRestore:      new(false),
-					AllowUnhosted:     new(false),
-					IgnoreRecordError: new(false),
+					RequestCommon:          common,
+					JobID:                  testRequestJobID,
+					BackupIDs:              testRequestBackupID,
+					FuzzyRestore:           new(false),
+					AllowUnhosted:          new(false),
+					IgnoreRecordError:      new(false),
+					RestoreDownloadThreads: testDownloadThreads,
 				}
 			},
 		},
@@ -232,21 +238,24 @@ func TestServiceRestoreRequest(t *testing.T) {
 				RetryMultiplier:   1.5,
 				RetryMaxAttempts:  3,
 				IgnoreRecordError: true,
+
+				RestoreDownloadThreads: testDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
-					RequestCommon:       testRequestCommon(),
-					JobID:               testRequestJobID,
-					BackupIDs:           testRequestBackupID,
-					FuzzyRestore:        new(true),
-					AllowUnhosted:       new(true),
-					Parallel:            16,
-					RecordsPerSecond:    1000,
-					MaxInflight:         500,
-					RetryBaseIntervalMs: 2000,
-					RetryMultiplier:     1.5,
-					RetryMaxAttempts:    3,
-					IgnoreRecordError:   new(true),
+					RequestCommon:          testRequestCommon(),
+					JobID:                  testRequestJobID,
+					BackupIDs:              testRequestBackupID,
+					FuzzyRestore:           new(true),
+					AllowUnhosted:          new(true),
+					Parallel:               16,
+					RecordsPerSecond:       1000,
+					MaxInflight:            500,
+					RetryBaseIntervalMs:    2000,
+					RetryMultiplier:        1.5,
+					RetryMaxAttempts:       3,
+					IgnoreRecordError:      new(true),
+					RestoreDownloadThreads: testDownloadThreads,
 				}
 			},
 		},

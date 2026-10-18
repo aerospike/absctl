@@ -67,28 +67,29 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-  -n, --namespace string             The namespace to restore.
-      --object-storage-type string   Type of object storage. Example: aws-s3
-      --backup-ids string            Comma separated list of the ids of the backups to restore from.
-      --job-id string                Id of the restore job. A cold restore must use the job id passed to
-                                     the restore preparation. If empty, the id of the single backup being
-                                     restored is used, so it is required when several backup ids are given.
-      --path string                  Key prefix in the bucket the backup was written under.
-  -s, --set-list string              Only restore the given sets from the backup.
-                                     Default: restore all sets.
-      --filter-exp string            Base64 encoded filter expression. Cold restore only.
-  -I, --no-indexes                   Don't restore any secondary indexes.
-      --no-udfs                      Don't restore any UDFs.
-      --fuzzy-restore                Restore by writing records into the live namespace instead of
-                                     the cold partition hydration. The flags below apply to a fuzzy restore only.
-      --allow-unhosted               Allow the restore even if the principal does not host the namespace.
-  -w, --parallel int                 Number of worker threads, from 1 to 128. (default 8)
-  -L, --records-per-second int       Limit total written records per second. If 0, no limit is applied.
-      --max-inflight int             Maximum number of concurrent writes, up to 100000. (default 200)
-      --retry-base-interval int      Base delay before a retry (in ms). (default 1000)
-      --retry-multiplier float       Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
-      --retry-max-attempts int       Maximum number of attempts per record. (default 5)
-      --ignore-record-error          Continue the restore on errors of individual records.
+  -n, --namespace string               The namespace to restore.
+      --object-storage-type string     Type of object storage. Example: aws-s3
+      --backup-ids string              Comma separated list of the ids of the backups to restore from.
+      --job-id string                  Id of the restore job. A cold restore must use the job id passed to
+                                       the restore preparation. If empty, the id of the single backup being
+                                       restored is used, so it is required when several backup ids are given.
+      --path string                    Key prefix in the bucket the backup was written under.
+  -s, --set-list string                Only restore the given sets from the backup.
+                                       Default: restore all sets.
+      --filter-exp string              Base64 encoded filter expression. Cold restore only.
+  -I, --no-indexes                     Don't restore any secondary indexes.
+      --no-udfs                        Don't restore any UDFs.
+      --restore-download-threads int   Number of threads to use for downloading backup files, from 1 to 128. (default 8)
+      --fuzzy-restore                  Restore by writing records into the live namespace instead of
+                                       the cold partition hydration. The flags below apply to a fuzzy restore only.
+      --allow-unhosted                 Allow the restore even if the principal does not host the namespace.
+  -w, --parallel int                   Number of worker threads, from 1 to 128. (default 8)
+  -L, --records-per-second int         Limit total written records per second. If 0, no limit is applied.
+      --max-inflight int               Maximum number of concurrent writes, up to 100000. (default 200)
+      --retry-base-interval int        Base delay before a retry (in ms). (default 1000)
+      --retry-multiplier float         Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
+      --retry-max-attempts int         Maximum number of attempts per record. (default 5)
+      --ignore-record-error            Continue the restore on errors of individual records.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -491,6 +492,8 @@ restore:
   retry-max-attempts: 5
   # Continue the restore on errors of individual records.
   ignore-record-error: false
+  # Number of threads to use for downloading backup files, from 1 to 128.
+  restore-download-threads: 8
 prepare:
   # The namespace to restore.
   namespace: source-ns1

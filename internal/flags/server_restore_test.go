@@ -46,6 +46,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		testRetryBaseInterval = "2000"
 		testRetryMultiplier   = "1.5"
 		testRetryMaxAttempts  = "3"
+		testDownloadThreads   = "32"
 	)
 
 	want := &models.ServerRestore{
@@ -67,6 +68,8 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		RetryMultiplier:   1.5,
 		RetryMaxAttempts:  3,
 		IgnoreRecordError: true,
+
+		RestoreDownloadThreads: 32,
 	}
 
 	commonArgs := []string{
@@ -83,6 +86,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--retry-multiplier", testRetryMultiplier,
 		"--retry-max-attempts", testRetryMaxAttempts,
 		"--ignore-record-error",
+		"--restore-download-threads", testDownloadThreads,
 	}
 
 	tests := []struct {
@@ -152,6 +156,7 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, result.RetryMultiplier, 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, result.RetryMaxAttempts)
 	assert.Equal(t, models.DefaultServerRestoreIgnoreRecordError, result.IgnoreRecordError)
+	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, result.RestoreDownloadThreads)
 }
 
 func TestServerRestorePrepare_NewFlagSet(t *testing.T) {

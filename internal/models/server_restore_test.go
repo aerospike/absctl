@@ -28,23 +28,26 @@ const (
 	testServerBackupIDs = testServerJobID + "," + testServerSecondJobID
 	errMsgJobIDRequired = "job-id is required"
 	errMsgRequiresFuzzy = "requires fuzzy-restore"
+	// errMsgDownloadThreads is the common part of the download threads range errors.
+	errMsgDownloadThreads = "restore-download-threads must be between 1 and 128, got "
 )
 
 // validServerRestore returns a cold restore with every setting at its default, as the
 // flags and the YAML config produce it.
 func validServerRestore() *ServerRestore {
 	return &ServerRestore{
-		Namespace:         testServerNamespace,
-		StorageType:       testServerStorage,
-		BackupIDs:         testServerJobID,
-		AllowUnhosted:     DefaultServerRestoreAllowUnhosted,
-		Parallel:          DefaultServerRestoreParallel,
-		RecordsPerSecond:  DefaultServerRestoreRecordsPerSecond,
-		MaxInflight:       DefaultServerRestoreMaxInflight,
-		RetryBaseInterval: DefaultServerRestoreRetryBaseInterval,
-		RetryMultiplier:   DefaultServerRestoreRetryMultiplier,
-		RetryMaxAttempts:  DefaultServerRestoreRetryMaxAttempts,
-		IgnoreRecordError: DefaultServerRestoreIgnoreRecordError,
+		Namespace:              testServerNamespace,
+		StorageType:            testServerStorage,
+		BackupIDs:              testServerJobID,
+		RestoreDownloadThreads: DefaultServerRestoreDownloadThreads,
+		AllowUnhosted:          DefaultServerRestoreAllowUnhosted,
+		Parallel:               DefaultServerRestoreParallel,
+		RecordsPerSecond:       DefaultServerRestoreRecordsPerSecond,
+		MaxInflight:            DefaultServerRestoreMaxInflight,
+		RetryBaseInterval:      DefaultServerRestoreRetryBaseInterval,
+		RetryMultiplier:        DefaultServerRestoreRetryMultiplier,
+		RetryMaxAttempts:       DefaultServerRestoreRetryMaxAttempts,
+		IgnoreRecordError:      DefaultServerRestoreIgnoreRecordError,
 	}
 }
 
@@ -496,6 +499,54 @@ func TestServerRestore_Validate(t *testing.T) {
 				return restore
 			},
 			wantErr: false,
+		},
+		{
+			name: "download threads at the lower limit on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RestoreDownloadThreads = minServerRestoreDownloadThreads
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "download threads at the upper limit on a fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RestoreDownloadThreads = maxServerRestoreDownloadThreads
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "download threads below range",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RestoreDownloadThreads = minServerRestoreDownloadThreads - 1
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgDownloadThreads + "0",
+		},
+		{
+			name: "negative download threads",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RestoreDownloadThreads = -1
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgDownloadThreads + "-1",
+		},
+		{
+			name: "download threads above range on a fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RestoreDownloadThreads = maxServerRestoreDownloadThreads + 1
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgDownloadThreads + "129",
 		},
 	}
 

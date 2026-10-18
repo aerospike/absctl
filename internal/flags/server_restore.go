@@ -60,6 +60,9 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVar(&f.NoUDFs, "no-udfs",
 		models.DefaultCommonNoUDFs,
 		descNoUDFsRestore)
+	flagSet.IntVar(&f.RestoreDownloadThreads, "restore-download-threads",
+		models.DefaultServerRestoreDownloadThreads,
+		"Number of threads to use for downloading backup files, from 1 to 128.")
 	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore",
 		models.DefaultServerRestoreFuzzyRestore,
 		"Restore by writing records into the live namespace instead of\n"+
