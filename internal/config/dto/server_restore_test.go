@@ -57,6 +57,7 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, derefFloat64(restore.RetryMultiplier), 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, derefInt(restore.RetryMaxAttempts))
 	assert.Equal(t, models.DefaultServerRestoreIgnoreRecordError, derefBool(restore.IgnoreRecordError))
+	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, derefInt(restore.RestoreDownloadThreads))
 
 	prepare := defaultServerRestorePrepareConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(prepare.Namespace))
@@ -86,6 +87,7 @@ func TestServerRestoreToModels(t *testing.T) {
 	retryBaseInterval := 2000
 	retryMultiplier := 1.5
 	retryMaxAttempts := 3
+	downloadThreads := 32
 	hydrateReplica := false
 	prepareNamespace := "ns2"
 	progressNamespace := "ns3"
@@ -111,6 +113,8 @@ func TestServerRestoreToModels(t *testing.T) {
 			RetryMultiplier:   &retryMultiplier,
 			RetryMaxAttempts:  &retryMaxAttempts,
 			IgnoreRecordError: &enabled,
+
+			RestoreDownloadThreads: &downloadThreads,
 		},
 		Prepare: ServerRestorePrepareConfig{
 			Namespace:      &prepareNamespace,
@@ -143,6 +147,8 @@ func TestServerRestoreToModels(t *testing.T) {
 		RetryMultiplier:   retryMultiplier,
 		RetryMaxAttempts:  retryMaxAttempts,
 		IgnoreRecordError: true,
+
+		RestoreDownloadThreads: downloadThreads,
 	}, start)
 
 	prepare := restore.ToModelServerRestorePrepare()
@@ -181,6 +187,7 @@ func TestServerRestoreToModelsNullFallsBackToDefaults(t *testing.T) {
 	restore.Restore.RetryBaseInterval = nil
 	restore.Restore.RetryMultiplier = nil
 	restore.Restore.RetryMaxAttempts = nil
+	restore.Restore.RestoreDownloadThreads = nil
 	restore.Prepare.HydrateReplica = nil
 
 	start := restore.ToModelServerRestore()
@@ -190,6 +197,7 @@ func TestServerRestoreToModelsNullFallsBackToDefaults(t *testing.T) {
 	assert.Equal(t, models.DefaultServerRestoreRetryBaseInterval, start.RetryBaseInterval)
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, start.RetryMultiplier, 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, start.RetryMaxAttempts)
+	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, start.RestoreDownloadThreads)
 
 	prepare := restore.ToModelServerRestorePrepare()
 	require.NotNil(t, prepare)

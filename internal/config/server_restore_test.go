@@ -36,6 +36,8 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 			RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
 			RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
 			RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
+
+			RestoreDownloadThreads: models.DefaultServerRestoreDownloadThreads,
 		},
 		Prepare: &models.ServerRestorePrepare{
 			Namespace:      testServerNamespace,

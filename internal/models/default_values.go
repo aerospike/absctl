@@ -222,4 +222,5 @@ const (
 	DefaultServerRestoreRetryMaxAttempts  = 5
 	DefaultServerRestoreIgnoreRecordError = false
 	DefaultServerRestoreHydrateReplica    = true
+	DefaultServerRestoreDownloadThreads   = 8
 )

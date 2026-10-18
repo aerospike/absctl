@@ -28,6 +28,8 @@ const (
 	minServerRestoreMaxInflight     = 1
 	maxServerRestoreMaxInflight     = 100_000
 	minServerRestoreRetryMultiplier = 1.0
+	minServerRestoreDownloadThreads = 1
+	maxServerRestoreDownloadThreads = 128
 )
 
 // backupIDsSeparator separates the ids of the backups a single restore reads. The
@@ -51,6 +53,9 @@ type ServerRestore struct {
 	NoIndexes    bool
 	NoUDFs       bool
 	FuzzyRestore bool
+	// RestoreDownloadThreads is the number of threads to use for downloading backup
+	// files. It applies to both cold and fuzzy restore.
+	RestoreDownloadThreads int
 
 	// The fields below apply to a fuzzy restore only.
 
@@ -104,6 +109,13 @@ func (s *ServerRestore) Validate() error {
 
 	if err := s.validateRestoreMode(); err != nil {
 		return err
+	}
+
+	if s.RestoreDownloadThreads < minServerRestoreDownloadThreads ||
+		s.RestoreDownloadThreads > maxServerRestoreDownloadThreads {
+		return fmt.Errorf("restore-download-threads must be between %d and %d, got %d",
+			minServerRestoreDownloadThreads, maxServerRestoreDownloadThreads,
+			s.RestoreDownloadThreads)
 	}
 
 	return s.ServerCommon.Validate()
