@@ -159,12 +159,14 @@ func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
 	)
 
 	want := &models.ServerBackup{
-		Namespace: testNamespace,
-		Path:      testPath,
-		SetList:   testSetList,
-		BinList:   testBinList,
-		FilterExp: testFilterExp,
-		NoIndexes: true,
+		Namespace:     testNamespace,
+		Path:          testPath,
+		SetList:       testSetList,
+		BinList:       testBinList,
+		FilterExp:     testFilterExp,
+		NoIndexes:     true,
+		ParallelRead:  models.DefaultServerBackupParallelRead,
+		ParallelWrite: models.DefaultServerBackupParallelWrite,
 	}
 
 	tests := []struct {
