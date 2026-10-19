@@ -176,6 +176,10 @@ const (
 	DefaultServerBackupAsync              = false
 	DefaultServerBackupValidateSampleSize = 10000
 	DefaultServerBackupProgressWatch      = false
+	DefaultServerBackupRecordsPerSecond   = 0
+	DefaultServerBackupParallelRead       = 8
+	DefaultServerBackupParallelWrite      = 8
+	DefaultServerBackupS3Throughput       = 0
 )
 
 // Server-backup common.
@@ -214,7 +218,7 @@ const (
 	DefaultServerRestoreJobID             = ""
 	DefaultServerRestoreFuzzyRestore      = false
 	DefaultServerRestoreAllowUnhosted     = false
-	DefaultServerRestoreParallel          = 8
+	DefaultServerRestoreParallelWrite     = 8
 	DefaultServerRestoreRecordsPerSecond  = 0
 	DefaultServerRestoreMaxInflight       = 200
 	DefaultServerRestoreRetryBaseInterval = 1000
@@ -222,5 +226,10 @@ const (
 	DefaultServerRestoreRetryMaxAttempts  = 5
 	DefaultServerRestoreIgnoreRecordError = false
 	DefaultServerRestoreHydrateReplica    = true
-	DefaultServerRestoreDownloadThreads   = 8
+	DefaultServerRestoreParallelRead      = 8
+	DefaultServerRestoreIncrementalPath   = ""
+	DefaultServerRestoreExtraTTL          = 0
+	DefaultServerRestoreApplyMetadataLast = false
+	DefaultServerRestoreAsync             = false
+	DefaultServerRestoreProgressWatch     = false
 )

@@ -194,6 +194,8 @@ const (
 	ServerRestoreCommandPrepare
 	ServerRestoreCommandProgress
 	ServerRestoreCommandAbort
+	ServerRestoreCommandOpen
+	ServerRestoreCommandClearStorage
 )
 
 // DecodeServerRestoreServiceConfig reads a snapshot-restore configuration file and
@@ -243,6 +245,10 @@ func dtoToServerRestoreServiceConfig(
 		cfg.Progress = dtoRestore.ToModelServerRestoreProgress()
 	case ServerRestoreCommandAbort:
 		cfg.Abort = dtoRestore.ToModelServerRestoreAbort()
+	case ServerRestoreCommandOpen:
+		cfg.Open = dtoRestore.ToModelServerRestoreOpen()
+	case ServerRestoreCommandClearStorage:
+		cfg.ClearStorage = dtoRestore.ToModelServerRestoreClearStorage()
 	default:
 		return nil, fmt.Errorf("unknown snapshot-restore command %d", command)
 	}

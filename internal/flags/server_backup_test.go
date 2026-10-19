@@ -93,6 +93,58 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
+	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
+	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
+	assert.Equal(t, models.DefaultServerBackupS3Throughput, result.S3Throughput)
+}
+
+func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testRecordsPerSecond = "5000"
+		testParallelRead     = "8"
+		testParallelWrite    = "4"
+		testS3Throughput     = "10"
+	)
+
+	commonArgs := []string{
+		"--parallel-read", testParallelRead,
+		"--parallel-write", testParallelWrite,
+		"--s3-throughput", testS3Throughput,
+	}
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "long flags",
+			args: append([]string{"--records-per-second", testRecordsPerSecond}, commonArgs...),
+		},
+		{
+			// The short flag matches the one of the scan backup.
+			name: "short flags",
+			args: append([]string{"-L", testRecordsPerSecond}, commonArgs...),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			backup := NewServerBackup()
+			require.NoError(t, backup.NewFlagSet().Parse(tt.args))
+
+			result := backup.GetServerBackup()
+
+			assert.Equal(t, 5000, result.RecordsPerSecond)
+			assert.Equal(t, 8, result.ParallelRead)
+			assert.Equal(t, 4, result.ParallelWrite)
+			assert.Equal(t, 10, result.S3Throughput)
+		})
+	}
 }
 
 func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {

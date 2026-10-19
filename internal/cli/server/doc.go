@@ -129,6 +129,24 @@ func restoreAbortHelpSections(abortFS *pflag.FlagSet, common commonFlagSets) []H
 	}
 }
 
+func restoreOpenHelpSections(openFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{openFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
+func restoreClearStorageHelpSections(clearFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{clearFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
 // BuildBackupSubcommandDocs returns documentation for every server backup subcommand.
 func BuildBackupSubcommandDocs() []SubcommandDoc {
 	rc := newRunCtx(flags.NewRoot(), "", "", "")
@@ -193,6 +211,8 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 	prepareFS := rf.prepare.NewFlagSet()
 	progressFS := rf.progress.NewFlagSet()
 	abortFS := rf.abort.NewFlagSet()
+	openFS := rf.open.NewFlagSet()
+	clearFS := rf.clear.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -222,6 +242,20 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestoreAbort,
 			Usage:    flags.SectionTextUsageRestoreAbort,
 			Sections: restoreAbortHelpSections(abortFS, common),
+		},
+		{
+			Name:     UseOpen,
+			Short:    ShortRestoreOpen,
+			Long:     LongRestoreOpen,
+			Usage:    flags.SectionTextUsageRestoreOpen,
+			Sections: restoreOpenHelpSections(openFS, common),
+		},
+		{
+			Name:     UseClearStorage,
+			Short:    ShortRestoreClear,
+			Long:     LongRestoreClear,
+			Usage:    flags.SectionTextUsageRestoreClear,
+			Sections: restoreClearStorageHelpSections(clearFS, common),
 		},
 	}
 }

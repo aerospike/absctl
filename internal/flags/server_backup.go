@@ -85,6 +85,23 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 		"Return as soon as the cluster accepts the backup, without\n"+
 			"following its progress. Use the progress command to follow\n"+
 			"the backup later.")
+	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
+		models.DefaultServerBackupRecordsPerSecond,
+		"Limit the records per second of each scan on each node.\n"+
+			"A non-zero value must be at least 5 x --parallel-read.\n"+
+			"If 0, the server default is used, which is no limit.")
+	flagSet.IntVar(&f.ParallelRead, "parallel-read",
+		models.DefaultServerBackupParallelRead,
+		"Number of scan threads per node, from 1 to 128.\n"+
+			"If 0, the server default is used.")
+	flagSet.IntVar(&f.ParallelWrite, "parallel-write",
+		models.DefaultServerBackupParallelWrite,
+		"Number of upload threads per node, from 1 to 128.\n"+
+			"If 0, the server default is used.")
+	flagSet.IntVar(&f.S3Throughput, "s3-throughput",
+		models.DefaultServerBackupS3Throughput,
+		"Target throughput of the S3 client per node, in gigabits per second\n"+
+			"(Gbit/s), from 1 to 400. If 0, the server default is used.")
 
 	return flagSet
 }

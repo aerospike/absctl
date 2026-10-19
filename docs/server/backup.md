@@ -96,6 +96,15 @@ Backup Flags:
       --async                        Return as soon as the cluster accepts the backup, without
                                      following its progress. Use the progress command to follow
                                      the backup later.
+  -L, --records-per-second int       Limit the records per second of each scan on each node.
+                                     A non-zero value must be at least 5 x --parallel-read.
+                                     If 0, the server default is used, which is no limit.
+      --parallel-read int            Number of scan threads per node, from 1 to 128.
+                                     If 0, the server default is used.
+      --parallel-write int           Number of upload threads per node, from 1 to 128.
+                                     If 0, the server default is used.
+      --s3-throughput int            Target throughput of the S3 client per node, in gigabits per second
+                                     (Gbit/s), from 1 to 400. If 0, the server default is used.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -550,6 +559,19 @@ backup:
   # following its progress. Use the progress command to follow
   # the backup later.
   async: false
+  # Limit the records per second of each scan on each node.
+  # A non-zero value must be at least 5 x parallel-read.
+  # If 0, the server default is used, which is no limit.
+  records-per-second: 0
+  # Number of scan threads per node, from 1 to 128.
+  # If 0, the server default is used.
+  parallel-read: 0
+  # Number of upload threads per node, from 1 to 128.
+  # If 0, the server default is used.
+  parallel-write: 0
+  # Target throughput of the S3 client per node, in gigabits per second
+  # (Gbit/s), from 1 to 400. If 0, the server default is used.
+  s3-throughput: 0
 list:
   # Path to list backups from.
   path: backup_dir

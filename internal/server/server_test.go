@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
+	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -29,8 +29,8 @@ import (
 	backupmodels "github.com/aerospike/backup-go/models"
 	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
-	"github.com/aerospike/backup-go/pkg/server/lister"
-	servermodels "github.com/aerospike/backup-go/pkg/server/lister/models"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,14 +39,7 @@ const (
 	testBucket     = "asbackup"
 	testBackupPath = "backups/daily"
 	logBackupEntry = "backup entry"
-	logNoBackups   = "backups not found"
-
-	logAborting     = "aborting"
-	logAborted      = "backup was successfully aborted"
-	logAbortTooLate = "backup finished before it could be aborted"
-
-	logAbortingRestore = "aborting restore"
-	logRestoreAborted  = "restore was successfully aborted"
+	logOpenHint    = "released with"
 
 	// testAbortTimeout bounds the abort wait in the tests. It has to outlast a handful
 	// of one-millisecond polls, and still expire quickly when a test wants it to.
@@ -59,6 +52,28 @@ const (
 
 	// testErrorReason stands for the reason the cluster gives for a terminal state.
 	testErrorReason = "storage unreachable"
+
+	// testLayoutNodes is the number of nodes the cold restores of the tests are spread
+	// over.
+	testLayoutNodes = 3
+
+	testJobID     = "527069025"
+	testNamespace = "source-ns1"
+
+	testRequestNamespace = "source-ns"
+	testRequestStorage   = models.StorageTypeAwsS3
+	testRequestRegion    = "eu-central-1"
+	testRequestProfile   = "default"
+	testRequestEndpoint  = "http://127.0.0.1:9000"
+	testRequestSetList   = "set1,set2"
+	testRequestFilterExp = "kwGTUQKkYmluMQE="
+	testRequestBackupID  = "bkp-1"
+	testRequestBackupID2 = "bkp-2"
+	// testRequestBackupIDs is the list form a multi-backup restore is given.
+	testRequestBackupIDs = testRequestBackupID + "," + testRequestBackupID2
+	testRequestJobID     = "rst-1"
+	testMetadataKey      = testBackupPath + "/" + testRequestBackupID
+	testManifestSuffix   = "/metadata.json"
 )
 
 // errBoom stands for any failure that is not a missing job or a missing manifest.
@@ -117,14 +132,14 @@ func (f *fakeInfoClient) AbortBackup(_ context.Context, jobID string) error {
 
 // restoreAnswer is a single canned answer of fakeRestoreInfoClient.
 type restoreAnswer struct {
-	state string
-	err   error
+	status *infomodels.ResponseRestoreState
+	err    error
 }
 
 // fakeRestoreInfoClient is the restore counterpart of fakeInfoClient: it replays canned
-// restore status answers, one per call, and reports the namespace as carrying no restore
-// state once they run out - unless repeatLast is set, which makes the last answer stand
-// forever, for the loops that only a timeout can end.
+// restore status answers, one per call, and reports the job as missing once they run
+// out - unless repeatLast is set, which makes the last answer stand forever, for the
+// loops that only a timeout can end.
 type fakeRestoreInfoClient struct {
 	mocks.MockServerBackupInfo
 
@@ -136,21 +151,53 @@ type fakeRestoreInfoClient struct {
 	abortNamespace string
 	abortJobID     string
 	abortCalls     int
+
+	openErr       error
+	openNamespace string
+	openJobID     string
+	openCalls     int
+
+	// clearErrs are the answers to the clear requests, one per call; the requests past
+	// them succeed.
+	clearErrs      []error
+	clearNamespace string
+	clearJobID     string
+	clearCalls     int
+
+	// unstable reports migrations in flight, so the zero value is a stable cluster.
+	unstable bool
+
+	startErr     error
+	startRequest *infomodels.RequestRestore
+	startCalls   int
 }
 
-func (f *fakeRestoreInfoClient) GetRestoreStatus(_ context.Context, _ string) (string, error) {
+func (f *fakeRestoreInfoClient) GetClusterStable(_ context.Context, _ string) (bool, error) {
+	return !f.unstable, nil
+}
+
+func (f *fakeRestoreInfoClient) StartRestore(_ context.Context, request *infomodels.RequestRestore) error {
+	f.startCalls++
+	f.startRequest = request
+
+	return f.startErr
+}
+
+func (f *fakeRestoreInfoClient) GetRestoreStatus(
+	_ context.Context, _, _ string,
+) (*infomodels.ResponseRestoreState, error) {
 	call := f.calls
 	f.calls++
 
 	if call >= len(f.answers) {
 		if !f.repeatLast || len(f.answers) == 0 {
-			return "", asinfo.ErrNotFound
+			return nil, asinfo.ErrNotFound
 		}
 
 		call = len(f.answers) - 1
 	}
 
-	return f.answers[call].state, f.answers[call].err
+	return f.answers[call].status, f.answers[call].err
 }
 
 func (f *fakeRestoreInfoClient) AbortRestore(_ context.Context, namespace, jobID string) error {
@@ -159,6 +206,27 @@ func (f *fakeRestoreInfoClient) AbortRestore(_ context.Context, namespace, jobID
 	f.abortJobID = jobID
 
 	return f.abortErr
+}
+
+func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace, jobID string) error {
+	f.openCalls++
+	f.openNamespace = namespace
+	f.openJobID = jobID
+
+	return f.openErr
+}
+
+func (f *fakeRestoreInfoClient) ClearRestoreStorage(_ context.Context, namespace, jobID string) error {
+	call := f.clearCalls
+	f.clearCalls++
+	f.clearNamespace = namespace
+	f.clearJobID = jobID
+
+	if call < len(f.clearErrs) {
+		return f.clearErrs[call]
+	}
+
+	return nil
 }
 
 // fakeClusterInfo answers the two questions asked about the cluster before a job is
@@ -177,58 +245,6 @@ func (f *fakeClusterInfo) GetVersion(_ context.Context) (infomodels.AerospikeVer
 
 func (f *fakeClusterInfo) GetClusterStable(_ context.Context, _ string) (bool, error) {
 	return f.stable, f.stableErr
-}
-
-// fakeMetadataGetter answers "not found" a given number of times before it either
-// returns the manifest or fails permanently.
-type fakeMetadataGetter struct {
-	notFound int
-	md       servermodels.Metadata
-	err      error
-	calls    int
-}
-
-func (f *fakeMetadataGetter) GetMetadata(_ context.Context, _ string) (servermodels.Metadata, error) {
-	f.calls++
-
-	if f.calls <= f.notFound {
-		return servermodels.Metadata{}, lister.ErrMetadataNotFound
-	}
-
-	if f.err != nil {
-		return servermodels.Metadata{}, f.err
-	}
-
-	return f.md, nil
-}
-
-// fakeBackupLister answers the two lookups listing makes: the manifests under the
-// configured path, and the single manifest that path may name itself.
-type fakeBackupLister struct {
-	all    []servermodels.Metadata
-	allErr error
-
-	md      servermodels.Metadata
-	mdErr   error
-	mdCalls int
-}
-
-func (f *fakeBackupLister) FetchAllMetadata(_ context.Context) ([]servermodels.Metadata, error) {
-	if f.allErr != nil {
-		return nil, f.allErr
-	}
-
-	return f.all, nil
-}
-
-func (f *fakeBackupLister) GetMetadata(_ context.Context, _ string) (servermodels.Metadata, error) {
-	f.mdCalls++
-
-	if f.mdErr != nil {
-		return servermodels.Metadata{}, f.mdErr
-	}
-
-	return f.md, nil
 }
 
 // TestNewService covers the one thing the constructor decides: a service serves the
@@ -402,87 +418,6 @@ func TestServiceCheckClusterStable(t *testing.T) {
 	}
 }
 
-// TestServiceListBackups covers what a listing does when the path holds no manifests:
-// the path may name a single backup rather than a prefix over several, so it is read as
-// one, and only a path that holds nothing at all is reported as empty.
-func TestServiceListBackups(t *testing.T) {
-	t.Parallel()
-
-	md := servermodels.Metadata{BackupID: testJobID, Namespace: testNamespace}
-
-	tests := []struct {
-		name        string
-		l           *fakeBackupLister
-		wantErr     error
-		wantMDCalls int
-		wantLogs    []string
-		notWantLogs []string
-	}{
-		{
-			name:     "prints the backups under the path",
-			l:        &fakeBackupLister{all: []servermodels.Metadata{md}},
-			wantLogs: []string{logBackupEntry},
-		},
-		{
-			// A path that names one backup holds nothing under itself, so the listing
-			// comes back empty and the path itself carries the manifest.
-			name:        "reads a path that names a single backup",
-			l:           &fakeBackupLister{md: md},
-			wantMDCalls: 1,
-			wantLogs:    []string{logBackupEntry},
-		},
-		{
-			// A path with neither manifests under it nor one of its own is empty, which
-			// is an answer and not a failure.
-			name:        "reports a path that holds no backups",
-			l:           &fakeBackupLister{mdErr: lister.ErrMetadataNotFound},
-			wantMDCalls: 1,
-			wantLogs:    []string{logNoBackups},
-			notWantLogs: []string{logBackupEntry},
-		},
-		{
-			name:    "propagates a failed listing",
-			l:       &fakeBackupLister{allErr: errBoom},
-			wantErr: errBoom,
-		},
-		{
-			// Storage that cannot be read says nothing about whether the path names a
-			// backup, and must not be reported as an empty path.
-			name:        "propagates a failed read of a single backup",
-			l:           &fakeBackupLister{mdErr: errBoom},
-			wantErr:     errBoom,
-			wantMDCalls: 1,
-			notWantLogs: []string{logNoBackups},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, buf := newTestService(t)
-
-			err := svc.listBackups(t.Context(), tt.l, testBackupPath)
-
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tt.wantMDCalls, tt.l.mdCalls)
-
-			for _, want := range tt.wantLogs {
-				assert.Contains(t, buf.String(), want)
-			}
-
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
-			}
-		})
-	}
-}
-
 // newTestService builds a service that logs into the returned buffer and polls and
 // retries fast enough not to slow the tests down.
 func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
@@ -497,13 +432,17 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 			AwsS3: &models.AwsS3{BucketName: testBucket},
 		},
 		restoreCfg: &config.ServerRestoreServiceConfig{
-			Abort: &models.ServerRestoreAbort{Namespace: testNamespace, JobID: testJobID},
+			Abort:        &models.ServerRestoreAbort{Namespace: testNamespace, JobID: testJobID},
+			Open:         &models.ServerRestoreOpen{Namespace: testNamespace, JobID: testJobID},
+			ClearStorage: &models.ServerRestoreClearStorage{Namespace: testNamespace, JobID: testJobID},
 		},
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
 		vanishedPollInterval: time.Millisecond,
 		abortPollInterval:    time.Millisecond,
 		abortTimeout:         testAbortTimeout,
+		statePollInterval:    time.Millisecond,
+		openTimeout:          testAbortTimeout,
 	}, buf
 }
 
@@ -544,996 +483,102 @@ func testFailedStatus(state infomodels.BackupState) *infomodels.ResponseBackupSt
 	return status
 }
 
-func TestServiceReportBackupProgress(t *testing.T) {
-	t.Parallel()
+// testLayout stands for the active nodes of the cluster.
+func testLayout() int { return testLayoutNodes }
 
-	md := servermodels.Metadata{BackupID: testJobID, Namespace: testNamespace}
-
-	tests := []struct {
-		name        string
-		mode        progressMode
-		answers     []statusAnswer
-		metadata    *fakeMetadataGetter
-		wantErr     error
-		wantErrMsg  string
-		wantCalls   int
-		wantLogs    []string
-		notWantLogs []string
-	}{
-		{
-			// The cluster reports both ends of a finished job, so the completion line
-			// can say how long the backup took.
-			name:      "reports a completed backup with the time it took",
-			mode:      followJob,
-			answers:   []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateComplete, 100)}},
-			wantCalls: 1,
-			wantLogs:  []string{msgBackupComplete, logDuration, logBackupEntry},
-		},
-		{
-			// The cluster drops the job state right after finishing the backup. The job
-			// was last seen draining, so this is a completion and not a missing backup.
-			name: "treats a job vanished while draining as a completed backup",
-			mode: followJob,
-			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateFinalDraining, 97)},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-				{err: asinfo.ErrNotFound},
-			},
-			wantCalls: 6,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// The status of a running job can be unavailable for a moment. Reporting
-			// that gap as a completed backup is the bug this case guards against.
-			name: "keeps watching after a transient status gap",
-			mode: followJob,
-			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateBaseScanActive, 3)},
-				{err: asinfo.ErrNotFound},
-				{status: testStatus(infomodels.BackupStateBaseScanActive, 47)},
-				{status: testStatus(infomodels.BackupStateComplete, 100)},
-			},
-			wantCalls: 4,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// A scan that stops reporting for longer than the confirmations of a
-			// finished job still has to be waited for: it is nowhere near the stages a
-			// backup can complete from, so the watch keeps the job until it comes back.
-			name: "keeps watching a scan that stops reporting for a long time",
-			mode: followJob,
-			answers: append(
-				append(
-					[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 4)}},
-					repeatNotFound(vanishedJobConfirmations*3)...,
-				),
-				statusAnswer{status: testStatus(infomodels.BackupStateIncrScanActive, 95)},
-				statusAnswer{status: testStatus(infomodels.BackupStateComplete, 100)},
-			),
-			wantCalls: vanishedJobConfirmations*3 + 3,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// The watch can be between polls while the job runs through its last stages.
-			// The manifest proves the backup finished even though the last state seen
-			// was not one a backup completes from.
-			name: "reports a backup that finished between polls",
-			mode: followJob,
-			answers: append(
-				[]statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 95)}},
-				repeatNotFound(midBackupGapConfirmations)...,
-			),
-			wantCalls: midBackupGapConfirmations + 1,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// A job that stopped reporting in the middle of a backup and left no
-			// manifest behind did not complete, and must not be announced as complete.
-			name: "fails when a job vanished mid-backup left no manifest",
-			mode: followJob,
-			answers: append(
-				[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 3)}},
-				repeatNotFound(midBackupGapConfirmations)...,
-			),
-			metadata:    &fakeMetadataGetter{notFound: 10},
-			wantErr:     errBackupStatusLost,
-			wantCalls:   midBackupGapConfirmations + 1,
-			notWantLogs: []string{msgBackupComplete},
-		},
-		{
-			// A job the cluster does not report has no status to wait for: the lookup
-			// itself already gives a job that is about to appear a few seconds of grace,
-			// so the first answer is final. Polling it instead left the command silent
-			// for half a minute before it said the same thing.
-			name:        "fails right away when the cluster does not report the job",
-			mode:        followJob,
-			answers:     repeatNotFound(1),
-			wantErr:     errBackupNotFound,
-			wantErrMsg:  testJobID,
-			wantCalls:   1,
-			notWantLogs: []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			name:        "fails right away when the cluster does not report the job and watching is disabled",
-			mode:        reportOnce,
-			answers:     repeatNotFound(1),
-			wantErr:     errBackupNotFound,
-			wantCalls:   1,
-			notWantLogs: []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// The job "backup start" follows exists: the cluster answered with its id.
-			// Failing the command because the status does not list it in the first
-			// moment would report a backup that is running as one that was never there.
-			name: "waits for a just-started job to turn up in the status",
-			mode: followStartedJob,
-			answers: append(
-				repeatNotFound(startedJobConfirmations-1),
-				statusAnswer{status: testStatus(infomodels.BackupStateBaseScanActive, 7)},
-				statusAnswer{status: testStatus(infomodels.BackupStateComplete, 100)},
-			),
-			wantCalls: startedJobConfirmations + 1,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// The grace is bounded: a job that never turns up ends the command rather
-			// than leaving it watching a job the cluster will not report.
-			name:        "fails when a just-started job never turns up",
-			mode:        followStartedJob,
-			answers:     repeatNotFound(startedJobConfirmations),
-			wantErr:     errBackupNotFound,
-			wantErrMsg:  testJobID,
-			wantCalls:   startedJobConfirmations,
-			notWantLogs: []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			// A status the cluster answers with neither a state nor an error says as
-			// little about the job as one that was not found.
-			name:      "fails right away on a status without a state or an error",
-			mode:      followJob,
-			answers:   []statusAnswer{{}},
-			wantErr:   errBackupNotFound,
-			wantCalls: 1,
-		},
-		{
-			// A manifest that cannot be read for a reason other than being absent is a
-			// storage failure, and must not be reported as a job that stopped reporting.
-			name: "propagates a storage failure for a job vanished mid-backup",
-			mode: followJob,
-			answers: append(
-				[]statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 3)}},
-				repeatNotFound(midBackupGapConfirmations)...,
-			),
-			metadata:    &fakeMetadataGetter{err: errBoom},
-			wantErr:     errBoom,
-			wantCalls:   midBackupGapConfirmations + 1,
-			notWantLogs: []string{msgBackupComplete},
-		},
-		{
-			// COMMITTING is the last stage before COMPLETE, so a job that stops
-			// reporting from it has finished just as much as one that was draining.
-			name: "treats a job vanished while committing as a completed backup",
-			mode: followJob,
-			answers: append(
-				[]statusAnswer{{status: testStatus(infomodels.BackupStateCommitting, 99)}},
-				repeatNotFound(vanishedJobConfirmations)...,
-			),
-			wantCalls: vanishedJobConfirmations + 1,
-			wantLogs:  []string{msgBackupComplete, logBackupEntry},
-		},
-		{
-			name:      "fails on a failed backup",
-			mode:      followJob,
-			answers:   []statusAnswer{{status: testStatus(infomodels.BackupStateFailed, 42)}},
-			wantErr:   errBackupFailed,
-			wantCalls: 1,
-		},
-		{
-			// The reason is the only thing that says why the job died, so it belongs in
-			// the error rather than in a log line the caller may never see.
-			name:       "names the reason the cluster gave for a failure",
-			mode:       followJob,
-			answers:    []statusAnswer{{status: testFailedStatus(infomodels.BackupStateFailed)}},
-			wantErr:    errBackupFailed,
-			wantErrMsg: testErrorReason,
-			wantCalls:  1,
-		},
-		{
-			// An aborted job stopped on request and left no usable backup behind, so it
-			// must not be reported as a completion.
-			name:        "fails on an aborted backup",
-			mode:        followJob,
-			answers:     []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 42)}},
-			wantErr:     errBackupAborted,
-			wantCalls:   1,
-			notWantLogs: []string{msgBackupComplete},
-		},
-		{
-			// ABORTING is not terminal: the job is still winding down, and the watch has
-			// to stay on it until it reports the abort.
-			name: "keeps watching a job that is still aborting",
-			mode: followJob,
-			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateAborting, 42)},
-				{status: testFinishedStatus(infomodels.BackupStateAborted, 42)},
-			},
-			wantErr:   errBackupAborted,
-			wantCalls: 2,
-		},
-		{
-			name:      "propagates an unexpected status error",
-			mode:      followJob,
-			answers:   []statusAnswer{{err: errBoom}},
-			wantErr:   errBoom,
-			wantCalls: 1,
-		},
-		{
-			name:        "prints once when watching is disabled",
-			mode:        reportOnce,
-			answers:     []statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 5)}},
-			wantCalls:   1,
-			wantLogs:    []string{logBackupProgress},
-			notWantLogs: []string{msgBackupComplete, logBackupEntry},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, buf := newTestService(t)
-			status := &fakeInfoClient{answers: tt.answers}
-
-			metadata := tt.metadata
-			if metadata == nil {
-				metadata = &fakeMetadataGetter{md: md}
-			}
-
-			err := svc.reportBackupProgress(t.Context(), status, metadata, testJobID, tt.mode)
-
-			if tt.wantErr == nil && tt.wantErrMsg == "" {
-				require.NoError(t, err)
-			}
-
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-			}
-
-			if tt.wantErrMsg != "" {
-				require.ErrorContains(t, err, tt.wantErrMsg)
-			}
-
-			assert.Equal(t, tt.wantCalls, status.calls)
-
-			for _, want := range tt.wantLogs {
-				assert.Contains(t, buf.String(), want)
-			}
-
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
-			}
-		})
+// testColdStatus reports a cold restore job of a single backup.
+func testColdStatus(state infomodels.RestoreState, nsState infomodels.NamespaceState) *infomodels.ResponseRestoreState {
+	return &infomodels.ResponseRestoreState{
+		JobID:         testJobID,
+		Namespace:     testNamespace,
+		Kind:          infomodels.RestoreKindCold,
+		State:         state,
+		NsState:       nsState,
+		BackupEntries: 1,
+		StartTime:     time.Now().Add(-testBackupDuration),
 	}
 }
 
-// TestServiceJobVanished pins down what a job disappearing from the cluster status means
-// for every stage of the backup lifecycle: only the last stages may be read as a finished
-// backup, and every earlier one has to be waited out.
-//
-// Every case describes a job that was reported at least once, which is the only kind
-// jobVanished is asked about: a job the cluster has never reported ends the watch without
-// any confirmation, and is covered by TestServiceReportBackupProgress.
-func TestServiceJobVanished(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		lastState    infomodels.BackupState
-		wantAfter    int
-		wantNotAfter int
-	}{
-		{
-			name:         "init",
-			lastState:    infomodels.BackupStateInit,
-			wantAfter:    midBackupGapConfirmations,
-			wantNotAfter: midBackupGapConfirmations - 1,
-		},
-		{
-			name:         "base scan active",
-			lastState:    infomodels.BackupStateBaseScanActive,
-			wantAfter:    midBackupGapConfirmations,
-			wantNotAfter: midBackupGapConfirmations - 1,
-		},
-		{
-			name:         "base scan done",
-			lastState:    infomodels.BackupStateBaseScanDone,
-			wantAfter:    midBackupGapConfirmations,
-			wantNotAfter: midBackupGapConfirmations - 1,
-		},
-		{
-			name:         "incremental scan active",
-			lastState:    infomodels.BackupStateIncrScanActive,
-			wantAfter:    midBackupGapConfirmations,
-			wantNotAfter: midBackupGapConfirmations - 1,
-		},
-		{
-			name:         "unknown state",
-			lastState:    infomodels.BackupStateUnknown,
-			wantAfter:    midBackupGapConfirmations,
-			wantNotAfter: midBackupGapConfirmations - 1,
-		},
-		{
-			name:         "stopping change stream",
-			lastState:    infomodels.BackupStateStoppingChangeStream,
-			wantAfter:    vanishedJobConfirmations,
-			wantNotAfter: vanishedJobConfirmations - 1,
-		},
-		{
-			name:         "final draining",
-			lastState:    infomodels.BackupStateFinalDraining,
-			wantAfter:    vanishedJobConfirmations,
-			wantNotAfter: vanishedJobConfirmations - 1,
-		},
-		{
-			name:         "committing",
-			lastState:    infomodels.BackupStateCommitting,
-			wantAfter:    vanishedJobConfirmations,
-			wantNotAfter: vanishedJobConfirmations - 1,
-		},
-		{
-			name:         "complete",
-			lastState:    infomodels.BackupStateComplete,
-			wantAfter:    vanishedJobConfirmations,
-			wantNotAfter: vanishedJobConfirmations - 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.False(t, jobVanished(tt.lastState, tt.wantNotAfter),
-				"the job must still be waited for after %d misses", tt.wantNotAfter)
-
-			assert.True(t, jobVanished(tt.lastState, tt.wantAfter),
-				"the job must be given up after %d misses", tt.wantAfter)
-		})
+// testFuzzyStatus reports a fuzzy restore job of a single backup.
+func testFuzzyStatus(state infomodels.RestoreState) *infomodels.ResponseRestoreState {
+	return &infomodels.ResponseRestoreState{
+		JobID:         testJobID,
+		Namespace:     testNamespace,
+		Kind:          infomodels.RestoreKindFuzzy,
+		State:         state,
+		BackupEntries: 1,
+		StartTime:     time.Now().Add(-testBackupDuration),
 	}
 }
 
-// TestServiceReportBackupProgressSkipsMetadataForMissingJob makes sure a job the cluster
-// does not report is answered from the cluster alone. Reading a manifest for it turned
-// "no such backup" into whatever the storage had to say about a backup that was never
-// there - an unreadable bucket answered a question about a job id with a credentials
-// failure.
-func TestServiceReportBackupProgressSkipsMetadataForMissingJob(t *testing.T) {
-	t.Parallel()
+// testFinishedRestore reports a job that reached a terminal state, which is the only case
+// in which the cluster fills in the finish time.
+func testFinishedRestore(status *infomodels.ResponseRestoreState) *infomodels.ResponseRestoreState {
+	status.FinishTime = status.StartTime.Add(testBackupDuration)
 
-	tests := []struct {
-		name string
-		mode progressMode
-	}{
-		{
-			name: "watching",
-			mode: followJob,
-		},
-		{
-			name: "reporting once",
-			mode: reportOnce,
-		},
-		{
-			// A just-started job is waited for, but once the wait runs out it is still
-			// the cluster that answers, not the storage.
-			name: "following a just-started job",
-			mode: followStartedJob,
-		},
+	return status
+}
+
+// testFailedRestore reports a job that ended in a terminal state with a reason attached.
+func testFailedRestore(status *infomodels.ResponseRestoreState) *infomodels.ResponseRestoreState {
+	status.ErrorReason = testErrorReason
+
+	return testFinishedRestore(status)
+}
+
+// repeatRestoreNotFound builds n answers that report the restore job as missing.
+func repeatRestoreNotFound(n int) []restoreAnswer {
+	answers := make([]restoreAnswer, n)
+	for i := range answers {
+		answers[i] = restoreAnswer{err: asinfo.ErrNotFound}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	return answers
+}
 
-			svc, _ := newTestService(t)
-			client := &fakeInfoClient{answers: repeatNotFound(1)}
-			// A getter that fails on any call, so that reading the manifest at all
-			// would be reported instead of the missing job.
-			metadata := &fakeMetadataGetter{err: errBoom}
-
-			err := svc.reportBackupProgress(t.Context(), client, metadata, testJobID, tt.mode)
-
-			require.ErrorIs(t, err, errBackupNotFound)
-			require.NotErrorIs(t, err, errBoom)
-			assert.Equal(t, 0, metadata.calls, "the manifest of a missing job must not be read")
-		})
+// testRequestS3 returns the storage settings the request tests share. The access keys
+// are set to make sure they never reach a request.
+func testRequestS3() *models.AwsS3 {
+	return &models.AwsS3{
+		BucketName:      testBucket,
+		Region:          testRequestRegion,
+		Profile:         testRequestProfile,
+		Endpoint:        testRequestEndpoint,
+		AccessKeyID:     "access",
+		SecretAccessKey: "secret",
 	}
 }
 
-func TestServiceFetchMetadata(t *testing.T) {
-	t.Parallel()
-
-	md := servermodels.Metadata{BackupID: testJobID, Namespace: testNamespace}
-
-	tests := []struct {
-		name      string
-		wait      bool
-		getter    *fakeMetadataGetter
-		wantErr   string
-		wantCalls int
-	}{
-		{
-			name:      "returns the manifest right away",
-			wait:      true,
-			getter:    &fakeMetadataGetter{md: md},
-			wantCalls: 1,
-		},
-		{
-			name:      "waits until the manifest is uploaded",
-			wait:      true,
-			getter:    &fakeMetadataGetter{notFound: 2, md: md},
-			wantCalls: 3,
-		},
-		{
-			name:      "gives up after the last attempt",
-			wait:      true,
-			getter:    &fakeMetadataGetter{notFound: 10, md: md},
-			wantErr:   "timed out waiting for backup metadata",
-			wantCalls: 3,
-		},
-		{
-			name:      "does not retry a permanent failure",
-			wait:      true,
-			getter:    &fakeMetadataGetter{err: errBoom},
-			wantErr:   "failed to get backup metadata",
-			wantCalls: 1,
-		},
-		{
-			name:      "does not wait when the job was never running",
-			wait:      false,
-			getter:    &fakeMetadataGetter{notFound: 1, md: md},
-			wantErr:   "failed to get backup metadata",
-			wantCalls: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, _ := newTestService(t)
-
-			got, err := svc.fetchMetadata(t.Context(), tt.getter, testJobID, tt.wait)
-
-			if tt.wantErr != "" {
-				require.ErrorContains(t, err, tt.wantErr)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, md, got)
-			}
-
-			assert.Equal(t, tt.wantCalls, tt.getter.calls)
-		})
+// testRequestCommon returns the storage part of a request built from testRequestS3.
+func testRequestCommon() infomodels.RequestCommon {
+	return infomodels.RequestCommon{
+		Namespace: testRequestNamespace,
+		Storage:   testRequestStorage,
+		Bucket:    testBucket,
+		Region:    testRequestRegion,
+		Profile:   testRequestProfile,
+		Endpoint:  testRequestEndpoint,
+		NoIndexes: new(false),
+		NoUDFs:    new(false),
 	}
 }
 
-// TestServiceAbortBackup covers the outcomes the abort reaches within a few polls. The
-// two that only time can produce - the bounded wait and a canceled command - are driven
-// separately below.
-//
-// The first status lookup is the pre-abort check, so every case that gets as far as
-// requesting the abort opens with a status that reports the job as running.
-func TestServiceAbortBackup(t *testing.T) {
-	t.Parallel()
-
-	// runningStatus is the answer the pre-abort check needs to let the abort through.
-	runningStatus := statusAnswer{status: testStatus(infomodels.BackupStateBaseScanActive, 12)}
-
-	tests := []struct {
-		name           string
-		abortErr       error
-		answers        []statusAnswer
-		wantErr        error
-		wantCalls      int
-		wantAbortCalls int
-		wantLogs       []string
-		notWantLogs    []string
-	}{
-		{
-			name: "confirms the abort through the aborted state",
-			answers: []statusAnswer{
-				runningStatus,
-				{status: testFinishedStatus(infomodels.BackupStateAborted, 12)},
-			},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborting, logAborted},
-		},
-		{
-			// A job that hit a failure on its way out reports that instead of the abort,
-			// and is just as stopped.
-			name: "confirms the abort through the failed state",
-			answers: []statusAnswer{
-				runningStatus,
-				{status: testStatus(infomodels.BackupStateFailed, 12)},
-			},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborting, logAborted},
-		},
-		{
-			// The cluster drops the state of a job that is no longer running, so a job
-			// that goes missing from the status after the abort has stopped too.
-			name:           "confirms the abort for a job the cluster no longer reports",
-			answers:        []statusAnswer{runningStatus},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
-		},
-		{
-			// The cluster keeps reporting the job while it winds down, so the state that
-			// confirms the abort only arrives a few polls later.
-			name: "waits for a job that is still winding down",
-			answers: []statusAnswer{
-				runningStatus,
-				{status: testStatus(infomodels.BackupStateBaseScanActive, 12)},
-				{status: testStatus(infomodels.BackupStateAborting, 91)},
-				{status: testFinishedStatus(infomodels.BackupStateAborted, 91)},
-			},
-			wantCalls:      4,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
-		},
-		{
-			// A job winding down from an earlier abort is still running, so a repeated
-			// abort goes through and waits for it the same way.
-			name: "aborts a job that is already winding down from an earlier abort",
-			answers: []statusAnswer{
-				{status: testStatus(infomodels.BackupStateAborting, 91)},
-				{status: testFinishedStatus(infomodels.BackupStateAborted, 91)},
-			},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
-		},
-		{
-			// A backup that reached the end between the check and the confirmation was
-			// not aborted, and announcing it as aborted would hide a backup that is in
-			// storage.
-			name: "reports a backup that finished before the abort landed",
-			answers: []statusAnswer{
-				runningStatus,
-				{status: testStatus(infomodels.BackupStateComplete, 100)},
-			},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAbortTooLate},
-			notWantLogs:    []string{logAborted},
-		},
-		{
-			// The cluster answers an abort for a job it knows nothing about without
-			// complaining, so a job it does not report must not be asked to stop: the
-			// status right after such a request looks just like a job that was aborted.
-			name:           "does not abort a job the cluster does not report",
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningBackup},
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			// A status with neither a state nor an error says nothing about the job, and
-			// must not be read as a job to abort - the state of it would be dereferenced.
-			name:           "does not abort a job whose status comes back empty",
-			answers:        []statusAnswer{{}},
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningBackup},
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			// The same empty answer during the confirmation says the job is no longer
-			// reported, which is what the cluster does to a job that stopped.
-			name:           "confirms the abort for a job whose status comes back empty",
-			answers:        []statusAnswer{runningStatus, {}},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
-		},
-		{
-			// The state of a finished job is kept for a while, and there is nothing left
-			// in it to abort.
-			name:           "does not abort a job that already completed",
-			answers:        []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateComplete, 100)}},
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningBackup},
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			name:           "does not abort a job that already stopped on an earlier abort",
-			answers:        []statusAnswer{{status: testFinishedStatus(infomodels.BackupStateAborted, 12)}},
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningBackup},
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			// Nothing was aborted, so there is nothing to confirm.
-			name:           "propagates a rejected abort request without polling",
-			answers:        []statusAnswer{runningStatus},
-			abortErr:       errBoom,
-			wantErr:        errBoom,
-			wantCalls:      1,
-			wantAbortCalls: 1,
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			// A check that cannot tell whether the job runs must not guess, and must not
-			// send the abort either.
-			name:           "propagates an unexpected error from the pre-abort check",
-			answers:        []statusAnswer{{err: errBoom}},
-			wantErr:        errBoom,
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			notWantLogs:    []string{logAborting, logAborted},
-		},
-		{
-			name:           "propagates an unexpected status error",
-			answers:        []statusAnswer{runningStatus, {err: errBoom}},
-			wantErr:        errBoom,
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			notWantLogs:    []string{logAborted},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, buf := newTestService(t)
-			client := &fakeInfoClient{answers: tt.answers, abortErr: tt.abortErr}
-
-			err := svc.abortBackup(t.Context(), client)
-
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-			} else {
-				require.NoError(t, err)
-			}
-
-			// The abort is requested at most once, and only for the configured job.
-			assert.Equal(t, tt.wantAbortCalls, client.abortCalls)
-			assert.Equal(t, tt.wantCalls, client.calls)
-
-			if tt.wantAbortCalls > 0 {
-				assert.Equal(t, testJobID, client.abortJobID)
-			}
-
-			for _, want := range tt.wantLogs {
-				assert.Contains(t, buf.String(), want)
-			}
-
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
-			}
-		})
-	}
+// fakeManifestS3 serves a single complete manifest and records the object keys read.
+type fakeManifestS3 struct {
+	manifest []byte
+	keys     []string
 }
 
-// TestServiceAbortBackupTimesOut pins down the bound on the wait: a job that never reacts
-// to the abort has to end the command instead of being polled forever, and the failure
-// has to say so rather than claim the backup stopped.
-func TestServiceAbortBackupTimesOut(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-
-	client := &fakeInfoClient{
-		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 80)}},
-		repeatLast: true,
-	}
-
-	err := svc.abortBackup(t.Context(), client)
-
-	require.ErrorIs(t, err, errAbortStatusTimeout)
-	// The last state the cluster reported belongs in the error: it is the only clue
-	// about what the job was still doing.
-	require.ErrorContains(t, err, infomodels.BackupStateIncrScanActive.Describe())
-	require.Greater(t, client.calls, 1, "the abort must keep polling until the wait runs out")
-	require.NotContains(t, buf.String(), logAborted)
+func (f *fakeManifestS3) ListObjectsV2(
+	context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options),
+) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, nil
 }
 
-// TestServiceAbortBackupStatusDeadline covers the wait running out while a status lookup
-// is in flight: the lookup comes back with the deadline instead of a state, and the
-// command has to report the wait it gave up on rather than pass a bare deadline on.
-func TestServiceAbortBackupStatusDeadline(t *testing.T) {
-	t.Parallel()
+func (f *fakeManifestS3) GetObject(
+	_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options),
+) (*s3.GetObjectOutput, error) {
+	f.keys = append(f.keys, aws.ToString(in.Key))
 
-	svc, buf := newTestService(t)
-
-	client := &fakeInfoClient{
-		answers: []statusAnswer{
-			{status: testStatus(infomodels.BackupStateIncrScanActive, 80)},
-			{err: fmt.Errorf("status request: %w", context.DeadlineExceeded)},
-		},
-	}
-
-	err := svc.abortBackup(t.Context(), client)
-
-	require.ErrorIs(t, err, errAbortStatusTimeout)
-	require.ErrorContains(t, err, testJobID)
-	assert.Equal(t, 2, client.calls, "the wait must end with the lookup that ran out of time")
-	assert.NotContains(t, buf.String(), logAborted)
-}
-
-// TestServiceAbortBackupCanceled makes sure a command the user interrupted is reported as
-// canceled and not as a timeout, and that the wait ends at once instead of sitting out the
-// poll interval.
-func TestServiceAbortBackupCanceled(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-	// A poll interval longer than the test would tolerate: only the cancellation can
-	// end this wait.
-	svc.abortPollInterval = time.Minute
-
-	ctx, cancel := context.WithCancel(t.Context())
-
-	client := &fakeInfoClient{
-		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateBaseScanActive, 40)}},
-		repeatLast: true,
-	}
-
-	cancel()
-
-	err := svc.abortBackup(ctx, client)
-
-	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, errAbortStatusTimeout)
-	assert.NotContains(t, buf.String(), logAborted)
-}
-
-// TestServiceAbortRestore covers the outcomes the restore abort reaches within a few
-// polls. The two that only time can produce are driven separately below.
-//
-// The first status lookup is the pre-abort check, so every case that gets as far as
-// requesting the abort opens with a state that reports the namespace as restoring.
-func TestServiceAbortRestore(t *testing.T) {
-	t.Parallel()
-
-	// restoringState is the answer the pre-abort check needs to let the abort through.
-	restoringState := restoreAnswer{state: infomodels.RestoreStateRestoring}
-
-	tests := []struct {
-		name           string
-		abortErr       error
-		answers        []restoreAnswer
-		wantErr        error
-		wantCalls      int
-		wantAbortCalls int
-		wantLogs       []string
-		notWantLogs    []string
-	}{
-		{
-			// Nothing restores into the namespace anymore, so the abort has landed.
-			name:           "confirms the abort through the none state",
-			answers:        []restoreAnswer{restoringState, {state: infomodels.RestoreStateNone}},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			// A restore that hit a failure on its way out is just as stopped.
-			name:           "confirms the abort through the failed state",
-			answers:        []restoreAnswer{restoringState, {state: infomodels.RestoreStateFailed}},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
-		},
-		{
-			// The cluster answers with no state at all for a namespace nothing restores
-			// into, which says the same thing as the NONE state.
-			name:           "confirms the abort for a namespace with no restore state",
-			answers:        []restoreAnswer{restoringState},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
-		},
-		{
-			// The cluster keeps reporting the namespace as restoring while the job winds
-			// down, so the state that confirms the abort only arrives a few polls later.
-			name: "waits for a restore that is still winding down",
-			answers: []restoreAnswer{
-				restoringState,
-				{state: infomodels.RestoreStateRestoring},
-				{state: infomodels.RestoreStateRestoring},
-				{state: infomodels.RestoreStateNone},
-			},
-			wantCalls:      4,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
-		},
-		{
-			// A job aborted before it started writing records is still preparing, which
-			// is something to abort and not a stopped restore.
-			name: "waits for a restore that is still preparing",
-			answers: []restoreAnswer{
-				{state: infomodels.RestoreStatePreparing},
-				{state: infomodels.RestoreStatePreparing},
-				{state: infomodels.RestoreStateNone},
-			},
-			wantCalls:      3,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
-		},
-		{
-			// A prepared namespace blocks writes until the restore ends, so the abort has
-			// to release that block - and only the state that follows says it did. Until
-			// then the namespace keeps reporting itself as prepared.
-			name: "aborts a namespace that is only prepared and waits for the block to lift",
-			answers: []restoreAnswer{
-				{state: infomodels.RestoreStateReady},
-				{state: infomodels.RestoreStateReady},
-				{state: infomodels.RestoreStateNone},
-			},
-			wantCalls:      3,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			// The cluster accepts the abort of a namespace nothing restores into, and the
-			// idle status that follows would announce a restore that never ran as
-			// aborted. This is what a wrong backup id used to look like.
-			name:           "does not abort a namespace that carries no restore state",
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningRestore},
-			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			name:           "does not abort a namespace nothing restores into",
-			answers:        []restoreAnswer{{state: infomodels.RestoreStateNone}},
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningRestore},
-			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			// A restore that ended in a failure holds nothing anymore.
-			name:           "does not abort a namespace whose restore failed",
-			answers:        []restoreAnswer{{state: infomodels.RestoreStateFailed}},
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			wantLogs:       []string{msgNoRunningRestore},
-			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			// Nothing was aborted, so there is nothing to confirm.
-			name:           "propagates a rejected abort request without polling",
-			answers:        []restoreAnswer{restoringState},
-			abortErr:       errBoom,
-			wantErr:        errBoom,
-			wantCalls:      1,
-			wantAbortCalls: 1,
-			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			// A check that cannot tell whether a restore runs must not guess, and must
-			// not send the abort either.
-			name:           "propagates an unexpected error from the pre-abort check",
-			answers:        []restoreAnswer{{err: errBoom}},
-			wantErr:        errBoom,
-			wantCalls:      1,
-			wantAbortCalls: 0,
-			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
-		},
-		{
-			name:           "propagates an unexpected status error",
-			answers:        []restoreAnswer{restoringState, {err: errBoom}},
-			wantErr:        errBoom,
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			notWantLogs:    []string{logRestoreAborted},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, buf := newTestService(t)
-			client := &fakeRestoreInfoClient{answers: tt.answers, abortErr: tt.abortErr}
-
-			err := svc.abortRestore(t.Context(), client)
-
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tt.wantAbortCalls, client.abortCalls)
-			assert.Equal(t, tt.wantCalls, client.calls)
-
-			// A restore job is named by its namespace as well as by its id, so both have
-			// to reach the cluster.
-			if tt.wantAbortCalls > 0 {
-				assert.Equal(t, testNamespace, client.abortNamespace)
-				assert.Equal(t, testJobID, client.abortJobID)
-			}
-
-			for _, want := range tt.wantLogs {
-				assert.Contains(t, buf.String(), want)
-			}
-
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
-			}
-		})
-	}
-}
-
-// TestServiceAbortRestoreTimesOut pins down the bound on the wait: a namespace that never
-// stops reporting a running restore has to end the command instead of being polled
-// forever, and the failure has to say so rather than claim the restore stopped.
-func TestServiceAbortRestoreTimesOut(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-
-	client := &fakeRestoreInfoClient{
-		answers:    []restoreAnswer{{state: infomodels.RestoreStateRestoring}},
-		repeatLast: true,
-	}
-
-	err := svc.abortRestore(t.Context(), client)
-
-	require.ErrorIs(t, err, errAbortRestoreStatusTimeout)
-	// The last state the cluster reported belongs in the error: it is the only clue
-	// about what the namespace was still doing.
-	require.ErrorContains(t, err, infomodels.RestoreStateRestoring)
-	require.Greater(t, client.calls, 1, "the abort must keep polling until the wait runs out")
-	require.NotContains(t, buf.String(), logRestoreAborted)
-}
-
-// TestServiceAbortRestoreCanceled makes sure a command the user interrupted is reported
-// as canceled and not as a timeout, and that the wait ends at once instead of sitting out
-// the poll interval.
-func TestServiceAbortRestoreCanceled(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-	// A poll interval longer than the test would tolerate: only the cancellation can
-	// end this wait.
-	svc.abortPollInterval = time.Minute
-
-	ctx, cancel := context.WithCancel(t.Context())
-
-	client := &fakeRestoreInfoClient{
-		answers:    []restoreAnswer{{state: infomodels.RestoreStateRestoring}},
-		repeatLast: true,
-	}
-
-	cancel()
-
-	err := svc.abortRestore(ctx, client)
-
-	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, errAbortRestoreStatusTimeout)
-	assert.NotContains(t, buf.String(), logRestoreAborted)
-}
-
-func TestMetadataS3Config(t *testing.T) {
-	t.Parallel()
-
-	shared := &models.AwsS3{BucketName: testBucket}
-
-	cfg := metadataS3Config(shared)
-
-	assert.Equal(t, testBucket, cfg.BucketName)
-	assert.Equal(t, metadataRequestTimeoutMillis, cfg.RequestTimeout)
-	// The configuration the rest of the command reads must stay untouched.
-	assert.Equal(t, 0, shared.RequestTimeout)
+	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(f.manifest))}, nil
 }
