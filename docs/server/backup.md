@@ -100,9 +100,9 @@ Backup Flags:
                                      A non-zero value must be at least 5 x --parallel-read.
                                      If 0, the server default is used, which is no limit.
       --parallel-read int            Number of scan threads per node, from 1 to 128.
-                                     If 0, the server default is used.
+                                     If 0, the server default is used. (default 8)
       --parallel-write int           Number of upload threads per node, from 1 to 128.
-                                     If 0, the server default is used.
+                                     If 0, the server default is used. (default 8)
       --s3-throughput int            Target throughput of the S3 client per node, in gigabits per second
                                      (Gbit/s), from 1 to 400. If 0, the server default is used.
 
@@ -565,10 +565,10 @@ backup:
   records-per-second: 0
   # Number of scan threads per node, from 1 to 128.
   # If 0, the server default is used.
-  parallel-read: 0
+  parallel-read: 8
   # Number of upload threads per node, from 1 to 128.
   # If 0, the server default is used.
-  parallel-write: 0
+  parallel-write: 8
   # Target throughput of the S3 client per node, in gigabits per second
   # (Gbit/s), from 1 to 400. If 0, the server default is used.
   s3-throughput: 0
