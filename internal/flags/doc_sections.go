@@ -35,6 +35,8 @@ const (
 	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl snapshot-restore progress [flags]"
 	SectionTextUsageRestoreStart    = "\nUsage:\n  absctl snapshot-restore start [flags]"
 	SectionTextUsageRestoreAbort    = "\nUsage:\n  absctl snapshot-restore abort [flags]"
+	SectionTextUsageRestoreOpen     = "\nUsage:\n  absctl snapshot-restore open [flags]"
+	SectionTextUsageRestoreClear    = "\nUsage:\n  absctl snapshot-restore clear-storage [flags]"
 
 	SectionAvailableCommands = "\nAvailable Commands:"
 

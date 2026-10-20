@@ -93,6 +93,58 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
+	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
+	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
+	assert.Equal(t, models.DefaultServerBackupS3Throughput, result.S3Throughput)
+}
+
+func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testRecordsPerSecond = "5000"
+		testParallelRead     = "8"
+		testParallelWrite    = "4"
+		testS3Throughput     = "10"
+	)
+
+	commonArgs := []string{
+		"--parallel-read", testParallelRead,
+		"--parallel-write", testParallelWrite,
+		"--s3-throughput", testS3Throughput,
+	}
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "long flags",
+			args: append([]string{"--records-per-second", testRecordsPerSecond}, commonArgs...),
+		},
+		{
+			// The short flag matches the one of the scan backup.
+			name: "short flags",
+			args: append([]string{"-L", testRecordsPerSecond}, commonArgs...),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			backup := NewServerBackup()
+			require.NoError(t, backup.NewFlagSet().Parse(tt.args))
+
+			result := backup.GetServerBackup()
+
+			assert.Equal(t, 5000, result.RecordsPerSecond)
+			assert.Equal(t, 8, result.ParallelRead)
+			assert.Equal(t, 4, result.ParallelWrite)
+			assert.Equal(t, 10, result.S3Throughput)
+		})
+	}
 }
 
 func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
@@ -107,12 +159,14 @@ func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
 	)
 
 	want := &models.ServerBackup{
-		Namespace: testNamespace,
-		Path:      testPath,
-		SetList:   testSetList,
-		BinList:   testBinList,
-		FilterExp: testFilterExp,
-		NoIndexes: true,
+		Namespace:     testNamespace,
+		Path:          testPath,
+		SetList:       testSetList,
+		BinList:       testBinList,
+		FilterExp:     testFilterExp,
+		NoIndexes:     true,
+		ParallelRead:  models.DefaultServerBackupParallelRead,
+		ParallelWrite: models.DefaultServerBackupParallelWrite,
 	}
 
 	tests := []struct {
@@ -170,7 +224,7 @@ func TestServerBackup_NewFlagSet_Async(t *testing.T) {
 	backup := NewServerBackup()
 	flagSet := backup.NewFlagSet()
 
-	err := flagSet.Parse([]string{"--async"})
+	err := flagSet.Parse([]string{flagAsync})
 	require.NoError(t, err)
 
 	assert.True(t, backup.GetServerBackup().Async)
@@ -270,12 +324,13 @@ func TestServerBackupAbort_NewFlagSet(t *testing.T) {
 	abort := NewServerBackupAbort()
 	flagSet := abort.NewFlagSet()
 
-	err := flagSet.Parse([]string{"--backup-id", testBackupJobID})
+	err := flagSet.Parse([]string{"--backup-id", testBackupJobID, flagAsync})
 	require.NoError(t, err)
 
 	result := abort.GetServerBackupAbort()
 
 	assert.Equal(t, testBackupJobID, result.JobID)
+	assert.True(t, result.Async)
 }
 
 func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
@@ -290,6 +345,7 @@ func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
 	result := abort.GetServerBackupAbort()
 
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
 }
 
 func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {

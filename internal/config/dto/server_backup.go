@@ -82,21 +82,30 @@ type ServerBackupConfig struct {
 	NoIndexes      *bool    `yaml:"no-indexes"`
 	NoUDFs         *bool    `yaml:"no-udfs"`
 	Async          *bool    `yaml:"async"`
+
+	RecordsPerSecond *int `yaml:"records-per-second"`
+	ParallelRead     *int `yaml:"parallel-read"`
+	ParallelWrite    *int `yaml:"parallel-write"`
+	S3Throughput     *int `yaml:"s3-throughput"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
 	return ServerBackupConfig{
-		Namespace:      new(models.DefaultCommonNamespace),
-		StorageType:    new(models.DefaultServerBackupObjectStorageType),
-		Path:           new(models.DefaultServerBackupPath),
-		ModifiedAfter:  new(models.DefaultBackupModifiedAfter),
-		ModifiedBefore: new(models.DefaultBackupModifiedBefore),
-		SetList:        []string{},
-		BinList:        []string{},
-		FilterExp:      new(models.DefaultServerFilterExp),
-		NoIndexes:      new(models.DefaultCommonNoIndexes),
-		NoUDFs:         new(models.DefaultCommonNoUDFs),
-		Async:          new(models.DefaultServerBackupAsync),
+		Namespace:        new(models.DefaultCommonNamespace),
+		StorageType:      new(models.DefaultServerBackupObjectStorageType),
+		Path:             new(models.DefaultServerBackupPath),
+		ModifiedAfter:    new(models.DefaultBackupModifiedAfter),
+		ModifiedBefore:   new(models.DefaultBackupModifiedBefore),
+		SetList:          []string{},
+		BinList:          []string{},
+		FilterExp:        new(models.DefaultServerFilterExp),
+		NoIndexes:        new(models.DefaultCommonNoIndexes),
+		NoUDFs:           new(models.DefaultCommonNoUDFs),
+		Async:            new(models.DefaultServerBackupAsync),
+		RecordsPerSecond: new(models.DefaultServerBackupRecordsPerSecond),
+		ParallelRead:     new(models.DefaultServerBackupParallelRead),
+		ParallelWrite:    new(models.DefaultServerBackupParallelWrite),
+		S3Throughput:     new(models.DefaultServerBackupS3Throughput),
 	}
 }
 
@@ -118,6 +127,11 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		NoIndexes:      derefBool(b.Backup.NoIndexes),
 		NoUDFs:         derefBool(b.Backup.NoUDFs),
 		Async:          derefBool(b.Backup.Async),
+
+		RecordsPerSecond: derefInt(b.Backup.RecordsPerSecond),
+		ParallelRead:     derefInt(b.Backup.ParallelRead),
+		ParallelWrite:    derefInt(b.Backup.ParallelWrite),
+		S3Throughput:     derefInt(b.Backup.S3Throughput),
 	}
 }
 
@@ -204,11 +218,13 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 // ServerBackupAbortConfig maps the "abort" section, used by "snapshot-backup abort".
 type ServerBackupAbortConfig struct {
 	JobID *string `yaml:"backup-id"`
+	Async *bool   `yaml:"async"`
 }
 
 func defaultServerBackupAbortConfig() ServerBackupAbortConfig {
 	return ServerBackupAbortConfig{
 		JobID: new(models.DefaultServerBackupJobID),
+		Async: new(models.DefaultServerBackupAsync),
 	}
 }
 
@@ -220,5 +236,6 @@ func (b *ServerBackup) ToModelServerBackupAbort() *models.ServerBackupAbort {
 
 	return &models.ServerBackupAbort{
 		JobID: derefString(b.Abort.JobID),
+		Async: derefBool(b.Abort.Async),
 	}
 }

@@ -135,22 +135,36 @@ restore:
   no-udfs: true
   fuzzy-restore: true
   allow-unhosted: true
-  parallel: 16
+  parallel-write: 16
+  parallel-read: 4
   records-per-second: 1000
   max-inflight: 500
   retry-base-interval: 2000
   retry-multiplier: 1.5
   retry-max-attempts: 3
   ignore-record-error: true
+  incremental-path: incr/prefix
+  async: true
+  extra-ttl: 3600
 prepare:
   namespace: test
   job-id: rst-1
   hydrate-replica: false
 progress:
   namespace: test
+  job-id: rst-1
+  watch: true
 abort:
   namespace: test
   job-id: rst-1
+open:
+  namespace: test
+  job-id: rst-1
+  async: true
+clear-storage:
+  namespace: test
+  job-id: rst-1
+  async: true
 aws:
   s3:
     bucket-name: my-bucket
@@ -616,6 +630,24 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 			},
 		},
 		{
+			name:    "restore parallel",
+			yaml:    "restore:\n  parallel: 8\n",
+			wantKey: "parallel",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
+				return err
+			},
+		},
+		{
+			name:    "restore restore-download-threads",
+			yaml:    "restore:\n  restore-download-threads: 8\n",
+			wantKey: "restore-download-threads",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
+				return err
+			},
+		},
+		{
 			name:    "prepare backup-id",
 			yaml:    "prepare:\n  backup-id: bkp-1\n",
 			wantKey: "backup-id",
@@ -678,13 +710,17 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.True(t, cfg.Start.NoUDFs)
 				assert.True(t, cfg.Start.FuzzyRestore)
 				assert.True(t, cfg.Start.AllowUnhosted)
-				assert.Equal(t, 16, cfg.Start.Parallel)
+				assert.Equal(t, 16, cfg.Start.ParallelWrite)
+				assert.Equal(t, 4, cfg.Start.ParallelRead)
 				assert.Equal(t, 1000, cfg.Start.RecordsPerSecond)
 				assert.Equal(t, 500, cfg.Start.MaxInflight)
 				assert.Equal(t, 2000, cfg.Start.RetryBaseInterval)
 				assert.InDelta(t, 1.5, cfg.Start.RetryMultiplier, 0)
 				assert.Equal(t, 3, cfg.Start.RetryMaxAttempts)
 				assert.True(t, cfg.Start.IgnoreRecordError)
+				assert.Equal(t, "incr/prefix", cfg.Start.IncrementalPath)
+				assert.True(t, cfg.Start.Async)
+				assert.Equal(t, 3600, cfg.Start.ExtraTTL)
 			},
 		},
 		{
@@ -715,6 +751,8 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Progress.Namespace)
+				assert.Equal(t, testServerRestoreJobID, cfg.Progress.JobID)
+				assert.True(t, cfg.Progress.Watch)
 			},
 		},
 		{
@@ -730,6 +768,38 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "test", cfg.Abort.Namespace)
 				assert.Equal(t, testServerRestoreJobID, cfg.Abort.JobID)
+			},
+		},
+		{
+			name:    "open reads the open section",
+			command: ServerRestoreCommandOpen,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.Open)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Abort)
+				assert.Nil(t, cfg.ClearStorage)
+
+				assert.Equal(t, "test", cfg.Open.Namespace)
+				assert.Equal(t, testServerRestoreJobID, cfg.Open.JobID)
+				assert.True(t, cfg.Open.Async)
+			},
+		},
+		{
+			name:    "clear storage reads the clear-storage section",
+			command: ServerRestoreCommandClearStorage,
+			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
+				t.Helper()
+
+				require.NotNil(t, cfg.ClearStorage)
+				assert.Nil(t, cfg.Start)
+				assert.Nil(t, cfg.Abort)
+				assert.Nil(t, cfg.Open)
+
+				assert.Equal(t, "test", cfg.ClearStorage.Namespace)
+				assert.Equal(t, testServerRestoreJobID, cfg.ClearStorage.JobID)
+				assert.True(t, cfg.ClearStorage.Async)
 			},
 		},
 	}

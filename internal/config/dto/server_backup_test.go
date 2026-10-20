@@ -50,6 +50,10 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
+	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
+	assert.Equal(t, models.DefaultServerBackupParallelRead, derefInt(backup.ParallelRead))
+	assert.Equal(t, models.DefaultServerBackupParallelWrite, derefInt(backup.ParallelWrite))
+	assert.Equal(t, models.DefaultServerBackupS3Throughput, derefInt(backup.S3Throughput))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -66,6 +70,7 @@ func TestDefaultServerBackupSections(t *testing.T) {
 
 	abort := defaultServerBackupAbortConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(abort.JobID))
+	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(abort.Async))
 }
 
 func TestServerBackupToModels(t *testing.T) {
@@ -84,6 +89,10 @@ func TestServerBackupToModels(t *testing.T) {
 	jobID := "bkp-1"
 	sampleSize := 500
 	watch := true
+	recordsPerSecond := 5000
+	parallelRead := 8
+	parallelWrite := 4
+	s3Throughput := 10
 
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
@@ -98,11 +107,16 @@ func TestServerBackupToModels(t *testing.T) {
 			NoIndexes:      &noIndexes,
 			NoUDFs:         &noUDFs,
 			Async:          &async,
+
+			RecordsPerSecond: &recordsPerSecond,
+			ParallelRead:     &parallelRead,
+			ParallelWrite:    &parallelWrite,
+			S3Throughput:     &s3Throughput,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
 		Progress: ServerBackupProgressConfig{JobID: &jobID, Path: &backupPath, Watch: &watch},
-		Abort:    ServerBackupAbortConfig{JobID: &jobID},
+		Abort:    ServerBackupAbortConfig{JobID: &jobID, Async: &async},
 	}
 
 	start := backup.ToModelServerBackup()
@@ -119,6 +133,10 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.True(t, start.NoIndexes)
 	assert.True(t, start.NoUDFs)
 	assert.True(t, start.Async)
+	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
+	assert.Equal(t, parallelRead, start.ParallelRead)
+	assert.Equal(t, parallelWrite, start.ParallelWrite)
+	assert.Equal(t, s3Throughput, start.S3Throughput)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)
@@ -139,6 +157,7 @@ func TestServerBackupToModels(t *testing.T) {
 	abort := backup.ToModelServerBackupAbort()
 	require.NotNil(t, abort)
 	assert.Equal(t, jobID, abort.JobID)
+	assert.True(t, abort.Async)
 }
 
 func TestServerBackupToModelsNil(t *testing.T) {

@@ -17,19 +17,22 @@ package models
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 )
 
-// Limits of the fuzzy restore settings, as enforced by the server.
+// Limits of the restore settings, as enforced by the server.
 const (
-	minServerRestoreParallel        = 1
-	maxServerRestoreParallel        = 128
+	minServerRestoreParallelWrite   = 1
+	maxServerRestoreParallelWrite   = 128
 	minServerRestoreMaxInflight     = 1
 	maxServerRestoreMaxInflight     = 100_000
 	minServerRestoreRetryMultiplier = 1.0
-	minServerRestoreDownloadThreads = 1
-	maxServerRestoreDownloadThreads = 128
+	minServerRestoreParallelRead    = 1
+	maxServerRestoreParallelRead    = 128
+	// maxServerRestoreExtraTTL is ten years, in seconds.
+	maxServerRestoreExtraTTL = 315_360_000
 )
 
 // backupIDsSeparator separates the ids of the backups a single restore reads. The
@@ -46,28 +49,43 @@ type ServerRestore struct {
 	// BackupIDs is a comma-separated list of the ids of the backups to restore from.
 	BackupIDs string
 	// Path is the key prefix the backup was written under.
-	Path    string
-	SetList string
+	Path string
+	// IncrementalPath is the key prefix the incremental backups, every backup id after
+	// the first one, were written under, when it differs from Path.
+	IncrementalPath string
+	SetList         string
 	// FilterExp is a base64-encoded filter expression. Cold restore only.
 	FilterExp    string
 	NoIndexes    bool
 	NoUDFs       bool
 	FuzzyRestore bool
-	// RestoreDownloadThreads is the number of threads to use for downloading backup
-	// files. It applies to both cold and fuzzy restore.
-	RestoreDownloadThreads int
+	// Async returns from the start command as soon as the cluster accepts the job,
+	// instead of following the restore until it ends.
+	Async bool
+
+	// The fields below apply to both cold and fuzzy restore.
+
+	// ParallelRead is the number of threads per node that download the backup files.
+	ParallelRead int
+	// ParallelWrite is the number of threads per node that apply the records.
+	ParallelWrite int
+	// RecordsPerSecond limits the records per second each node applies.
+	RecordsPerSecond int
+	// ExtraTTL is added to the expiry of every restored record that expires, in seconds.
+	ExtraTTL int
 
 	// The fields below apply to a fuzzy restore only.
 
-	AllowUnhosted    bool
-	Parallel         int
-	RecordsPerSecond int
-	MaxInflight      int
+	AllowUnhosted bool
+	MaxInflight   int
 	// RetryBaseInterval is the base delay before a retry, in milliseconds.
 	RetryBaseInterval int
 	RetryMultiplier   float64
 	RetryMaxAttempts  int
 	IgnoreRecordError bool
+	// ApplyMetadataLast creates the secondary indexes and UDFs after the records
+	// instead of before.
+	ApplyMetadataLast bool
 }
 
 // RestoreJobID returns the id of the restore job, which defaults to the id of the
@@ -103,6 +121,10 @@ func (s *ServerRestore) Validate() error {
 		return err
 	}
 
+	if err := s.validateIncrementalPath(); err != nil {
+		return err
+	}
+
 	if err := validateFilterExp(s.FilterExp); err != nil {
 		return err
 	}
@@ -111,14 +133,47 @@ func (s *ServerRestore) Validate() error {
 		return err
 	}
 
-	if s.RestoreDownloadThreads < minServerRestoreDownloadThreads ||
-		s.RestoreDownloadThreads > maxServerRestoreDownloadThreads {
-		return fmt.Errorf("restore-download-threads must be between %d and %d, got %d",
-			minServerRestoreDownloadThreads, maxServerRestoreDownloadThreads,
-			s.RestoreDownloadThreads)
+	if err := s.validateJobSettings(); err != nil {
+		return err
 	}
 
 	return s.ServerCommon.Validate()
+}
+
+// validateIncrementalPath checks the path of the incremental backups. The server refuses
+// it for a restore of a single backup, which has no incremental backups to read.
+func (s *ServerRestore) validateIncrementalPath() error {
+	if s.IncrementalPath == "" {
+		return nil
+	}
+
+	if len(s.BackupIDList()) < 2 {
+		return errors.New("incremental-path requires more than one backup id")
+	}
+
+	return validatePath(s.IncrementalPath)
+}
+
+// validateJobSettings checks the settings that apply to both cold and fuzzy restore.
+func (s *ServerRestore) validateJobSettings() error {
+	switch {
+	case s.ParallelRead < minServerRestoreParallelRead ||
+		s.ParallelRead > maxServerRestoreParallelRead:
+		return fmt.Errorf("parallel-read must be between %d and %d, got %d",
+			minServerRestoreParallelRead, maxServerRestoreParallelRead,
+			s.ParallelRead)
+	case s.ParallelWrite < minServerRestoreParallelWrite || s.ParallelWrite > maxServerRestoreParallelWrite:
+		return fmt.Errorf("parallel-write must be between %d and %d, got %d",
+			minServerRestoreParallelWrite, maxServerRestoreParallelWrite, s.ParallelWrite)
+	case s.RecordsPerSecond < 0 || int64(s.RecordsPerSecond) > math.MaxUint32:
+		return fmt.Errorf("records-per-second must be between 0 and %d, got %d",
+			uint32(math.MaxUint32), s.RecordsPerSecond)
+	case s.ExtraTTL < 0 || s.ExtraTTL > maxServerRestoreExtraTTL:
+		return fmt.Errorf("extra-ttl must be between 0 and %d, got %d",
+			maxServerRestoreExtraTTL, s.ExtraTTL)
+	}
+
+	return nil
 }
 
 // validateBackupIDs checks the backup id list the server is sent verbatim. The server
@@ -154,21 +209,19 @@ func (s *ServerRestore) validateRestoreMode() error {
 	}
 
 	switch {
-	case s.Parallel < minServerRestoreParallel || s.Parallel > maxServerRestoreParallel:
-		return fmt.Errorf("parallel must be between %d and %d, got %d",
-			minServerRestoreParallel, maxServerRestoreParallel, s.Parallel)
-	case s.RecordsPerSecond < 0:
-		return fmt.Errorf("records-per-second must be non-negative, got %d", s.RecordsPerSecond)
 	case s.MaxInflight < minServerRestoreMaxInflight || s.MaxInflight > maxServerRestoreMaxInflight:
 		return fmt.Errorf("max-inflight must be between %d and %d, got %d",
 			minServerRestoreMaxInflight, maxServerRestoreMaxInflight, s.MaxInflight)
-	case s.RetryBaseInterval <= 0:
-		return fmt.Errorf("retry-base-interval must be positive, got %d", s.RetryBaseInterval)
+	case s.RetryBaseInterval < 0 || int64(s.RetryBaseInterval) > math.MaxUint32:
+		return fmt.Errorf("retry-base-interval must be between 0 and %d, got %d",
+			uint32(math.MaxUint32), s.RetryBaseInterval)
 	case s.RetryMultiplier < minServerRestoreRetryMultiplier:
 		return fmt.Errorf("retry-multiplier must be at least %.1f, got %g",
 			minServerRestoreRetryMultiplier, s.RetryMultiplier)
 	case s.RetryMaxAttempts <= 0:
 		return fmt.Errorf("retry-max-attempts must be positive, got %d", s.RetryMaxAttempts)
+	case s.ApplyMetadataLast && s.NoIndexes && s.NoUDFs:
+		return errors.New("apply-metadata-last has nothing to apply with no-indexes and no-udfs")
 	}
 
 	return nil
@@ -183,13 +236,12 @@ func (s *ServerRestore) validateColdRestore() error {
 		set  bool
 	}{
 		{"allow-unhosted", changed(s.AllowUnhosted, DefaultServerRestoreAllowUnhosted)},
-		{"parallel", changed(s.Parallel, DefaultServerRestoreParallel)},
-		{"records-per-second", changed(s.RecordsPerSecond, DefaultServerRestoreRecordsPerSecond)},
 		{"max-inflight", changed(s.MaxInflight, DefaultServerRestoreMaxInflight)},
 		{"retry-base-interval", changed(s.RetryBaseInterval, DefaultServerRestoreRetryBaseInterval)},
 		{"retry-multiplier", changed(s.RetryMultiplier, DefaultServerRestoreRetryMultiplier)},
 		{"retry-max-attempts", changed(s.RetryMaxAttempts, DefaultServerRestoreRetryMaxAttempts)},
 		{"ignore-record-error", changed(s.IgnoreRecordError, DefaultServerRestoreIgnoreRecordError)},
+		{"apply-metadata-last", changed(s.ApplyMetadataLast, DefaultServerRestoreApplyMetadataLast)},
 	}
 
 	for _, f := range fuzzyOnly {
@@ -215,6 +267,9 @@ type ServerRestorePrepare struct {
 	JobID string
 	// HydrateReplica restores all replicas when true, and only the master when false.
 	HydrateReplica bool
+	// Async returns as soon as the cluster accepts the request, instead of waiting for
+	// the namespace to become ready for the restore.
+	Async bool
 }
 
 func (s *ServerRestorePrepare) Validate() error {
@@ -233,9 +288,13 @@ func (s *ServerRestorePrepare) Validate() error {
 	return nil
 }
 
-// ServerRestoreProgress contains flags that will be mapped to ServerRestorePrepare.
+// ServerRestoreProgress contains flags that will be mapped to ServerRestoreProgress.
 type ServerRestoreProgress struct {
-	ServerCommon
+	Namespace string
+	// JobID is the id of the restore job to follow.
+	JobID string
+	// Watch keeps reporting the restore until it reaches a terminal state.
+	Watch bool
 }
 
 func (s *ServerRestoreProgress) Validate() error {
@@ -243,11 +302,7 @@ func (s *ServerRestoreProgress) Validate() error {
 		return nil
 	}
 
-	if s.Namespace == "" {
-		return fmt.Errorf("namespace is required")
-	}
-
-	return nil
+	return validateRestoreJob(s.Namespace, s.JobID)
 }
 
 // ServerRestoreAbort contains flags that will be mapped to ServerRestoreAbort.
@@ -256,6 +311,9 @@ func (s *ServerRestoreProgress) Validate() error {
 type ServerRestoreAbort struct {
 	Namespace string
 	JobID     string
+	// Async returns as soon as the cluster accepts the abort, instead of waiting for the
+	// restore to stop.
+	Async bool
 }
 
 func (s *ServerRestoreAbort) Validate() error {
@@ -263,12 +321,55 @@ func (s *ServerRestoreAbort) Validate() error {
 		return nil
 	}
 
-	if s.JobID == "" {
-		return fmt.Errorf("job-id is required")
+	return validateRestoreJob(s.Namespace, s.JobID)
+}
+
+// ServerRestoreOpen contains flags that will be mapped to ServerRestoreOpen.
+type ServerRestoreOpen struct {
+	Namespace string
+	// JobID is the id of the aborted cold restore job that holds the namespace.
+	JobID string
+	// Async returns as soon as the cluster accepts the request, instead of waiting for
+	// the namespace to be released.
+	Async bool
+}
+
+// Validate checks that the restore job to open is named.
+func (s *ServerRestoreOpen) Validate() error {
+	if s == nil {
+		return nil
 	}
 
-	if s.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+	return validateRestoreJob(s.Namespace, s.JobID)
+}
+
+// ServerRestoreClearStorage contains flags that will be mapped to ServerRestoreClearStorage.
+type ServerRestoreClearStorage struct {
+	Namespace string
+	// JobID is the id of the cold restore job being prepared.
+	JobID string
+	// Async returns as soon as the nodes accept the clear, instead of waiting for the
+	// namespace to become ready for the restore.
+	Async bool
+}
+
+// Validate checks that the restore job whose storage is cleared is named.
+func (s *ServerRestoreClearStorage) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	return validateRestoreJob(s.Namespace, s.JobID)
+}
+
+// validateRestoreJob checks the namespace and the job id that name a restore job.
+func validateRestoreJob(namespace, jobID string) error {
+	if jobID == "" {
+		return errors.New("job-id is required")
+	}
+
+	if namespace == "" {
+		return errors.New("namespace is required")
 	}
 
 	return nil

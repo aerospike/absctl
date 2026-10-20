@@ -20,6 +20,8 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/absctl/internal/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -31,7 +33,9 @@ type restoreCtx struct {
 	prepare  *flags.ServerRestorePrepare
 	progress *flags.ServerRestoreProgress
 	abort    *flags.ServerRestoreAbort
-	// objectStorageS3 is the restore read source (start, prepare).
+	open     *flags.ServerRestoreOpen
+	clear    *flags.ServerRestoreClearStorage
+	// objectStorageS3 is the restore read source (start).
 	objectStorageS3 *flags.ObjectStorageS3
 }
 
@@ -41,6 +45,8 @@ func newRestoreCtx() *restoreCtx {
 		prepare:         flags.NewServerRestorePrepare(),
 		progress:        flags.NewServerRestoreProgress(),
 		abort:           flags.NewServerRestoreAbort(),
+		open:            flags.NewServerRestoreOpen(),
+		clear:           flags.NewServerRestoreClearStorage(),
 		objectStorageS3: flags.NewObjectStorageS3(),
 	}
 }
@@ -69,6 +75,24 @@ func restoreServiceConfig(
 	return cfg, nil
 }
 
+// newRestoreServiceConfig builds the flag-based service config of a snapshot-restore
+// subcommand, whose own configuration is the only one set in commands. awsS3 is nil for
+// the subcommands served by the cluster alone.
+func newRestoreServiceConfig(
+	rc *runCtx,
+	commands config.ServerRestoreCommands,
+	awsS3 *models.AwsS3,
+) *config.ServerRestoreServiceConfig {
+	return config.NewServerRestoreServiceConfig(
+		commands,
+		rc.app.GetApp(),
+		rc.aerospike.NewAerospikeConfig(),
+		rc.clientPolicy.GetClientPolicy(),
+		rc.secretAgent.GetSecretAgent(),
+		awsS3,
+	)
+}
+
 // NewRestoreCmd builds the top-level "restore" command for server-integrated
 // restores.
 func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
@@ -86,6 +110,8 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 		newRestorePrepareCmd(rc, rf),
 		newRestoreProgressCmd(rc, rf),
 		newRestoreAbortCmd(rc, rf),
+		newRestoreOpenCmd(rc, rf),
+		newRestoreClearStorageCmd(rc, rf),
 	)
 
 	applyRootPersistent(cmd, rc)
@@ -114,15 +140,9 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandStart,
 				func() *config.ServerRestoreServiceConfig {
-					return config.NewServerRestoreServiceConfig(
-						rf.start.GetServerRestore(),
-						nil, nil, nil,
-						rc.app.GetApp(),
-						rc.aerospike.NewAerospikeConfig(),
-						rc.clientPolicy.GetClientPolicy(),
-						rc.secretAgent.GetSecretAgent(),
-						rf.objectStorageS3.ToAwsS3(),
-					)
+					return newRestoreServiceConfig(rc,
+						config.ServerRestoreCommands{Start: rf.start.GetServerRestore()},
+						rf.objectStorageS3.ToAwsS3())
 				})
 			if err != nil {
 				return err
@@ -167,26 +187,39 @@ func setHelpRestoreStart(
 	usageFromHelp(cmd)
 }
 
-func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	prepareFlags := rf.prepare.NewFlagSet()
+// restoreSubcommand describes a snapshot-restore subcommand that is configured by a
+// single flag set of its own and is served by the cluster alone.
+type restoreSubcommand struct {
+	use   string
+	short string
+	long  string
+	// usage is the line the help of the subcommand opens with.
+	usage   string
+	command config.ServerRestoreCommand
+	flagSet *pflag.FlagSet
+	// helpSections lays out the help of the subcommand.
+	helpSections func(fs *pflag.FlagSet, common commonFlagSets) []HelpSection
+	// commands returns the configuration of the subcommand, parsed from its flags.
+	commands func() config.ServerRestoreCommands
+	// initErrMsg prefixes a failure to build the service. When it is empty, the failure
+	// is returned as it is.
+	initErrMsg string
+	// run runs the subcommand with the service built from its configuration. The
+	// services of abort, open and clear-storage already report what went wrong and for
+	// which job, so their errors are passed through instead of being prefixed again.
+	run func(ctx context.Context, svc *server.Service) error
+}
 
+// newRestoreSubcommandCmd builds the cobra command of sub.
+func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   UsePrepare,
-		Short: ShortRestorePrepare,
-		Long:  LongRestorePrepare,
+		Use:   sub.use,
+		Short: sub.short,
+		Long:  sub.long,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandPrepare,
+			cfg, err := restoreServiceConfig(cmd.Context(), rc, sub.command,
 				func() *config.ServerRestoreServiceConfig {
-					return config.NewServerRestoreServiceConfig(
-						nil,
-						rf.prepare.GetServerRestorePrepare(),
-						nil, nil,
-						rc.app.GetApp(),
-						rc.aerospike.NewAerospikeConfig(),
-						rc.clientPolicy.GetClientPolicy(),
-						rc.secretAgent.GetSecretAgent(),
-						rf.objectStorageS3.ToAwsS3(),
-					)
+					return newRestoreServiceConfig(rc, sub.commands(), nil)
 				})
 			if err != nil {
 				return err
@@ -194,29 +227,23 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 
 			svc, err := newService(rc, nil, cfg)
 			if err != nil {
-				return err
+				if sub.initErrMsg == "" {
+					return err
+				}
+
+				return fmt.Errorf("%s: %w", sub.initErrMsg, err)
 			}
 
-			if err := svc.PrepareRestore(cmd.Context()); err != nil {
-				return fmt.Errorf("server side restore preparation failed: %w", err)
-			}
-
-			return nil
+			return sub.run(cmd.Context(), svc)
 		},
 	}
 
 	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(prepareFlags)
+	cmd.Flags().AddFlagSet(sub.flagSet)
 
-	setHelpRestorePrepare(cmd, prepareFlags, common)
-
-	return cmd
-}
-
-func setHelpRestorePrepare(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
 	doc := SubcommandDoc{
-		Usage:    flags.SectionTextUsageRestorePrepare,
-		Sections: restorePrepareHelpSections(prepareFS, common),
+		Usage:    sub.usage,
+		Sections: sub.helpSections(sub.flagSet, common),
 	}
 
 	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
@@ -224,123 +251,107 @@ func setHelpRestorePrepare(cmd *cobra.Command, prepareFS *pflag.FlagSet, common 
 	})
 
 	usageFromHelp(cmd)
+
+	return cmd
+}
+
+func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+		use:          UsePrepare,
+		short:        ShortRestorePrepare,
+		long:         LongRestorePrepare,
+		usage:        flags.SectionTextUsageRestorePrepare,
+		command:      config.ServerRestoreCommandPrepare,
+		flagSet:      rf.prepare.NewFlagSet(),
+		helpSections: restorePrepareHelpSections,
+		commands: func() config.ServerRestoreCommands {
+			return config.ServerRestoreCommands{Prepare: rf.prepare.GetServerRestorePrepare()}
+		},
+		run: func(ctx context.Context, svc *server.Service) error {
+			if err := svc.PrepareRestore(ctx); err != nil {
+				return fmt.Errorf("server side restore preparation failed: %w", err)
+			}
+
+			return nil
+		},
+	})
 }
 
 func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	progressFlags := rf.progress.NewFlagSet()
-
-	cmd := &cobra.Command{
-		Use:   UseProgress,
-		Short: ShortRestoreProgress,
-		Long:  LongRestoreProgress,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandProgress,
-				func() *config.ServerRestoreServiceConfig {
-					return config.NewServerRestoreServiceConfig(
-						nil, nil,
-						rf.progress.GetServerRestoreProgress(),
-						nil,
-						rc.app.GetApp(),
-						rc.aerospike.NewAerospikeConfig(),
-						rc.clientPolicy.GetClientPolicy(),
-						rc.secretAgent.GetSecretAgent(),
-						rf.objectStorageS3.ToAwsS3(),
-					)
-				})
-			if err != nil {
-				return err
-			}
-
-			svc, err := newService(rc, nil, cfg)
-			if err != nil {
-				return err
-			}
-
-			if err := svc.RestoreProgress(cmd.Context()); err != nil {
-				return fmt.Errorf("server side restore preparation failed: %w", err)
+	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+		use:          UseProgress,
+		short:        ShortRestoreProgress,
+		long:         LongRestoreProgress,
+		usage:        flags.SectionTextUsageRestoreProgress,
+		command:      config.ServerRestoreCommandProgress,
+		flagSet:      rf.progress.NewFlagSet(),
+		helpSections: restoreProgressHelpSections,
+		commands: func() config.ServerRestoreCommands {
+			return config.ServerRestoreCommands{Progress: rf.progress.GetServerRestoreProgress()}
+		},
+		run: func(ctx context.Context, svc *server.Service) error {
+			if err := svc.RestoreProgress(ctx); err != nil {
+				return fmt.Errorf("failed to get server side restore progress: %w", err)
 			}
 
 			return nil
 		},
-	}
-
-	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(progressFlags)
-
-	setHelpRestoreProgress(cmd, progressFlags, common)
-
-	return cmd
-}
-
-func setHelpRestoreProgress(cmd *cobra.Command, prepareFS *pflag.FlagSet, common commonFlagSets) {
-	doc := SubcommandDoc{
-		Usage:    flags.SectionTextUsageRestoreProgress,
-		Sections: restoreProgressHelpSections(prepareFS, common),
-	}
-
-	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		printSubcommandHelp(doc)
 	})
-
-	usageFromHelp(cmd)
 }
 
 func newRestoreAbortCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	abortFlags := rf.abort.NewFlagSet()
-
-	cmd := &cobra.Command{
-		Use:   UseAbort,
-		Short: ShortRestoreAbort,
-		Long:  LongRestoreAbort,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandAbort,
-				func() *config.ServerRestoreServiceConfig {
-					return config.NewServerRestoreServiceConfig(
-						nil, nil, nil,
-						rf.abort.GetServerRestoreAbort(),
-						rc.app.GetApp(),
-						rc.aerospike.NewAerospikeConfig(),
-						rc.clientPolicy.GetClientPolicy(),
-						rc.secretAgent.GetSecretAgent(),
-						nil,
-					)
-				})
-			if err != nil {
-				return err
-			}
-
-			svc, err := newService(rc, nil, cfg)
-			if err != nil {
-				return fmt.Errorf("failed to initialize restore abort: %w", err)
-			}
-
-			// The service already reports what went wrong and for which job, so the
-			// error is passed through instead of being prefixed again.
-			if err := svc.AbortRestore(cmd.Context()); err != nil {
-				return err
-			}
-
-			return nil
+	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+		use:          UseAbort,
+		short:        ShortRestoreAbort,
+		long:         LongRestoreAbort,
+		usage:        flags.SectionTextUsageRestoreAbort,
+		command:      config.ServerRestoreCommandAbort,
+		flagSet:      rf.abort.NewFlagSet(),
+		helpSections: restoreAbortHelpSections,
+		commands: func() config.ServerRestoreCommands {
+			return config.ServerRestoreCommands{Abort: rf.abort.GetServerRestoreAbort()}
 		},
-	}
-
-	common := applyCommon(cmd, rc)
-	cmd.Flags().AddFlagSet(abortFlags)
-
-	setHelpRestoreAbort(cmd, abortFlags, common)
-
-	return cmd
+		initErrMsg: "failed to initialize restore abort",
+		run: func(ctx context.Context, svc *server.Service) error {
+			return svc.AbortRestore(ctx)
+		},
+	})
 }
 
-func setHelpRestoreAbort(cmd *cobra.Command, abortFS *pflag.FlagSet, common commonFlagSets) {
-	doc := SubcommandDoc{
-		Usage:    flags.SectionTextUsageRestoreAbort,
-		Sections: restoreAbortHelpSections(abortFS, common),
-	}
-
-	cmd.SetHelpFunc(func(_ *cobra.Command, _ []string) {
-		printSubcommandHelp(doc)
+func newRestoreOpenCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+		use:          UseOpen,
+		short:        ShortRestoreOpen,
+		long:         LongRestoreOpen,
+		usage:        flags.SectionTextUsageRestoreOpen,
+		command:      config.ServerRestoreCommandOpen,
+		flagSet:      rf.open.NewFlagSet(),
+		helpSections: restoreOpenHelpSections,
+		commands: func() config.ServerRestoreCommands {
+			return config.ServerRestoreCommands{Open: rf.open.GetServerRestoreOpen()}
+		},
+		initErrMsg: "failed to initialize restore open",
+		run: func(ctx context.Context, svc *server.Service) error {
+			return svc.OpenRestore(ctx)
+		},
 	})
+}
 
-	usageFromHelp(cmd)
+func newRestoreClearStorageCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
+	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+		use:          UseClearStorage,
+		short:        ShortRestoreClear,
+		long:         LongRestoreClear,
+		usage:        flags.SectionTextUsageRestoreClear,
+		command:      config.ServerRestoreCommandClearStorage,
+		flagSet:      rf.clear.NewFlagSet(),
+		helpSections: restoreClearStorageHelpSections,
+		commands: func() config.ServerRestoreCommands {
+			return config.ServerRestoreCommands{ClearStorage: rf.clear.GetServerRestoreClearStorage()}
+		},
+		initErrMsg: "failed to initialize restore clear storage",
+		run: func(ctx context.Context, svc *server.Service) error {
+			return svc.ClearRestoreStorage(ctx)
+		},
+	})
 }

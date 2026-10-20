@@ -30,6 +30,7 @@ const (
 	testRestoreJobID     = "restore-job-1"
 	flagRestoreNamespace = "--namespace"
 	flagRestoreJobID     = "--job-id"
+	flagAsync            = "--async"
 )
 
 func TestServerRestore_NewFlagSet(t *testing.T) {
@@ -40,13 +41,15 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		testPath              = "backups/daily"
 		testSetList           = "set1,set2"
 		testFilterExp         = "kwGTUQKkYmluMQE="
-		testParallel          = "16"
+		testParallelWrite     = "16"
 		testRecordsPerSecond  = "1000"
 		testMaxInflight       = "500"
 		testRetryBaseInterval = "2000"
 		testRetryMultiplier   = "1.5"
 		testRetryMaxAttempts  = "3"
-		testDownloadThreads   = "32"
+		testParallelRead      = "32"
+		testIncrementalPath   = "backups/incr"
+		testExtraTTL          = "3600"
 	)
 
 	want := &models.ServerRestore{
@@ -61,15 +64,19 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		NoUDFs:            true,
 		FuzzyRestore:      true,
 		AllowUnhosted:     true,
-		Parallel:          16,
+		ParallelWrite:     16,
 		RecordsPerSecond:  1000,
 		MaxInflight:       500,
 		RetryBaseInterval: 2000,
 		RetryMultiplier:   1.5,
 		RetryMaxAttempts:  3,
 		IgnoreRecordError: true,
+		ApplyMetadataLast: true,
+		IncrementalPath:   testIncrementalPath,
+		Async:             true,
+		ExtraTTL:          3600,
 
-		RestoreDownloadThreads: 32,
+		ParallelRead: 32,
 	}
 
 	commonArgs := []string{
@@ -86,7 +93,11 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--retry-multiplier", testRetryMultiplier,
 		"--retry-max-attempts", testRetryMaxAttempts,
 		"--ignore-record-error",
-		"--restore-download-threads", testDownloadThreads,
+		"--parallel-read", testParallelRead,
+		"--apply-metadata-last",
+		"--incremental-path", testIncrementalPath,
+		flagAsync,
+		"--extra-ttl", testExtraTTL,
 	}
 
 	tests := []struct {
@@ -99,7 +110,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 				flagRestoreNamespace, testRestoreNamespace,
 				"--set-list", testSetList,
 				"--no-indexes",
-				"--parallel", testParallel,
+				"--parallel-write", testParallelWrite,
 				"--records-per-second", testRecordsPerSecond,
 			}, commonArgs...),
 		},
@@ -109,7 +120,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 				"-n", testRestoreNamespace,
 				"-s", testSetList,
 				"-I",
-				"-w", testParallel,
+				"-w", testParallelWrite,
 				"-L", testRecordsPerSecond,
 			}, commonArgs...),
 		},
@@ -149,14 +160,18 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, result.FuzzyRestore)
 	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, result.AllowUnhosted)
-	assert.Equal(t, models.DefaultServerRestoreParallel, result.Parallel)
+	assert.Equal(t, models.DefaultServerRestoreParallelWrite, result.ParallelWrite)
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, result.RecordsPerSecond)
 	assert.Equal(t, models.DefaultServerRestoreMaxInflight, result.MaxInflight)
 	assert.Equal(t, models.DefaultServerRestoreRetryBaseInterval, result.RetryBaseInterval)
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, result.RetryMultiplier, 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, result.RetryMaxAttempts)
 	assert.Equal(t, models.DefaultServerRestoreIgnoreRecordError, result.IgnoreRecordError)
-	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, result.RestoreDownloadThreads)
+	assert.Equal(t, models.DefaultServerRestoreParallelRead, result.ParallelRead)
+	assert.Equal(t, models.DefaultServerRestoreApplyMetadataLast, result.ApplyMetadataLast)
+	assert.Equal(t, models.DefaultServerRestoreIncrementalPath, result.IncrementalPath)
+	assert.Equal(t, models.DefaultServerRestoreAsync, result.Async)
+	assert.Equal(t, models.DefaultServerRestoreExtraTTL, result.ExtraTTL)
 }
 
 func TestServerRestorePrepare_NewFlagSet(t *testing.T) {
@@ -295,5 +310,124 @@ func TestServerRestore_NewFlagSet_BackupIDRemoved(t *testing.T) {
 
 			require.Error(t, tt.parse([]string{"--backup-id", testRestoreBackupIDs}))
 		})
+	}
+}
+
+// TestServerRestoreJob_NewFlagSet covers the commands that name a restore job and take a
+// single switch on top of it: --watch for progress, --async for prepare, abort, open and
+// clear-storage.
+func TestServerRestoreJob_NewFlagSet(t *testing.T) {
+	t.Parallel()
+
+	// jobFlags is what the commands share, read back from the model of each command.
+	type jobFlags struct {
+		namespace string
+		jobID     string
+		toggle    bool
+	}
+
+	commands := []struct {
+		name       string
+		toggleFlag string
+		parse      func(args []string) (jobFlags, error)
+	}{
+		{
+			name:       "progress",
+			toggleFlag: "--watch",
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestoreProgress()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestoreProgress()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Watch}, err
+			},
+		},
+		{
+			name:       "prepare",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestorePrepare()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestorePrepare()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+		{
+			name:       "abort",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestoreAbort()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestoreAbort()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+		{
+			name:       "open",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestoreOpen()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestoreOpen()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+		{
+			name:       "clear storage",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestoreClearStorage()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestoreClearStorage()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		args      func(toggleFlag string) []string
+		wantFlags jobFlags
+	}{
+		{
+			name: "no arguments keeps the defaults",
+			args: func(string) []string { return nil },
+			wantFlags: jobFlags{
+				namespace: models.DefaultCommonNamespace,
+				jobID:     models.DefaultServerRestoreJobID,
+			},
+		},
+		{
+			name: "long flags",
+			args: func(toggleFlag string) []string {
+				return []string{flagRestoreNamespace, testRestoreNamespace, flagRestoreJobID, testRestoreJobID, toggleFlag}
+			},
+			wantFlags: jobFlags{namespace: testRestoreNamespace, jobID: testRestoreJobID, toggle: true},
+		},
+		{
+			name: "short namespace flag",
+			args: func(string) []string { return []string{"-n", testRestoreNamespace} },
+			wantFlags: jobFlags{
+				namespace: testRestoreNamespace,
+				jobID:     models.DefaultServerRestoreJobID,
+			},
+		},
+	}
+
+	for _, cmd := range commands {
+		for _, tt := range tests {
+			t.Run(cmd.name+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				got, err := cmd.parse(tt.args(cmd.toggleFlag))
+				require.NoError(t, err)
+
+				assert.Equal(t, tt.wantFlags, got)
+			})
+		}
 	}
 }

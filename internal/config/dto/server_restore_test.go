@@ -32,6 +32,8 @@ func TestDefaultServerRestore(t *testing.T) {
 	require.NotNil(t, restore.Prepare)
 	require.NotNil(t, restore.Progress)
 	require.NotNil(t, restore.Abort)
+	require.NotNil(t, restore.Open)
+	require.NotNil(t, restore.ClearStorage)
 	require.NotNil(t, restore.SecretAgent)
 	require.NotNil(t, restore.Aws.S3)
 }
@@ -50,26 +52,44 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(restore.NoUDFs))
 	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, derefBool(restore.FuzzyRestore))
 	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, derefBool(restore.AllowUnhosted))
-	assert.Equal(t, models.DefaultServerRestoreParallel, derefInt(restore.Parallel))
+	assert.Equal(t, models.DefaultServerRestoreParallelWrite, derefInt(restore.ParallelWrite))
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, derefInt(restore.RecordsPerSecond))
 	assert.Equal(t, models.DefaultServerRestoreMaxInflight, derefInt(restore.MaxInflight))
 	assert.Equal(t, models.DefaultServerRestoreRetryBaseInterval, derefInt(restore.RetryBaseInterval))
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, derefFloat64(restore.RetryMultiplier), 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, derefInt(restore.RetryMaxAttempts))
 	assert.Equal(t, models.DefaultServerRestoreIgnoreRecordError, derefBool(restore.IgnoreRecordError))
-	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, derefInt(restore.RestoreDownloadThreads))
+	assert.Equal(t, models.DefaultServerRestoreParallelRead, derefInt(restore.ParallelRead))
+	assert.Equal(t, models.DefaultServerRestoreIncrementalPath, derefString(restore.IncrementalPath))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(restore.Async))
+	assert.Equal(t, models.DefaultServerRestoreExtraTTL, derefInt(restore.ExtraTTL))
+	assert.Equal(t, models.DefaultServerRestoreApplyMetadataLast, derefBool(restore.ApplyMetadataLast))
 
 	prepare := defaultServerRestorePrepareConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(prepare.Namespace))
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(prepare.JobID))
 	assert.Equal(t, models.DefaultServerRestoreHydrateReplica, derefBool(prepare.HydrateReplica))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(prepare.Async))
 
 	progress := defaultServerRestoreProgressConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(progress.Namespace))
+	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(progress.JobID))
+	assert.Equal(t, models.DefaultServerRestoreProgressWatch, derefBool(progress.Watch))
 
 	abort := defaultServerRestoreAbortConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(abort.Namespace))
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(abort.JobID))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(abort.Async))
+
+	open := defaultServerRestoreOpenConfig()
+	assert.Equal(t, models.DefaultCommonNamespace, derefString(open.Namespace))
+	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(open.JobID))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(open.Async))
+
+	clearStorage := defaultServerRestoreClearConfig()
+	assert.Equal(t, models.DefaultCommonNamespace, derefString(clearStorage.Namespace))
+	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(clearStorage.JobID))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(clearStorage.Async))
 }
 
 func TestServerRestoreToModels(t *testing.T) {
@@ -81,17 +101,21 @@ func TestServerRestoreToModels(t *testing.T) {
 	path := "some/prefix"
 	filterExp := "kwGTUQKkYmluMQE="
 	enabled := true
-	parallel := 16
+	parallelWrite := 16
 	recordsPerSecond := 1000
 	maxInflight := 500
 	retryBaseInterval := 2000
 	retryMultiplier := 1.5
 	retryMaxAttempts := 3
-	downloadThreads := 32
+	parallelRead := 32
 	hydrateReplica := false
 	prepareNamespace := "ns2"
 	progressNamespace := "ns3"
 	abortNamespace := "ns4"
+	openNamespace := "ns5"
+	clearNamespace := "ns6"
+	incrementalPath := "incr/prefix"
+	extraTTL := 3600
 
 	restore := &ServerRestore{
 		Restore: ServerRestoreConfig{
@@ -106,23 +130,30 @@ func TestServerRestoreToModels(t *testing.T) {
 			NoUDFs:            &enabled,
 			FuzzyRestore:      &enabled,
 			AllowUnhosted:     &enabled,
-			Parallel:          &parallel,
+			ParallelWrite:     &parallelWrite,
 			RecordsPerSecond:  &recordsPerSecond,
 			MaxInflight:       &maxInflight,
 			RetryBaseInterval: &retryBaseInterval,
 			RetryMultiplier:   &retryMultiplier,
 			RetryMaxAttempts:  &retryMaxAttempts,
 			IgnoreRecordError: &enabled,
+			ApplyMetadataLast: &enabled,
+			IncrementalPath:   &incrementalPath,
+			Async:             &enabled,
+			ExtraTTL:          &extraTTL,
 
-			RestoreDownloadThreads: &downloadThreads,
+			ParallelRead: &parallelRead,
 		},
 		Prepare: ServerRestorePrepareConfig{
 			Namespace:      &prepareNamespace,
 			JobID:          &jobID,
 			HydrateReplica: &hydrateReplica,
+			Async:          &enabled,
 		},
-		Progress: ServerRestoreProgressConfig{Namespace: &progressNamespace},
-		Abort:    ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID},
+		Progress:     ServerRestoreProgressConfig{Namespace: &progressNamespace, JobID: &jobID, Watch: &enabled},
+		Abort:        ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID, Async: &enabled},
+		Open:         ServerRestoreOpenConfig{Namespace: &openNamespace, JobID: &jobID, Async: &enabled},
+		ClearStorage: ServerRestoreClearConfig{Namespace: &clearNamespace, JobID: &jobID, Async: &enabled},
 	}
 
 	start := restore.ToModelServerRestore()
@@ -140,15 +171,19 @@ func TestServerRestoreToModels(t *testing.T) {
 		NoUDFs:            true,
 		FuzzyRestore:      true,
 		AllowUnhosted:     true,
-		Parallel:          parallel,
+		ParallelWrite:     parallelWrite,
 		RecordsPerSecond:  recordsPerSecond,
 		MaxInflight:       maxInflight,
 		RetryBaseInterval: retryBaseInterval,
 		RetryMultiplier:   retryMultiplier,
 		RetryMaxAttempts:  retryMaxAttempts,
 		IgnoreRecordError: true,
+		ApplyMetadataLast: true,
+		IncrementalPath:   incrementalPath,
+		Async:             true,
+		ExtraTTL:          extraTTL,
 
-		RestoreDownloadThreads: downloadThreads,
+		ParallelRead: parallelRead,
 	}, start)
 
 	prepare := restore.ToModelServerRestorePrepare()
@@ -156,15 +191,22 @@ func TestServerRestoreToModels(t *testing.T) {
 	assert.Equal(t, prepareNamespace, prepare.Namespace)
 	assert.Equal(t, jobID, prepare.JobID)
 	assert.False(t, prepare.HydrateReplica)
+	assert.True(t, prepare.Async)
 
 	progress := restore.ToModelServerRestoreProgress()
 	require.NotNil(t, progress)
-	assert.Equal(t, progressNamespace, progress.Namespace)
+	assert.Equal(t, &models.ServerRestoreProgress{Namespace: progressNamespace, JobID: jobID, Watch: true}, progress)
 
 	abort := restore.ToModelServerRestoreAbort()
 	require.NotNil(t, abort)
 	assert.Equal(t, abortNamespace, abort.Namespace)
 	assert.Equal(t, jobID, abort.JobID)
+	assert.True(t, abort.Async)
+
+	assert.Equal(t, &models.ServerRestoreOpen{Namespace: openNamespace, JobID: jobID, Async: true},
+		restore.ToModelServerRestoreOpen())
+	assert.Equal(t, &models.ServerRestoreClearStorage{Namespace: clearNamespace, JobID: jobID, Async: true},
+		restore.ToModelServerRestoreClearStorage())
 }
 
 func TestServerRestoreToModelsNil(t *testing.T) {
@@ -176,28 +218,30 @@ func TestServerRestoreToModelsNil(t *testing.T) {
 	assert.Nil(t, restore.ToModelServerRestorePrepare())
 	assert.Nil(t, restore.ToModelServerRestoreProgress())
 	assert.Nil(t, restore.ToModelServerRestoreAbort())
+	assert.Nil(t, restore.ToModelServerRestoreOpen())
+	assert.Nil(t, restore.ToModelServerRestoreClearStorage())
 }
 
 func TestServerRestoreToModelsNullFallsBackToDefaults(t *testing.T) {
 	t.Parallel()
 
 	restore := DefaultServerRestore()
-	restore.Restore.Parallel = nil
+	restore.Restore.ParallelWrite = nil
 	restore.Restore.MaxInflight = nil
 	restore.Restore.RetryBaseInterval = nil
 	restore.Restore.RetryMultiplier = nil
 	restore.Restore.RetryMaxAttempts = nil
-	restore.Restore.RestoreDownloadThreads = nil
+	restore.Restore.ParallelRead = nil
 	restore.Prepare.HydrateReplica = nil
 
 	start := restore.ToModelServerRestore()
 	require.NotNil(t, start)
-	assert.Equal(t, models.DefaultServerRestoreParallel, start.Parallel)
+	assert.Equal(t, models.DefaultServerRestoreParallelWrite, start.ParallelWrite)
 	assert.Equal(t, models.DefaultServerRestoreMaxInflight, start.MaxInflight)
 	assert.Equal(t, models.DefaultServerRestoreRetryBaseInterval, start.RetryBaseInterval)
 	assert.InDelta(t, models.DefaultServerRestoreRetryMultiplier, start.RetryMultiplier, 0)
 	assert.Equal(t, models.DefaultServerRestoreRetryMaxAttempts, start.RetryMaxAttempts)
-	assert.Equal(t, models.DefaultServerRestoreDownloadThreads, start.RestoreDownloadThreads)
+	assert.Equal(t, models.DefaultServerRestoreParallelRead, start.ParallelRead)
 
 	prepare := restore.ToModelServerRestorePrepare()
 	require.NotNil(t, prepare)

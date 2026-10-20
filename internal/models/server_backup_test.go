@@ -15,6 +15,7 @@
 package models
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -171,6 +172,116 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: errMsgParentPath,
+		},
+		{
+			name: "job settings at the limits",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = math.MaxUint32
+				backup.ParallelRead = maxServerBackupParallel
+				backup.ParallelWrite = maxServerBackupParallel
+				backup.S3Throughput = maxServerBackupS3Throughput
+				return backup
+			},
+		},
+		{
+			// The server checks the rate against its own number of scan threads.
+			name: "records per second without parallel read",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = 1
+				return backup
+			},
+		},
+		{
+			name: "records per second at the minimum for parallel read",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelRead = 4
+				backup.RecordsPerSecond = 4 * minServerBackupRPSPerReader
+				return backup
+			},
+		},
+		{
+			name: "records per second below the minimum for parallel read",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelRead = 4
+				backup.RecordsPerSecond = 4*minServerBackupRPSPerReader - 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be 0 or at least 20 for 4 parallel-read, got 19",
+		},
+		{
+			name: "negative records per second",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = -1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got -1",
+		},
+		{
+			name: "records per second above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = math.MaxUint32 + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got 4294967296",
+		},
+		{
+			name: "parallel read above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelRead = maxServerBackupParallel + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-read must be between 0 and 128, got 129",
+		},
+		{
+			name: "negative parallel read",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelRead = -1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-read must be between 0 and 128, got -1",
+		},
+		{
+			name: "parallel write above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelWrite = maxServerBackupParallel + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-write must be between 0 and 128, got 129",
+		},
+		{
+			name: "s3 throughput above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.S3Throughput = maxServerBackupS3Throughput + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "s3-throughput must be between 0 and 400, got 401",
+		},
+		{
+			name: "negative s3 throughput",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.S3Throughput = -1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "s3-throughput must be between 0 and 400, got -1",
 		},
 	}
 

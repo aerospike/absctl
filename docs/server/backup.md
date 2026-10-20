@@ -96,6 +96,15 @@ Backup Flags:
       --async                        Return as soon as the cluster accepts the backup, without
                                      following its progress. Use the progress command to follow
                                      the backup later.
+  -L, --records-per-second int       Limit the records per second of each scan on each node.
+                                     A non-zero value must be at least 5 x --parallel-read.
+                                     If 0, the server default is used, which is no limit.
+      --parallel-read int            Number of scan threads per node, from 1 to 128.
+                                     If 0, the server default is used. (default 8)
+      --parallel-write int           Number of upload threads per node, from 1 to 128.
+                                     If 0, the server default is used. (default 8)
+      --s3-throughput int            Target throughput of the S3 client per node, in gigabits per second
+                                     (Gbit/s), from 1 to 400. If 0, the server default is used.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -360,7 +369,9 @@ Any AWS parameter can be retrieved from Secret Agent.
 
 Abort a server-integrated backup
 
-Abort a server-integrated backup on the Aerospike cluster.
+Abort a server-integrated backup on the Aerospike cluster and wait
+until it stops. With --async the command returns as soon as the
+cluster accepts the abort.
 
 ### Supported flags
 ```bash
@@ -419,6 +430,8 @@ Aerospike Client Flags:
 
 Backup Flags:
       --backup-id string   Backup id
+      --async              Return as soon as the cluster accepts the abort, without
+                           waiting for the backup to stop.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -550,6 +563,19 @@ backup:
   # following its progress. Use the progress command to follow
   # the backup later.
   async: false
+  # Limit the records per second of each scan on each node.
+  # A non-zero value must be at least 5 x parallel-read.
+  # If 0, the server default is used, which is no limit.
+  records-per-second: 0
+  # Number of scan threads per node, from 1 to 128.
+  # If 0, the server default is used.
+  parallel-read: 8
+  # Number of upload threads per node, from 1 to 128.
+  # If 0, the server default is used.
+  parallel-write: 8
+  # Target throughput of the S3 client per node, in gigabits per second
+  # (Gbit/s), from 1 to 400. If 0, the server default is used.
+  s3-throughput: 0
 list:
   # Path to list backups from.
   path: backup_dir
@@ -572,6 +598,9 @@ progress:
 abort:
   # Backup id
   backup-id: ""
+  # Return as soon as the cluster accepts the abort, without
+  # waiting for the backup to stop.
+  async: false
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP
