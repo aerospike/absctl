@@ -41,10 +41,6 @@ const (
 	logBackupEntry = "backup entry"
 	logOpenHint    = "released with"
 
-	// testAbortTimeout bounds the abort wait in the tests. It has to outlast a handful
-	// of one-millisecond polls, and still expire quickly when a test wants it to.
-	testAbortTimeout = 50 * time.Millisecond
-
 	// testBackupDuration is how long a finished job ran in the tests, and logDuration is
 	// how the completion line reports it.
 	testBackupDuration = time.Minute
@@ -87,7 +83,7 @@ type statusAnswer struct {
 
 // fakeInfoClient replays canned answers to the status lookups, one per call, and keeps
 // reporting the job as missing once they run out - unless repeatLast is set, which makes
-// the last answer stand forever, for the loops that only a timeout can end. Every call is
+// the last answer stand forever, for the loops that only a cancellation can end. Every call is
 // counted, so that a test which expects a loop to stop also proves that it stopped
 // polling.
 //
@@ -139,7 +135,7 @@ type restoreAnswer struct {
 // fakeRestoreInfoClient is the restore counterpart of fakeInfoClient: it replays canned
 // restore status answers, one per call, and reports the job as missing once they run
 // out - unless repeatLast is set, which makes the last answer stand forever, for the
-// loops that only a timeout can end.
+// loops that only a cancellation can end.
 type fakeRestoreInfoClient struct {
 	mocks.MockServerBackupInfo
 
@@ -170,6 +166,17 @@ type fakeRestoreInfoClient struct {
 	startErr     error
 	startRequest *infomodels.RequestRestore
 	startCalls   int
+
+	prepareErr     error
+	prepareRequest *infomodels.RequestPrepareRestore
+	prepareCalls   int
+}
+
+func (f *fakeRestoreInfoClient) PrepareRestore(_ context.Context, request *infomodels.RequestPrepareRestore) error {
+	f.prepareCalls++
+	f.prepareRequest = request
+
+	return f.prepareErr
 }
 
 func (f *fakeRestoreInfoClient) GetClusterStable(_ context.Context, _ string) (bool, error) {
@@ -432,6 +439,7 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 			AwsS3: &models.AwsS3{BucketName: testBucket},
 		},
 		restoreCfg: &config.ServerRestoreServiceConfig{
+			Prepare:      &models.ServerRestorePrepare{Namespace: testNamespace, JobID: testJobID},
 			Abort:        &models.ServerRestoreAbort{Namespace: testNamespace, JobID: testJobID},
 			Open:         &models.ServerRestoreOpen{Namespace: testNamespace, JobID: testJobID},
 			ClearStorage: &models.ServerRestoreClearStorage{Namespace: testNamespace, JobID: testJobID},
@@ -439,10 +447,7 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
 		vanishedPollInterval: time.Millisecond,
-		abortPollInterval:    time.Millisecond,
-		abortTimeout:         testAbortTimeout,
 		statePollInterval:    time.Millisecond,
-		openTimeout:          testAbortTimeout,
 	}, buf
 }
 

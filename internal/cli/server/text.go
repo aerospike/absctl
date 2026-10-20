@@ -68,15 +68,22 @@ const (
 		"stops the reporting only; use the abort command to stop the restore.\n" +
 		"With --async the command returns as soon as the cluster accepts\n" +
 		"the restore."
-	LongRestorePrepare  = "Prepare a server-integrated restore on the Aerospike cluster."
+	LongRestorePrepare = "Prepare a server-integrated restore on the Aerospike cluster and\n" +
+		"wait until the namespace is ready for the restore. If the storage of\n" +
+		"the namespace has to be cleared on some nodes first, the command says\n" +
+		"so and returns: run the clear-storage command then. With --async the\n" +
+		"command returns as soon as the cluster accepts the request."
 	LongRestoreProgress = "Show the progress of a server-integrated restore job.\n" +
 		"With --watch the progress is followed until the restore completes."
-	LongBackupAbort  = "Abort a server-integrated backup on the Aerospike cluster."
-	LongRestoreAbort = "Abort a server-integrated restore on the Aerospike cluster.\n" +
-		"A restore job is identified by the namespace it restores into and\n" +
-		"by its job id, so both are required. An aborted cold restore keeps\n" +
-		"the namespace closed to clients until it is released with the open\n" +
-		"command."
+	LongBackupAbort = "Abort a server-integrated backup on the Aerospike cluster and wait\n" +
+		"until it stops. With --async the command returns as soon as the\n" +
+		"cluster accepts the abort."
+	LongRestoreAbort = "Abort a server-integrated restore on the Aerospike cluster and wait\n" +
+		"until it stops. A restore job is identified by the namespace it\n" +
+		"restores into and by its job id, so both are required. An aborted\n" +
+		"cold restore keeps the namespace closed to clients until it is\n" +
+		"released with the open command. With --async the command returns as\n" +
+		"soon as the cluster accepts the abort."
 	LongRestoreOpen = "Release the namespace held by an aborted cold restore, so that it\n" +
 		"opens to clients again, and wait until it does. The data the restore\n" +
 		"wrote so far stays in the namespace. With --async the command\n" +

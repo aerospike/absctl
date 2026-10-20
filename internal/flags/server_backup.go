@@ -204,6 +204,10 @@ func (f *ServerBackupAbort) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerBackupAsync,
+		"Return as soon as the cluster accepts the abort, without\n"+
+			"waiting for the backup to stop.")
 
 	return flagSet
 }

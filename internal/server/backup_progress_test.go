@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,13 @@ func (f *fakeMetadataGetter) GetMetadata(_ context.Context, _ string) (servermod
 
 func TestServiceReportBackupProgress(t *testing.T) {
 	t.Parallel()
+
+	const (
+		// logCompleteLine marks the completion line, which every path that announces a
+		// finished backup has to log with logBackupID among its attributes.
+		logCompleteLine = `msg="` + msgBackupComplete + `"`
+		logBackupID     = "backup-id=" + testJobID
+	)
 
 	md := servermodels.Metadata{BackupID: testJobID, Namespace: testNamespace}
 
@@ -322,6 +330,12 @@ func TestServiceReportBackupProgress(t *testing.T) {
 
 			for _, notWant := range tt.notWantLogs {
 				assert.NotContains(t, buf.String(), notWant)
+			}
+
+			for line := range strings.Lines(buf.String()) {
+				if strings.Contains(line, logCompleteLine) {
+					assert.Contains(t, line, logBackupID)
+				}
 			}
 		})
 	}

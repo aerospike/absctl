@@ -166,6 +166,7 @@ type ServerRestorePrepareConfig struct {
 	Namespace      *string `yaml:"namespace"`
 	JobID          *string `yaml:"job-id"`
 	HydrateReplica *bool   `yaml:"hydrate-replica"`
+	Async          *bool   `yaml:"async"`
 }
 
 func defaultServerRestorePrepareConfig() ServerRestorePrepareConfig {
@@ -173,6 +174,7 @@ func defaultServerRestorePrepareConfig() ServerRestorePrepareConfig {
 		Namespace:      new(models.DefaultCommonNamespace),
 		JobID:          new(models.DefaultServerRestoreJobID),
 		HydrateReplica: new(models.DefaultServerRestoreHydrateReplica),
+		Async:          new(models.DefaultServerRestoreAsync),
 	}
 }
 
@@ -186,6 +188,7 @@ func (r *ServerRestore) ToModelServerRestorePrepare() *models.ServerRestorePrepa
 		Namespace:      derefString(r.Prepare.Namespace),
 		JobID:          derefString(r.Prepare.JobID),
 		HydrateReplica: derefOr(r.Prepare.HydrateReplica, models.DefaultServerRestoreHydrateReplica),
+		Async:          derefBool(r.Prepare.Async),
 	}
 }
 
@@ -223,12 +226,14 @@ func (r *ServerRestore) ToModelServerRestoreProgress() *models.ServerRestoreProg
 type ServerRestoreAbortConfig struct {
 	Namespace *string `yaml:"namespace"`
 	JobID     *string `yaml:"job-id"`
+	Async     *bool   `yaml:"async"`
 }
 
 func defaultServerRestoreAbortConfig() ServerRestoreAbortConfig {
 	return ServerRestoreAbortConfig{
 		Namespace: new(models.DefaultCommonNamespace),
 		JobID:     new(models.DefaultServerRestoreJobID),
+		Async:     new(models.DefaultServerRestoreAsync),
 	}
 }
 
@@ -241,6 +246,7 @@ func (r *ServerRestore) ToModelServerRestoreAbort() *models.ServerRestoreAbort {
 	return &models.ServerRestoreAbort{
 		Namespace: derefString(r.Abort.Namespace),
 		JobID:     derefString(r.Abort.JobID),
+		Async:     derefBool(r.Abort.Async),
 	}
 }
 

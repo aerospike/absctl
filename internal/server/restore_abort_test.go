@@ -32,7 +32,7 @@ const (
 )
 
 // TestServiceAbortRestore covers the outcomes the restore abort reaches within a few
-// polls. The two that only time can produce are driven separately below.
+// polls. A canceled command is driven separately below.
 //
 // The first status lookup is the pre-abort check, so every case that gets as far as
 // requesting the abort opens with a status that reports the job as running.
@@ -49,6 +49,7 @@ func TestServiceAbortRestore(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		async          bool
 		abortErr       error
 		answers        []restoreAnswer
 		wantErr        error
@@ -84,25 +85,81 @@ func TestServiceAbortRestore(t *testing.T) {
 			wantLogs:       []string{logRestoreAborted},
 		},
 		{
-			// The same holds before the abort: a job one lookup missed is still running
-			// on the other nodes, and still has to be aborted.
-			name:           "aborts a job the pre-abort check missed once",
-			answers:        []restoreAnswer{notFound, fuzzyActive, fuzzyAborted},
-			wantCalls:      3,
+			// The same holds before the abort: a job a few lookups missed is still
+			// running on the other nodes, and still has to be aborted.
+			name: "aborts a job the pre-abort check missed a few times",
+			answers: append(
+				repeatRestoreNotFound(startedJobConfirmations-1),
+				fuzzyActive,
+				fuzzyAborted,
+			),
+			wantCalls:      startedJobConfirmations + 1,
 			wantAbortCalls: 1,
 			wantLogs:       []string{logAbortingRestore, logRestoreAborted},
 		},
 		{
-			// A failed job is turned into an aborted one by the principal, and is only
-			// stopped once it reports that.
+			// The abort is not confirmed, but the namespace of a cold restore is left
+			// closed either way, so the hint is not held back.
+			name:           "returns as soon as the abort of a cold restore is accepted when async",
+			async:          true,
+			answers:        []restoreAnswer{coldActive},
+			wantCalls:      1,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAbortingRestore, logOpenHint},
+			notWantLogs:    []string{logRestoreAborted},
+		},
+		{
+			name:           "returns as soon as the abort of a fuzzy restore is accepted when async",
+			async:          true,
+			answers:        []restoreAnswer{fuzzyActive},
+			wantCalls:      1,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAbortingRestore},
+			notWantLogs:    []string{logRestoreAborted, logOpenHint},
+		},
+		{
+			// The cluster keeps the state of a stopped restore job, so a job the status
+			// no longer reports was not confirmed as aborted, and must not be announced
+			// as such.
+			name:           "fails when the job is not reported after the abort",
+			answers:        []restoreAnswer{fuzzyActive},
+			wantErr:        errRestoreStatusLost,
+			wantCalls:      1 + startedJobConfirmations,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logRestoreAborted},
+		},
+		{
+			name: "fails when the job stops reporting while winding down",
+			answers: append(
+				[]restoreAnswer{fuzzyActive, {status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
+				repeatRestoreNotFound(vanishedJobConfirmations)...,
+			),
+			wantErr:        errRestoreStatusLost,
+			wantCalls:      2 + vanishedJobConfirmations,
+			wantAbortCalls: 1,
+			notWantLogs:    []string{logRestoreAborted},
+		},
+		{
 			name: "waits for a job that is still winding down",
 			answers: []restoreAnswer{
 				coldActive,
 				{status: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStateRestoring)},
-				{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring)},
 				coldAborted,
 			},
-			wantCalls:      4,
+			wantCalls:      3,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted, logOpenHint},
+		},
+		{
+			// A job that reports FAILED stopped working, so there is nothing left to
+			// wait for.
+			name: "stops waiting for a job that failed after the abort",
+			answers: []restoreAnswer{
+				coldActive,
+				{status: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStateRestoring)},
+				{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring)},
+			},
+			wantCalls:      3,
 			wantAbortCalls: 1,
 			wantLogs:       []string{logRestoreAborted, logOpenHint},
 		},
@@ -134,7 +191,7 @@ func TestServiceAbortRestore(t *testing.T) {
 			// The cluster accepts the abort of a job it knows nothing about, and the
 			// status that follows would announce a restore that never ran as aborted.
 			name:           "does not abort a job the cluster does not report",
-			wantCalls:      missingRestoreConfirmations,
+			wantCalls:      startedJobConfirmations,
 			wantAbortCalls: 0,
 			wantLogs:       []string{msgNoRunningRestore},
 			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
@@ -168,7 +225,7 @@ func TestServiceAbortRestore(t *testing.T) {
 			// An answer that carries no status is as good as no answer.
 			name:           "does not abort on an empty status",
 			answers:        []restoreAnswer{{}},
-			wantCalls:      missingRestoreConfirmations,
+			wantCalls:      startedJobConfirmations,
 			wantAbortCalls: 0,
 			wantLogs:       []string{msgNoRunningRestore},
 		},
@@ -207,6 +264,7 @@ func TestServiceAbortRestore(t *testing.T) {
 			t.Parallel()
 
 			svc, buf := newTestService(t)
+			svc.restoreCfg.Abort.Async = tt.async
 			client := &fakeRestoreInfoClient{answers: tt.answers, abortErr: tt.abortErr}
 
 			err := svc.abortRestore(t.Context(), client)
@@ -238,66 +296,16 @@ func TestServiceAbortRestore(t *testing.T) {
 	}
 }
 
-// TestServiceAbortRestoreTimesOut pins down the bound on the wait: a job that never
-// stops reporting itself as running has to end the command instead of being polled
-// forever, and the failure has to say so rather than claim the restore stopped.
-//
-// A job that is no longer reported at all is not confirmed as aborted either: the cluster
-// keeps the state of a stopped restore job, so only ABORTED says the abort landed.
-func TestServiceAbortRestoreTimesOut(t *testing.T) {
-	t.Parallel()
-
-	fuzzyActive := restoreAnswer{status: testFuzzyStatus(infomodels.RestoreStateActive)}
-
-	tests := []struct {
-		name      string
-		answers   []restoreAnswer
-		wantState string
-	}{
-		{
-			name: "job keeps aborting",
-			answers: []restoreAnswer{
-				fuzzyActive,
-				{status: testFuzzyStatus(infomodels.RestoreStateAborting)},
-			},
-			wantState: string(infomodels.RestoreStateAborting),
-		},
-		{
-			name:      "job is no longer reported",
-			answers:   []restoreAnswer{fuzzyActive, {err: asinfo.ErrNotFound}},
-			wantState: stateNotReported,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc, buf := newTestService(t)
-			client := &fakeRestoreInfoClient{answers: tt.answers, repeatLast: true}
-
-			err := svc.abortRestore(t.Context(), client)
-
-			require.ErrorIs(t, err, errAbortRestoreStatusTimeout)
-			// The last state the cluster reported belongs in the error: it is the only
-			// clue about what the job was still doing.
-			require.ErrorContains(t, err, tt.wantState)
-			require.Greater(t, client.calls, 2, "the abort must keep polling until the wait runs out")
-			require.NotContains(t, buf.String(), logRestoreAborted)
-		})
-	}
-}
-
-// TestServiceAbortRestoreCanceled makes sure a command the user interrupted is reported
-// as canceled and not as a timeout, and that the wait ends at once instead of sitting out
-// the poll interval.
+// TestServiceAbortRestoreCanceled covers the only thing that ends the wait for a job that
+// keeps winding down: the wait is not bounded, so a command the user interrupted has to
+// end at once, as canceled, instead of sitting out the poll interval.
 func TestServiceAbortRestoreCanceled(t *testing.T) {
 	t.Parallel()
 
 	svc, buf := newTestService(t)
 	// A poll interval longer than the test would tolerate: only the cancellation can
 	// end this wait.
-	svc.abortPollInterval = time.Minute
+	svc.statePollInterval = time.Minute
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -311,7 +319,6 @@ func TestServiceAbortRestoreCanceled(t *testing.T) {
 	err := svc.abortRestore(ctx, client)
 
 	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, errAbortRestoreStatusTimeout)
 	assert.NotContains(t, buf.String(), logRestoreAborted)
 }
 

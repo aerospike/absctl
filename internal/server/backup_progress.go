@@ -35,10 +35,6 @@ const (
 	// job that stopped reporting before it reached its last stages. Such a gap cannot be a completion, so the job
 	// is given a much longer benefit of the doubt before the watch gives up on it.
 	midBackupGapConfirmations = 40
-	// statusGapLogEvery paces the reminders logged while a job is missing from the
-	// cluster status, so that a long wait can be followed in a debug log without a
-	// line per lookup.
-	statusGapLogEvery = 20
 
 	// msgBackupComplete announces a finished backup, whether the completion came from
 	// the job status or from the manifest of a job the cluster no longer reports.
@@ -129,41 +125,16 @@ func (s *Service) reportBackupProgress(
 ) error {
 	printer := newProgressPrinter(s.logger, msgBackupProgress)
 
-	// lastState is the state the cluster reported for this job most recently. It stays
-	// empty while the job has never been observed, and it decides what a job that stops
-	// reporting means.
-	var lastState infomodels.BackupState
-	// misses counts the lookups in a row that did not find the job.
-	var misses int
-
-	for {
-		status, err := backupStatus(ctx, client, jobID)
-
-		switch {
-		case err != nil && !errors.Is(err, asinfo.ErrNotFound):
-			return fmt.Errorf("failed to get backup status: %w", err)
-		case err != nil:
-			misses++
-
-			switch {
-			case lastState == "" && !startingJobPending(mode, misses):
+	w := s.newBackupWatch(client, jobID, mode.unseenLookups(),
+		func(ctx context.Context, last *infomodels.ResponseBackupState, seen bool) error {
+			if !seen {
 				return fmt.Errorf("%w: backup-id %s", errBackupNotFound, jobID)
-			case lastState != "" && jobVanished(lastState, misses):
-				return s.reportMissingBackup(ctx, l, jobID, lastState)
 			}
 
-			s.logStatusGap(jobID, lastState, misses)
+			return s.reportMissingBackup(ctx, l, jobID, last.State)
+		})
 
-			if err := waitFor(ctx, s.vanishedPollInterval); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		lastState = status.State
-		misses = 0
-
+	w.handle = func(ctx context.Context, status *infomodels.ResponseBackupState) (bool, time.Duration, error) {
 		// The clock is read after the lookup so that the speed and the estimate are
 		// measured against the status just read: a lookup that took seconds would
 		// otherwise stretch the interval the sample is divided by.
@@ -178,20 +149,45 @@ func (s *Service) reportBackupProgress(
 		case infomodels.BackupStateComplete:
 			s.logBackupComplete(status)
 
-			return s.printMetadata(ctx, l, jobID)
+			return true, 0, s.printMetadata(ctx, l, jobID)
 		case infomodels.BackupStateFailed:
-			return terminalStateError(errBackupFailed, jobID, status.ErrorReason)
+			return true, 0, terminalStateError(errBackupFailed, jobID, status.ErrorReason)
 		case infomodels.BackupStateAborted:
-			return terminalStateError(errBackupAborted, jobID, status.ErrorReason)
+			return true, 0, terminalStateError(errBackupAborted, jobID, status.ErrorReason)
 		}
 
-		if mode == reportOnce {
-			return nil
-		}
+		return mode == reportOnce, nextPoll(snap, now), nil
+	}
 
-		if err := waitFor(ctx, nextPoll(snap, now)); err != nil {
-			return err
-		}
+	w.vanished = func(last *infomodels.ResponseBackupState, misses int) bool {
+		return jobVanished(last.State, misses)
+	}
+
+	return w.run(ctx)
+}
+
+// newBackupWatch returns the watch of the backup job jobID, with everything but what
+// the caller does with the status filled in. unseenLookups is how many lookups the job
+// is given to turn up in the status, and missing decides how the watch ends once the
+// job is accepted as missing, see jobWatch.
+func (s *Service) newBackupWatch(
+	client backup.ServerBackupInfo,
+	jobID string,
+	unseenLookups int,
+	missing func(ctx context.Context, last *infomodels.ResponseBackupState, seen bool) error,
+) *jobWatch[*infomodels.ResponseBackupState] {
+	return &jobWatch[*infomodels.ResponseBackupState]{
+		logger:        s.logger,
+		attrs:         []any{slog.String("backup-id", jobID)},
+		gapInterval:   s.vanishedPollInterval,
+		unseenLookups: unseenLookups,
+		lookup: func(ctx context.Context) (*infomodels.ResponseBackupState, error) {
+			return backupStatus(ctx, client, jobID)
+		},
+		missing: missing,
+		describe: func(status *infomodels.ResponseBackupState) string {
+			return status.State.Describe()
+		},
 	}
 }
 
@@ -230,30 +226,6 @@ func jobVanished(lastState infomodels.BackupState, misses int) bool {
 	return misses >= midBackupGapConfirmations
 }
 
-// logStatusGap reports a job that is temporarily missing from the cluster status. A gap
-// is a normal part of watching a backup - the status is unavailable between stages, or
-// while a node is busy - so none of it reaches the user: both lines are logged on the
-// debug level, where a gap that outlives the routine confirmations says so, and is
-// repeated while it lasts.
-func (s *Service) logStatusGap(jobID string, lastState infomodels.BackupState, misses int) {
-	attrs := []any{
-		slog.String("backup-id", jobID),
-		slog.Int("attempt", misses),
-	}
-
-	if lastState != "" {
-		attrs = append(attrs, slog.String("last-state", lastState.Describe()))
-	}
-
-	if misses == vanishedJobConfirmations || misses%statusGapLogEvery == 0 {
-		s.logger.Debug("backup status is unavailable, still waiting for the job", attrs...)
-
-		return
-	}
-
-	s.logger.Debug("backup status is temporarily unavailable", attrs...)
-}
-
 // backupStatus reads the status of jobID, and reports an answer that carries no status at
 // all as a job the cluster does not report. The status is dereferenced by every caller,
 // so the one place that can hand out a nil is here.
@@ -264,7 +236,7 @@ func backupStatus(
 ) (*infomodels.ResponseBackupState, error) {
 	status, err := client.GetBackupStatus(ctx, jobID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get backup status: %w", err)
 	}
 
 	if status == nil {
@@ -287,7 +259,7 @@ func (s *Service) reportMissingBackup(
 	lastState infomodels.BackupState,
 ) error {
 	if completionStates[lastState] {
-		s.logger.Info(msgBackupComplete)
+		s.logger.Info(msgBackupComplete, slog.String("backup-id", jobID))
 
 		return s.printMetadata(ctx, l, jobID)
 	}
@@ -301,7 +273,7 @@ func (s *Service) reportMissingBackup(
 
 	switch {
 	case err == nil:
-		s.logger.Info(msgBackupComplete)
+		s.logger.Info(msgBackupComplete, slog.String("backup-id", jobID))
 
 		return s.printMetadataEntry(md)
 	case errors.Is(err, errclass.ErrNotFound):

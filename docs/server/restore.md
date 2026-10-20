@@ -138,7 +138,11 @@ Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
 
 Prepare a server-integrated restore
 
-Prepare a server-integrated restore on the Aerospike cluster.
+Prepare a server-integrated restore on the Aerospike cluster and
+wait until the namespace is ready for the restore. If the storage of
+the namespace has to be cleared on some nodes first, the command says
+so and returns: run the clear-storage command then. With --async the
+command returns as soon as the cluster accepts the request.
 
 ### Supported flags
 ```bash
@@ -200,6 +204,8 @@ Restore Flags:
       --job-id string      Id of the restore job. The restore must be started with the same job id.
       --hydrate-replica    Restore all replicas. If false, only the master is restored and
                            the other replicas are filled by migrations. (default true)
+      --async              Return as soon as the cluster accepts the request, without
+                           waiting for the namespace to become ready for the restore.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -308,11 +314,12 @@ Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
 
 Abort a server-integrated restore
 
-Abort a server-integrated restore on the Aerospike cluster.
-A restore job is identified by the namespace it restores into and
-by its job id, so both are required. An aborted cold restore keeps
-the namespace closed to clients until it is released with the open
-command.
+Abort a server-integrated restore on the Aerospike cluster and wait
+until it stops. A restore job is identified by the namespace it
+restores into and by its job id, so both are required. An aborted
+cold restore keeps the namespace closed to clients until it is
+released with the open command. With --async the command returns as
+soon as the cluster accepts the abort.
 
 ### Supported flags
 ```bash
@@ -372,6 +379,8 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace the restore is aborted for.
       --job-id string      Id of the restore job to abort.
+      --async              Return as soon as the cluster accepts the abort, without
+                           waiting for the restore to stop.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -708,6 +717,9 @@ prepare:
   # Restore all replicas. If false, only the master is restored and
   # the other replicas are filled by migrations.
   hydrate-replica: true
+  # Return as soon as the cluster accepts the request, without
+  # waiting for the namespace to become ready for the restore.
+  async: false
 progress:
   # The namespace the restore writes into.
   namespace: source-ns1
@@ -720,6 +732,9 @@ abort:
   namespace: source-ns1
   # Id of the restore job to abort.
   job-id: restore-job-1
+  # Return as soon as the cluster accepts the abort, without
+  # waiting for the restore to stop.
+  async: false
 open:
   # The namespace to release.
   namespace: source-ns1

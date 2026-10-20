@@ -35,7 +35,7 @@ type restoreCtx struct {
 	abort    *flags.ServerRestoreAbort
 	open     *flags.ServerRestoreOpen
 	clear    *flags.ServerRestoreClearStorage
-	// objectStorageS3 is the restore read source (start, prepare).
+	// objectStorageS3 is the restore read source (start).
 	objectStorageS3 *flags.ObjectStorageS3
 }
 
@@ -188,7 +188,7 @@ func setHelpRestoreStart(
 }
 
 // restoreSubcommand describes a snapshot-restore subcommand that is configured by a
-// single flag set of its own.
+// single flag set of its own and is served by the cluster alone.
 type restoreSubcommand struct {
 	use   string
 	short string
@@ -201,9 +201,6 @@ type restoreSubcommand struct {
 	helpSections func(fs *pflag.FlagSet, common commonFlagSets) []HelpSection
 	// commands returns the configuration of the subcommand, parsed from its flags.
 	commands func() config.ServerRestoreCommands
-	// awsS3 returns the object storage settings, or nil for a subcommand served by the
-	// cluster alone.
-	awsS3 func() *models.AwsS3
 	// initErrMsg prefixes a failure to build the service. When it is empty, the failure
 	// is returned as it is.
 	initErrMsg string
@@ -222,12 +219,7 @@ func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command 
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := restoreServiceConfig(cmd.Context(), rc, sub.command,
 				func() *config.ServerRestoreServiceConfig {
-					var awsS3 *models.AwsS3
-					if sub.awsS3 != nil {
-						awsS3 = sub.awsS3()
-					}
-
-					return newRestoreServiceConfig(rc, sub.commands(), awsS3)
+					return newRestoreServiceConfig(rc, sub.commands(), nil)
 				})
 			if err != nil {
 				return err
@@ -275,7 +267,6 @@ func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		commands: func() config.ServerRestoreCommands {
 			return config.ServerRestoreCommands{Prepare: rf.prepare.GetServerRestorePrepare()}
 		},
-		awsS3: rf.objectStorageS3.ToAwsS3,
 		run: func(ctx context.Context, svc *server.Service) error {
 			if err := svc.PrepareRestore(ctx); err != nil {
 				return fmt.Errorf("server side restore preparation failed: %w", err)
@@ -298,7 +289,6 @@ func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		commands: func() config.ServerRestoreCommands {
 			return config.ServerRestoreCommands{Progress: rf.progress.GetServerRestoreProgress()}
 		},
-		awsS3: rf.objectStorageS3.ToAwsS3,
 		run: func(ctx context.Context, svc *server.Service) error {
 			if err := svc.RestoreProgress(ctx); err != nil {
 				return fmt.Errorf("failed to get server side restore progress: %w", err)

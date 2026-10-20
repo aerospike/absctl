@@ -224,7 +224,7 @@ func TestServerBackup_NewFlagSet_Async(t *testing.T) {
 	backup := NewServerBackup()
 	flagSet := backup.NewFlagSet()
 
-	err := flagSet.Parse([]string{"--async"})
+	err := flagSet.Parse([]string{flagAsync})
 	require.NoError(t, err)
 
 	assert.True(t, backup.GetServerBackup().Async)
@@ -324,12 +324,13 @@ func TestServerBackupAbort_NewFlagSet(t *testing.T) {
 	abort := NewServerBackupAbort()
 	flagSet := abort.NewFlagSet()
 
-	err := flagSet.Parse([]string{"--backup-id", testBackupJobID})
+	err := flagSet.Parse([]string{"--backup-id", testBackupJobID, flagAsync})
 	require.NoError(t, err)
 
 	result := abort.GetServerBackupAbort()
 
 	assert.Equal(t, testBackupJobID, result.JobID)
+	assert.True(t, result.Async)
 }
 
 func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
@@ -344,6 +345,7 @@ func TestServerBackupAbort_NewFlagSet_DefaultValues(t *testing.T) {
 	result := abort.GetServerBackupAbort()
 
 	assert.Equal(t, models.DefaultServerBackupJobID, result.JobID)
+	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
 }
 
 func TestServerBackupProgress_NewFlagSet_DefaultValues(t *testing.T) {

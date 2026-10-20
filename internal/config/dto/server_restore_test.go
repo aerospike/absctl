@@ -69,6 +69,7 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(prepare.Namespace))
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(prepare.JobID))
 	assert.Equal(t, models.DefaultServerRestoreHydrateReplica, derefBool(prepare.HydrateReplica))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(prepare.Async))
 
 	progress := defaultServerRestoreProgressConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(progress.Namespace))
@@ -78,6 +79,7 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	abort := defaultServerRestoreAbortConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(abort.Namespace))
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(abort.JobID))
+	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(abort.Async))
 
 	open := defaultServerRestoreOpenConfig()
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(open.Namespace))
@@ -146,9 +148,10 @@ func TestServerRestoreToModels(t *testing.T) {
 			Namespace:      &prepareNamespace,
 			JobID:          &jobID,
 			HydrateReplica: &hydrateReplica,
+			Async:          &enabled,
 		},
 		Progress:     ServerRestoreProgressConfig{Namespace: &progressNamespace, JobID: &jobID, Watch: &enabled},
-		Abort:        ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID},
+		Abort:        ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID, Async: &enabled},
 		Open:         ServerRestoreOpenConfig{Namespace: &openNamespace, JobID: &jobID, Async: &enabled},
 		ClearStorage: ServerRestoreClearConfig{Namespace: &clearNamespace, JobID: &jobID, Async: &enabled},
 	}
@@ -188,6 +191,7 @@ func TestServerRestoreToModels(t *testing.T) {
 	assert.Equal(t, prepareNamespace, prepare.Namespace)
 	assert.Equal(t, jobID, prepare.JobID)
 	assert.False(t, prepare.HydrateReplica)
+	assert.True(t, prepare.Async)
 
 	progress := restore.ToModelServerRestoreProgress()
 	require.NotNil(t, progress)
@@ -197,6 +201,7 @@ func TestServerRestoreToModels(t *testing.T) {
 	require.NotNil(t, abort)
 	assert.Equal(t, abortNamespace, abort.Namespace)
 	assert.Equal(t, jobID, abort.JobID)
+	assert.True(t, abort.Async)
 
 	assert.Equal(t, &models.ServerRestoreOpen{Namespace: openNamespace, JobID: jobID, Async: true},
 		restore.ToModelServerRestoreOpen())

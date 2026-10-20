@@ -138,6 +138,10 @@ func (f *ServerRestorePrepare) NewFlagSet() *pflag.FlagSet {
 		models.DefaultServerRestoreHydrateReplica,
 		"Restore all replicas. If false, only the master is restored and\n"+
 			"the other replicas are filled by migrations.")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerRestoreAsync,
+		"Return as soon as the cluster accepts the request, without\n"+
+			"waiting for the namespace to become ready for the restore.")
 
 	return flagSet
 }
@@ -193,6 +197,10 @@ func (f *ServerRestoreAbort) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
 		"Id of the restore job to abort.")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerRestoreAsync,
+		"Return as soon as the cluster accepts the abort, without\n"+
+			"waiting for the restore to stop.")
 
 	return flagSet
 }

@@ -369,7 +369,9 @@ Any AWS parameter can be retrieved from Secret Agent.
 
 Abort a server-integrated backup
 
-Abort a server-integrated backup on the Aerospike cluster.
+Abort a server-integrated backup on the Aerospike cluster and wait
+until it stops. With --async the command returns as soon as the
+cluster accepts the abort.
 
 ### Supported flags
 ```bash
@@ -428,6 +430,8 @@ Aerospike Client Flags:
 
 Backup Flags:
       --backup-id string   Backup id
+      --async              Return as soon as the cluster accepts the abort, without
+                           waiting for the backup to stop.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -594,6 +598,9 @@ progress:
 abort:
   # Backup id
   backup-id: ""
+  # Return as soon as the cluster accepts the abort, without
+  # waiting for the backup to stop.
+  async: false
 secret-agent:
   # Secret Agent connection type. Supported types: TCP, UNIX.
   connection-type: TCP

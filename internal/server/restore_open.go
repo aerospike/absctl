@@ -16,22 +16,12 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/aerospike/backup-go"
-	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
-
-// openStatusTimeout bounds the wait for a released namespace to open.
-const openStatusTimeout = 5 * time.Minute
-
-// errOpenStatusTimeout is returned when the cluster accepted the release of a namespace
-// but kept reporting it as closed until the wait ran out.
-var errOpenStatusTimeout = errors.New("checking namespace state after opening timed out")
 
 // OpenRestore releases the namespace held by the configured aborted cold restore job,
 // and waits for the namespace to open to clients. With Async set it returns as soon as
@@ -65,11 +55,27 @@ func (s *Service) openRestore(ctx context.Context, client backup.ServerBackupInf
 		return nil
 	}
 
-	if err := s.waitForState(ctx, s.openTimeout,
-		fmt.Errorf("%w: namespace %s, job-id %s", errOpenStatusTimeout, namespace, jobID),
-		func(ctx context.Context) (bool, string, error) {
-			return namespaceOpened(ctx, client, namespace, jobID)
-		}); err != nil {
+	// The cluster keeps the state of the released job, so a job it does not report cannot
+	// confirm the release, and is followed like any other job missing from the status.
+	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
+		missingRestore(namespace, jobID))
+
+	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+		if namespaceOpened(status.NsState) {
+			return true, 0, nil
+		}
+
+		// ABORTED is the state of every job that can be released, so only FAILED says
+		// there is nothing left to wait for. A retained row of a node that was away can
+		// report FAILED too, which is why an open namespace is checked first.
+		if status.State == infomodels.RestoreStateFailed {
+			return true, 0, restoreTerminalError(errRestoreFailed, namespace, jobID, status.ErrorReason)
+		}
+
+		return false, s.statePollInterval, nil
+	}
+
+	if err := w.run(ctx); err != nil {
 		return err
 	}
 
@@ -78,29 +84,15 @@ func (s *Service) openRestore(ctx context.Context, client backup.ServerBackupInf
 	return nil
 }
 
-// namespaceOpened reports whether the namespace held by the restore job jobID is open to
-// clients again, along with the namespace state it read. A job the cluster does not
-// report cannot confirm the release, so the wait goes on.
-func namespaceOpened(
-	ctx context.Context,
-	client restoreStatusGetter,
-	namespace, jobID string,
-) (opened bool, nsState string, err error) {
-	status, err := restoreStatus(ctx, client, namespace, jobID)
-	if err != nil {
-		if errors.Is(err, asinfo.ErrNotFound) {
-			return false, "", nil
-		}
-
-		return false, "", fmt.Errorf("failed to get restore status: %w", err)
-	}
-
-	// The merged state is NONE only when no node keeps the namespace closed, and it is
-	// left empty or not hosted when no node hosts the namespace at all.
-	switch status.NsState {
+// namespaceOpened reports whether the merged namespace state nsState says the namespace
+// is open to clients again. The merged state is NONE only when no node keeps the
+// namespace closed, and it is left empty or not hosted when no node hosts the namespace
+// at all.
+func namespaceOpened(nsState infomodels.NamespaceState) bool {
+	switch nsState {
 	case infomodels.NamespaceStateNone, infomodels.NamespaceStateNotHosted, "":
-		return true, string(status.NsState), nil
+		return true
 	default:
-		return false, string(status.NsState), nil
+		return false
 	}
 }

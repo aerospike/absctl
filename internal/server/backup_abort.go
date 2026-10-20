@@ -16,21 +16,15 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/aerospike/backup-go"
-	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
 // msgNoRunningBackup is reported by an abort that found no running backup to abort.
 const msgNoRunningBackup = "no running backup found, nothing to abort"
-
-// errAbortStatusTimeout is returned when the cluster accepted an abort request but kept
-// reporting the job as running until the wait ran out.
-var errAbortStatusTimeout = errors.New("checking backup status after abortion timed out")
 
 // terminalBackupStates are the states of a backup job that has already ended. The cluster
 // keeps the state of a finished job for a while after it stops working on it, so a job
@@ -46,7 +40,8 @@ var terminalBackupStates = map[infomodels.BackupState]bool{
 }
 
 // AbortBackup asks the cluster to abort the configured backup job, once it has confirmed
-// there is a running job to abort, and waits for that job to stop.
+// there is a running job to abort, and waits for that job to stop. With Async set it
+// returns as soon as the cluster accepts the abort.
 func (s *Service) AbortBackup(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
 	if err != nil {
@@ -79,11 +74,11 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 	s.logger.Info("aborting",
 		slog.String("backup-id", jobID))
 
-	outcome, err := s.waitForAbort(ctx,
-		fmt.Errorf("%w: backup-id %s", errAbortStatusTimeout, jobID),
-		func(ctx context.Context) (abortOutcome, string, error) {
-			return backupAbortState(ctx, client, jobID)
-		})
+	if s.backupCfg.Abort.Async {
+		return nil
+	}
+
+	outcome, err := s.waitForBackupAbort(ctx, client, jobID)
 	if err != nil {
 		return err
 	}
@@ -103,32 +98,54 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 	return nil
 }
 
-// backupAbortState reads the state of a job that was asked to stop, and says what it
-// means for the abort.
-func backupAbortState(
+// waitForBackupAbort follows the job that was asked to stop until it does, and reports
+// how it stopped. The cluster accepts an abort request before the job actually winds
+// down, so the abort is confirmed by the status that follows it.
+//
+// The job is followed the same way "backup start" follows the job it started: it is
+// given startedJobConfirmations lookups to turn up in the status, and once reported, it
+// has to be missed vanishedJobConfirmations times in a row before it is accepted as gone.
+// The cluster drops the state of a job that is no longer running, so a job gone from the
+// status has stopped.
+func (s *Service) waitForBackupAbort(
 	ctx context.Context,
 	client backup.ServerBackupInfo,
 	jobID string,
-) (abortOutcome, string, error) {
-	status, err := backupStatus(ctx, client, jobID)
-	if err != nil {
-		// The cluster drops the state of a job that is no longer running.
-		if errors.Is(err, asinfo.ErrNotFound) {
-			return abortStopped, "", nil
-		}
+) (abortOutcome, error) {
+	var outcome abortOutcome
 
-		return 0, "", fmt.Errorf("failed to get backup status: %w", err)
+	w := s.newBackupWatch(client, jobID, startedJobConfirmations,
+		func(context.Context, *infomodels.ResponseBackupState, bool) error {
+			outcome = abortStopped
+
+			return nil
+		})
+
+	w.handle = func(_ context.Context, status *infomodels.ResponseBackupState) (bool, time.Duration, error) {
+		outcome = backupAbortOutcome(status.State)
+
+		return outcome != abortPending, s.statePollInterval, nil
 	}
 
-	switch status.State {
+	if err := w.run(ctx); err != nil {
+		return 0, err
+	}
+
+	return outcome, nil
+}
+
+// backupAbortOutcome says what the state of a job that was asked to stop means for the
+// abort.
+func backupAbortOutcome(state infomodels.BackupState) abortOutcome {
+	switch state {
 	// The job is done winding down once it reports the abort. A job that hit a failure
 	// on the way out reports that instead, and is just as stopped.
 	case infomodels.BackupStateAborted, infomodels.BackupStateFailed:
-		return abortStopped, status.State.Describe(), nil
+		return abortStopped
 	case infomodels.BackupStateComplete:
-		return abortTooLate, status.State.Describe(), nil
+		return abortTooLate
 	default:
-		return abortPending, status.State.Describe(), nil
+		return abortPending
 	}
 }
 
@@ -137,22 +154,38 @@ func backupAbortState(
 // knows nothing about without complaining, and the status that follows such a request
 // looks exactly like the status of a job that stopped on request - which would announce a
 // backup that never ran, or one that ended hours ago, as successfully aborted.
+//
+// The merged status misses the job as soon as a single node does not report it, so the
+// job is given startedJobConfirmations lookups to turn up before it is taken as missing.
 func (s *Service) backupIsRunning(
 	ctx context.Context,
 	client backup.ServerBackupInfo,
 	jobID string,
 ) (bool, error) {
-	status, err := backupStatus(ctx, client, jobID)
-	if err != nil {
-		// The cluster reports only the jobs it still holds the state of, so an unknown
-		// job id and a backup that finished long ago are answered the same way.
-		if errors.Is(err, asinfo.ErrNotFound) {
-			s.logger.Info(msgNoRunningBackup, slog.String("backup-id", jobID))
+	var status *infomodels.ResponseBackupState
 
-			return false, nil
-		}
+	// A job that never turns up leaves status nil, which is answered below.
+	w := s.newBackupWatch(client, jobID, startedJobConfirmations,
+		func(context.Context, *infomodels.ResponseBackupState, bool) error {
+			return nil
+		})
 
-		return false, fmt.Errorf("failed to get backup status: %w", err)
+	w.handle = func(_ context.Context, st *infomodels.ResponseBackupState) (bool, time.Duration, error) {
+		status = st
+
+		return true, 0, nil
+	}
+
+	if err := w.run(ctx); err != nil {
+		return false, err
+	}
+
+	// The cluster reports only the jobs it still holds the state of, so an unknown job id
+	// and a backup that finished long ago are answered the same way.
+	if status == nil {
+		s.logger.Info(msgNoRunningBackup, slog.String("backup-id", jobID))
+
+		return false, nil
 	}
 
 	// A job that already reached its end is still reported for a while. Naming the state

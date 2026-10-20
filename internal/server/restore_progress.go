@@ -104,7 +104,7 @@ func restoreStatus(
 ) (*infomodels.ResponseRestoreState, error) {
 	status, err := client.GetRestoreStatus(ctx, namespace, jobID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get restore status: %w", err)
 	}
 
 	if status == nil {
@@ -112,6 +112,52 @@ func restoreStatus(
 	}
 
 	return status, nil
+}
+
+// newRestoreWatch returns the watch of the restore job jobID of namespace, with
+// everything but what the caller does with the status filled in. unseenLookups is how
+// many lookups the job is given to turn up in the status, and missing decides how the
+// watch ends once the job is accepted as missing, see jobWatch.
+func (s *Service) newRestoreWatch(
+	client restoreStatusGetter,
+	namespace, jobID string,
+	unseenLookups int,
+	missing func(ctx context.Context, last *infomodels.ResponseRestoreState, seen bool) error,
+) *jobWatch[*infomodels.ResponseRestoreState] {
+	return &jobWatch[*infomodels.ResponseRestoreState]{
+		logger:        s.logger,
+		attrs:         []any{slog.String("namespace", namespace), slog.String("job-id", jobID)},
+		gapInterval:   s.vanishedPollInterval,
+		unseenLookups: unseenLookups,
+		lookup: func(ctx context.Context) (*infomodels.ResponseRestoreState, error) {
+			return restoreStatus(ctx, client, namespace, jobID)
+		},
+		missing: missing,
+		describe: func(status *infomodels.ResponseRestoreState) string {
+			return string(status.State)
+		},
+	}
+}
+
+// missingRestore returns the missing function of a watch of the restore job jobID of
+// namespace. The cluster keeps the state of a finished restore job, so a job missing
+// from the status has not finished, and ends the watch with restoreMissingError.
+func missingRestore(
+	namespace, jobID string,
+) func(context.Context, *infomodels.ResponseRestoreState, bool) error {
+	return func(_ context.Context, _ *infomodels.ResponseRestoreState, seen bool) error {
+		return restoreMissingError(namespace, jobID, seen)
+	}
+}
+
+// restoreMissingError names the restore job the cluster does not report: one it never
+// reported at all, or one it stopped reporting.
+func restoreMissingError(namespace, jobID string, seen bool) error {
+	if seen {
+		return fmt.Errorf("%w: namespace %s, job-id %s", errRestoreStatusLost, namespace, jobID)
+	}
+
+	return fmt.Errorf("%w: namespace %s, job-id %s", errRestoreNotFound, namespace, jobID)
 }
 
 // reportRestoreProgress polls the cluster for the status of the restore job jobID of
@@ -131,43 +177,10 @@ func (s *Service) reportRestoreProgress(
 ) error {
 	printer := newProgressPrinter(s.logger, msgRestoreProgress)
 
-	var (
-		// seen is set once the cluster reported the job.
-		seen bool
-		// misses counts the lookups in a row that did not find the job.
-		misses int
-	)
+	w := s.newRestoreWatch(client, namespace, jobID, mode.unseenLookups(),
+		missingRestore(namespace, jobID))
 
-	for {
-		status, err := restoreStatus(ctx, client, namespace, jobID)
-
-		switch {
-		case err != nil && !errors.Is(err, asinfo.ErrNotFound):
-			return fmt.Errorf("failed to get restore status: %w", err)
-		case err != nil:
-			misses++
-
-			switch {
-			case !seen && !startingJobPending(mode, misses):
-				return fmt.Errorf("%w: namespace %s, job-id %s", errRestoreNotFound, namespace, jobID)
-			case seen && misses >= vanishedJobConfirmations:
-				return fmt.Errorf("%w: namespace %s, job-id %s", errRestoreStatusLost, namespace, jobID)
-			}
-
-			s.logger.Debug("restore status is temporarily unavailable",
-				slog.String("job-id", jobID),
-				slog.Int("attempt", misses))
-
-			if err := waitFor(ctx, s.vanishedPollInterval); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		seen = true
-		misses = 0
-
+	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		now := time.Now()
 		// The nodes of the layout that left the cluster are not active, and still own
 		// a share of the restore. A node that joined after the layout was frozen owns
@@ -181,7 +194,7 @@ func (s *Service) reportRestoreProgress(
 		case infomodels.RestoreStateComplete:
 			s.logRestoreComplete(status)
 
-			return nil
+			return true, 0, nil
 		case infomodels.RestoreStateFailed:
 			if status.Kind == infomodels.RestoreKindCold {
 				s.logger.Warn(msgAbortOpenHint,
@@ -189,23 +202,19 @@ func (s *Service) reportRestoreProgress(
 					slog.String("job-id", jobID))
 			}
 
-			return restoreTerminalError(errRestoreFailed, namespace, jobID, status.ErrorReason)
+			return true, 0, restoreTerminalError(errRestoreFailed, namespace, jobID, status.ErrorReason)
 		case infomodels.RestoreStateAborted:
 			if status.Kind == infomodels.RestoreKindCold {
 				s.logOpenHint(namespace, jobID)
 			}
 
-			return restoreTerminalError(errRestoreAborted, namespace, jobID, status.ErrorReason)
+			return true, 0, restoreTerminalError(errRestoreAborted, namespace, jobID, status.ErrorReason)
 		}
 
-		if mode == reportOnce {
-			return nil
-		}
-
-		if err := waitFor(ctx, nextPoll(snap, now)); err != nil {
-			return err
-		}
+		return mode == reportOnce, nextPoll(snap, now), nil
 	}
+
+	return w.run(ctx)
 }
 
 // logRestoreComplete announces a restore the cluster reported as finished, and says how

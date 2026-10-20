@@ -70,6 +70,7 @@ func TestDefaultServerBackupSections(t *testing.T) {
 
 	abort := defaultServerBackupAbortConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(abort.JobID))
+	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(abort.Async))
 }
 
 func TestServerBackupToModels(t *testing.T) {
@@ -115,7 +116,7 @@ func TestServerBackupToModels(t *testing.T) {
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
 		Progress: ServerBackupProgressConfig{JobID: &jobID, Path: &backupPath, Watch: &watch},
-		Abort:    ServerBackupAbortConfig{JobID: &jobID},
+		Abort:    ServerBackupAbortConfig{JobID: &jobID, Async: &async},
 	}
 
 	start := backup.ToModelServerBackup()
@@ -156,6 +157,7 @@ func TestServerBackupToModels(t *testing.T) {
 	abort := backup.ToModelServerBackupAbort()
 	require.NotNil(t, abort)
 	assert.Equal(t, jobID, abort.JobID)
+	assert.True(t, abort.Async)
 }
 
 func TestServerBackupToModelsNil(t *testing.T) {

@@ -147,10 +147,32 @@ func TestServiceClearRestoreStorage(t *testing.T) {
 			wantClearCalls: 1,
 		},
 		{
-			name:           "fails when the job is not reported",
-			wantErr:        asinfo.ErrNotFound,
-			wantCalls:      1,
+			// The nodes accepted the clear, so the job is given as many lookups to turn
+			// up as a just-started one before the wait gives up on it.
+			name:           "fails when the job is never reported",
+			wantErr:        errRestoreNotFound,
+			wantCalls:      startedJobConfirmations,
 			wantClearCalls: 1,
+			notWantLogs:    []string{logStorageCleared},
+		},
+		{
+			// A single miss is a gap in the merged status, not a job that is gone.
+			name:           "waits through a job missing from the status for a moment",
+			answers:        []restoreAnswer{clearing, {err: asinfo.ErrNotFound}, readyAnswer},
+			wantCalls:      3,
+			wantClearCalls: 1,
+			wantLogs:       []string{logStorageCleared},
+		},
+		{
+			name: "fails when the job stops reporting",
+			answers: append(
+				[]restoreAnswer{clearing},
+				repeatRestoreNotFound(vanishedJobConfirmations)...,
+			),
+			wantErr:        errRestoreStatusLost,
+			wantCalls:      1 + vanishedJobConfirmations,
+			wantClearCalls: 1,
+			notWantLogs:    []string{logStorageCleared},
 		},
 		{
 			name:           "propagates an unexpected status error",

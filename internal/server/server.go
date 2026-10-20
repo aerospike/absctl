@@ -66,17 +66,13 @@ type Service struct {
 	// metadataRetryPolicy paces the polling of a backup manifest that the server has
 	// not uploaded yet.
 	metadataRetryPolicy *backupmodels.RetryPolicy
-	// vanishedPollInterval paces the lookups that confirm a job the cluster stopped
-	// reporting is really gone.
+	// vanishedPollInterval paces the lookups made while a job is missing from the
+	// cluster status.
 	vanishedPollInterval time.Duration
-	// abortPollInterval paces the lookups that confirm an aborted job stopped running,
-	// and abortTimeout bounds how long they are made for.
-	abortPollInterval time.Duration
-	abortTimeout      time.Duration
-	// statePollInterval paces the lookups that wait for a namespace to be opened or
-	// cleared, and openTimeout bounds how long the opening is waited for.
+	// statePollInterval paces the lookups made while a command waits for the state its
+	// request leads to: an aborted job to stop, or a namespace to be prepared, cleared or
+	// opened.
 	statePollInterval time.Duration
-	openTimeout       time.Duration
 	// metadataS3Client opens the storage client backup manifests are read with.
 	metadataS3Client func(ctx context.Context, cfg *models.AwsS3) (s3API, error)
 }
@@ -108,10 +104,7 @@ func NewService(
 			metadataRetryAttempts,
 		),
 		vanishedPollInterval: vanishedJobPollInterval,
-		abortPollInterval:    abortStatusPollInterval,
-		abortTimeout:         abortStatusTimeout,
 		statePollInterval:    statePollInterval,
-		openTimeout:          openStatusTimeout,
 		metadataS3Client:     newMetadataS3Client,
 	}, nil
 }

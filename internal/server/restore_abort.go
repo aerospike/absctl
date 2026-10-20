@@ -16,33 +16,15 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/aerospike/backup-go"
-	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
-const (
-	// msgNoRunningRestore is reported by an abort that found no running restore to abort.
-	msgNoRunningRestore = "no running restore found, nothing to abort"
-
-	// stateNotReported stands for the state of a job the status did not report, in the
-	// error of an abort whose wait ran out.
-	stateNotReported = "not reported"
-
-	// missingRestoreConfirmations is how many lookups in a row must miss a restore job
-	// before an abort accepts that there is nothing to abort. Each lookup already retries
-	// inside the info client, so a single node that is briefly behind is covered, and a
-	// mistyped job id is not answered only after half a minute.
-	missingRestoreConfirmations = 2
-)
-
-// errAbortRestoreStatusTimeout is the restore counterpart of errAbortStatusTimeout: the
-// cluster accepted the abort but kept reporting the job as running until the wait ran out.
-var errAbortRestoreStatusTimeout = errors.New("checking restore status after abortion timed out")
+// msgNoRunningRestore is reported by an abort that found no running restore to abort.
+const msgNoRunningRestore = "no running restore found, nothing to abort"
 
 // terminalRestoreStates are the states of a restore job that has already ended, and that
 // an abort has nothing left to do for. A FAILED job is not one of them: the server keeps
@@ -57,7 +39,8 @@ var terminalRestoreStates = map[infomodels.RestoreState]bool{
 
 // AbortRestore asks the cluster to abort the configured restore job, once it has
 // confirmed the namespace holds a restore to abort, and waits for the namespace to report
-// that it holds one no longer.
+// that it holds one no longer. With Async set it returns as soon as the cluster accepts
+// the abort.
 func (s *Service) AbortRestore(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
 	if err != nil {
@@ -89,11 +72,15 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 		slog.String("namespace", namespace),
 		slog.String("job-id", jobID))
 
-	outcome, err := s.waitForAbort(ctx,
-		fmt.Errorf("%w: namespace %s, job-id %s", errAbortRestoreStatusTimeout, namespace, jobID),
-		func(ctx context.Context) (abortOutcome, string, error) {
-			return restoreAbortState(ctx, client, namespace, jobID)
-		})
+	if s.restoreCfg.Abort.Async {
+		if status.Kind == infomodels.RestoreKindCold {
+			s.logOpenHint(namespace, jobID)
+		}
+
+		return nil
+	}
+
+	outcome, err := s.waitForRestoreAbort(ctx, client, namespace, jobID)
 	if err != nil {
 		return err
 	}
@@ -116,34 +103,51 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 	return nil
 }
 
-// restoreAbortState reads the state of a restore job that was asked to stop, and says
-// what it means for the abort. A FAILED job is still pending: the principal turns the
-// failure into an abort, and the job is only stopped once it reports that.
+// waitForRestoreAbort follows the restore job that was asked to stop until it does, and
+// reports how it stopped. The job is followed the same way "restore start" follows the
+// job it started, see jobWatch.
 //
-// A job missing from the status is pending as well. The cluster keeps the state of a
-// stopped restore job, and the status misses the job as soon as a single node does not
-// report it, so a miss says nothing about the job: only ABORTED confirms the abort.
-func restoreAbortState(
+// Unlike a backup job, a restore job missing from the status is not a stopped one: the
+// cluster keeps the state of a stopped restore job, so only its state confirms the abort,
+// and a job the status no longer reports ends the wait with an error.
+func (s *Service) waitForRestoreAbort(
 	ctx context.Context,
-	client backup.ServerBackupInfo,
+	client restoreStatusGetter,
 	namespace, jobID string,
-) (abortOutcome, string, error) {
-	status, err := restoreStatus(ctx, client, namespace, jobID)
-	if err != nil {
-		if errors.Is(err, asinfo.ErrNotFound) {
-			return abortPending, stateNotReported, nil
-		}
+) (abortOutcome, error) {
+	var outcome abortOutcome
 
-		return 0, "", fmt.Errorf("failed to get restore status: %w", err)
+	// The pre-abort check has seen the job running, so a job this wait never finds is one
+	// the cluster stopped reporting.
+	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
+		func(context.Context, *infomodels.ResponseRestoreState, bool) error {
+			return restoreMissingError(namespace, jobID, true)
+		})
+
+	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+		outcome = restoreAbortOutcome(status.State)
+
+		return outcome != abortPending, s.statePollInterval, nil
 	}
 
-	switch status.State {
-	case infomodels.RestoreStateAborted:
-		return abortStopped, string(status.State), nil
+	if err := w.run(ctx); err != nil {
+		return 0, err
+	}
+
+	return outcome, nil
+}
+
+// restoreAbortOutcome says what the state of a restore job that was asked to stop means
+// for the abort. A job that reports FAILED stopped working, and there is nothing left to
+// wait for: the principal turns the failure into the abort that was requested anyway.
+func restoreAbortOutcome(state infomodels.RestoreState) abortOutcome {
+	switch state {
+	case infomodels.RestoreStateAborted, infomodels.RestoreStateFailed:
+		return abortStopped
 	case infomodels.RestoreStateComplete:
-		return abortTooLate, string(status.State), nil
+		return abortTooLate
 	default:
-		return abortPending, string(status.State), nil
+		return abortPending
 	}
 }
 
@@ -155,41 +159,37 @@ func restoreAbortState(
 //
 // The status misses the job as soon as a single node does not report it, for instance
 // for a moment after the node restarted, while the other nodes keep running it. The job
-// is therefore only taken as missing after missingRestoreConfirmations lookups in a row.
+// is therefore given startedJobConfirmations lookups to turn up before it is taken as
+// missing.
 func (s *Service) runningRestore(
 	ctx context.Context,
-	client backup.ServerBackupInfo,
+	client restoreStatusGetter,
 	namespace, jobID string,
 ) (*infomodels.ResponseRestoreState, error) {
 	var status *infomodels.ResponseRestoreState
 
-	for misses := 1; ; misses++ {
-		var err error
+	// A job that never turns up leaves status nil, which is answered below.
+	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
+		func(context.Context, *infomodels.ResponseRestoreState, bool) error {
+			return nil
+		})
 
-		status, err = restoreStatus(ctx, client, namespace, jobID)
-		if err == nil {
-			break
-		}
+	w.handle = func(_ context.Context, st *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+		status = st
 
-		if !errors.Is(err, asinfo.ErrNotFound) {
-			return nil, fmt.Errorf("failed to get restore status: %w", err)
-		}
+		return true, 0, nil
+	}
 
-		if misses >= missingRestoreConfirmations {
-			s.logger.Info(msgNoRunningRestore,
-				slog.String("namespace", namespace),
-				slog.String("job-id", jobID))
+	if err := w.run(ctx); err != nil {
+		return nil, err
+	}
 
-			return nil, nil
-		}
+	if status == nil {
+		s.logger.Info(msgNoRunningRestore,
+			slog.String("namespace", namespace),
+			slog.String("job-id", jobID))
 
-		s.logger.Debug("restore status is temporarily unavailable",
-			slog.String("job-id", jobID),
-			slog.Int("attempt", misses))
-
-		if err := waitFor(ctx, s.vanishedPollInterval); err != nil {
-			return nil, err
-		}
+		return nil, nil
 	}
 
 	// A job that already reached its end is still reported for a while. Naming the state

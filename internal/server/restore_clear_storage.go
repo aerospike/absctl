@@ -39,7 +39,7 @@ var (
 )
 
 // endedRestoreStates are the states in which a restore job no longer prepares its
-// namespace, which a clear of the storage cannot get past.
+// namespace, which neither the preparation nor a clear of the storage can get past.
 var endedRestoreStates = map[infomodels.RestoreState]bool{
 	infomodels.RestoreStateComplete: true,
 	infomodels.RestoreStateFailed:   true,
@@ -93,15 +93,24 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 		reported string
 	)
 
-	// Zeroing the storage takes as long as the devices need, so the wait is not bounded:
-	// only the user or a failed job ends it.
-	err := s.waitForState(ctx, 0, nil, func(ctx context.Context) (bool, string, error) {
-		status, done, err := clearState(ctx, client, namespace, jobID)
-		if err != nil || status == nil {
-			return false, "", err
+	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
+		missingRestore(namespace, jobID))
+
+	w.handle = func(ctx context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+		if err := preparationError(status, namespace, jobID); err != nil {
+			return true, 0, err
+		}
+
+		// A node that asks for the clear again is sent it again.
+		if status.Clear == infomodels.ClearStateRequired {
+			if err := client.ClearRestoreStorage(ctx, namespace, jobID); err != nil {
+				return true, 0, err
+			}
 		}
 
 		last = status
+
+		done := namespaceReady(status)
 
 		state := describeClearState(status)
 		if !done && state != reported {
@@ -113,9 +122,10 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 			reported = state
 		}
 
-		return done, state, nil
-	})
-	if err != nil {
+		return done, s.statePollInterval, nil
+	}
+
+	if err := w.run(ctx); err != nil {
 		return err
 	}
 
@@ -142,41 +152,30 @@ func (s *Service) logClearDone(namespace, jobID string, status *infomodels.Respo
 	s.logger.Info(msgStorageCleared, attrs...)
 }
 
-// clearState reads the status of the restore job whose namespace is being cleared, and
-// reports whether the namespace is ready for the restore. A node that asks for the clear
-// again is sent it again.
-func clearState(
-	ctx context.Context,
-	client backup.ServerBackupInfo,
-	namespace, jobID string,
-) (*infomodels.ResponseRestoreState, bool, error) {
-	status, err := restoreStatus(ctx, client, namespace, jobID)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to get restore status: %w", err)
-	}
-
+// preparationError reports a restore job that can no longer get its namespace ready for
+// the restore: the job stopped, or the preparation of the namespace failed.
+func preparationError(status *infomodels.ResponseRestoreState, namespace, jobID string) error {
 	switch {
 	case endedRestoreStates[status.State]:
-		return nil, false, restoreTerminalError(
+		return restoreTerminalError(
 			fmt.Errorf("%w, state %s", errRestoreNotPreparing, status.State),
 			namespace, jobID, status.ErrorReason)
 	case status.NsState == infomodels.NamespaceStateFailed:
-		return nil, false, restoreTerminalError(errPrepareFailed, namespace, jobID, status.ErrorReason)
-	case status.Clear == infomodels.ClearStateRequired:
-		if err := client.ClearRestoreStorage(ctx, namespace, jobID); err != nil {
-			return nil, false, err
-		}
-
-		return status, false, nil
+		return restoreTerminalError(errPrepareFailed, namespace, jobID, status.ErrorReason)
+	default:
+		return nil
 	}
-
-	ready := status.Clear == infomodels.ClearStateNone && status.NsState == infomodels.NamespaceStateReady
-
-	return status, ready, nil
 }
 
-// describeClearState names the clear and namespace states of a status, for the log and
-// for the error of a wait that ended before the namespace was ready.
+// namespaceReady reports whether the merged status says the namespace is ready for the
+// restore on every node: none of them needs or runs a clear, and all of them report
+// READY.
+func namespaceReady(status *infomodels.ResponseRestoreState) bool {
+	return status.Clear == infomodels.ClearStateNone && status.NsState == infomodels.NamespaceStateReady
+}
+
+// describeClearState names the clear and namespace states of a status, so that a wait
+// logs them only when they change.
 func describeClearState(status *infomodels.ResponseRestoreState) string {
 	return fmt.Sprintf("clear=%s ns-state=%s", status.Clear, status.NsState)
 }

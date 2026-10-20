@@ -210,6 +210,9 @@ func (s *ServerBackupProgress) Validate() error {
 // ServerBackupAbort contains flags that will be mapped to ServerBackupAbort.
 type ServerBackupAbort struct {
 	JobID string
+	// Async returns as soon as the cluster accepts the abort, instead of waiting for the
+	// backup to stop.
+	Async bool
 }
 
 func (s *ServerBackupAbort) Validate() error {

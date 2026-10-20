@@ -267,6 +267,9 @@ type ServerRestorePrepare struct {
 	JobID string
 	// HydrateReplica restores all replicas when true, and only the master when false.
 	HydrateReplica bool
+	// Async returns as soon as the cluster accepts the request, instead of waiting for
+	// the namespace to become ready for the restore.
+	Async bool
 }
 
 func (s *ServerRestorePrepare) Validate() error {
@@ -308,6 +311,9 @@ func (s *ServerRestoreProgress) Validate() error {
 type ServerRestoreAbort struct {
 	Namespace string
 	JobID     string
+	// Async returns as soon as the cluster accepts the abort, instead of waiting for the
+	// restore to stop.
+	Async bool
 }
 
 func (s *ServerRestoreAbort) Validate() error {

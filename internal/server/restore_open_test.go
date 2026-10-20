@@ -56,6 +56,48 @@ func TestServiceOpenRestore(t *testing.T) {
 			wantLogs:  []string{logNamespaceOpened},
 		},
 		{
+			// The cluster accepted the release of the job, so the job is given as many
+			// lookups to turn up as a just-started one before the wait gives up on it.
+			name:        "fails when the job is never reported",
+			wantErr:     errRestoreNotFound,
+			wantCalls:   startedJobConfirmations,
+			notWantLogs: []string{logNamespaceOpened},
+		},
+		{
+			// The cluster keeps the state of the released job, so a job that stops
+			// reporting cannot confirm the release.
+			name: "fails when the job stops reporting",
+			answers: append(
+				[]restoreAnswer{opening},
+				repeatRestoreNotFound(vanishedJobConfirmations)...,
+			),
+			wantErr:     errRestoreStatusLost,
+			wantCalls:   1 + vanishedJobConfirmations,
+			notWantLogs: []string{logNamespaceOpened},
+		},
+		{
+			// The job can no longer release the namespace, so there is nothing to wait
+			// for.
+			name: "fails when the job fails",
+			answers: []restoreAnswer{
+				opening,
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))},
+			},
+			wantErr:     errRestoreFailed,
+			wantCalls:   2,
+			notWantLogs: []string{logNamespaceOpened},
+		},
+		{
+			// A node that was away keeps a FAILED row of the job, which says nothing
+			// about a namespace that is open.
+			name: "accepts an open namespace of a job one node reports as failed",
+			answers: []restoreAnswer{
+				{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateNone)},
+			},
+			wantCalls: 1,
+			wantLogs:  []string{logNamespaceOpened},
+		},
+		{
 			name: "accepts a namespace no node hosts",
 			answers: []restoreAnswer{
 				{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateNotHosted)},
@@ -117,25 +159,4 @@ func TestServiceOpenRestore(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestServiceOpenRestoreTimesOut pins down the bound on the wait: a namespace that never
-// opens has to end the command, and the error has to name the state it was left in.
-func TestServiceOpenRestoreTimesOut(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-	client := &fakeRestoreInfoClient{
-		answers: []restoreAnswer{
-			{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateOpening)},
-		},
-		repeatLast: true,
-	}
-
-	err := svc.openRestore(t.Context(), client)
-
-	require.ErrorIs(t, err, errOpenStatusTimeout)
-	require.ErrorContains(t, err, string(infomodels.NamespaceStateOpening))
-	require.Greater(t, client.calls, 1, "the open must keep polling until the wait runs out")
-	assert.NotContains(t, buf.String(), logNamespaceOpened)
 }

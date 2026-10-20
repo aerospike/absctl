@@ -218,11 +218,13 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 // ServerBackupAbortConfig maps the "abort" section, used by "snapshot-backup abort".
 type ServerBackupAbortConfig struct {
 	JobID *string `yaml:"backup-id"`
+	Async *bool   `yaml:"async"`
 }
 
 func defaultServerBackupAbortConfig() ServerBackupAbortConfig {
 	return ServerBackupAbortConfig{
 		JobID: new(models.DefaultServerBackupJobID),
+		Async: new(models.DefaultServerBackupAsync),
 	}
 }
 
@@ -234,5 +236,6 @@ func (b *ServerBackup) ToModelServerBackupAbort() *models.ServerBackupAbort {
 
 	return &models.ServerBackupAbort{
 		JobID: derefString(b.Abort.JobID),
+		Async: derefBool(b.Abort.Async),
 	}
 }

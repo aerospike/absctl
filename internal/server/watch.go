@@ -17,43 +17,48 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
+	"slices"
 	"time"
+
+	"github.com/aerospike/backup-go/pkg/asinfo"
 )
 
 const (
-	// startedJobConfirmations is how many lookups a job the cluster has just accepted is
-	// given to turn up in the cluster status. "backup start" follows the job the cluster
-	// handed it, so that job does exist, and reporting it as missing because the status
-	// does not list it yet would fail a command that has just succeeded. A job named on
-	// the command line gets no such grace: the first answer about it is final.
+	// startedJobConfirmations is how many lookups a job the cluster has not reported yet
+	// is given to turn up in the cluster status, whenever there is a reason to expect it
+	// there: the cluster has just accepted a request for it, or the job is about to be
+	// asked to stop. The merged status misses a job as soon as a single node does not
+	// report it, and failing a command on that would report a job that exists as one
+	// that does not. A job only named on the command line to report on gets no such
+	// grace: the first answer about it is final.
 	startedJobConfirmations = 5
 
 	// vanishedJobConfirmations is how many lookups in a row must miss a job that was
-	// being watched and had reached its last stages, before the watcher accepts that the
-	// cluster dropped the state of a finished backup. The status of a running job can be
-	// unavailable for a moment - between backup stages, or while a node is busy - and a
-	// single miss must not be reported as a finished backup.
-	//
-	// A job that has never been reported is not confirmed this way: it has no state to
-	// resolve, and startedJobConfirmations decides how long it is waited for.
+	// reported before, before the watch accepts that it is gone. The status of a job can
+	// be unavailable for a moment - between stages, or while a node is busy - and a
+	// single miss must not decide the outcome of a command.
 	vanishedJobConfirmations = 5
-	// vanishedJobPollInterval paces those confirmation lookups. A lookup also costs the
-	// retries the info client makes internally, so a confirmation takes longer than this
-	// interval alone: the client is built with the default retry policy, which backs off
-	// over about three seconds before it reports a job as missing.
+	// vanishedJobPollInterval paces the lookups made while a job is missing. A lookup also
+	// costs the retries the info client makes internally, so a confirmation takes longer
+	// than this interval alone: the client is built with the default retry policy, which
+	// backs off over about three seconds before it reports a job as missing.
 	vanishedJobPollInterval = 3 * time.Second
 
-	// abortStatusTimeout bounds the wait for an aborted job to stop running, and
-	// abortStatusPollInterval paces the status lookups made while waiting.
-	abortStatusTimeout      = 5 * time.Minute
-	abortStatusPollInterval = 5 * time.Second
-
-	// statePollInterval paces the status lookups of "snapshot-restore open" and
-	// "snapshot-restore clear-storage". The status is refreshed every 300 ms on the
-	// server, but both commands wait for a change that takes seconds at least.
+	// statePollInterval paces the status lookups made while a command waits for the
+	// state its request leads to. The status is refreshed every 300 ms on the server,
+	// but every such change takes seconds at least.
 	statePollInterval = 5 * time.Second
+
+	// statusGapLogEvery paces the reminders logged while a job is missing from the
+	// cluster status, so that a long wait can be followed in a debug log without a
+	// line per lookup.
+	statusGapLogEvery = 20
 )
+
+// errIncompleteJobWatch is returned by a jobWatch that was built without one of the
+// functions it cannot run without.
+var errIncompleteJobWatch = errors.New("job watch requires lookup, handle and missing")
 
 // progressMode says how long the watcher stays with a job, and how much it trusts the
 // cluster not reporting the job at all.
@@ -62,20 +67,22 @@ type progressMode int
 const (
 	// reportOnce logs the status the cluster reports now and returns.
 	reportOnce progressMode = iota + 1
-	// followJob keeps reporting a job named on the command line until the backup reaches
-	// a terminal state.
+	// followJob keeps reporting a job named on the command line until it reaches a
+	// terminal state.
 	followJob
 	// followStartedJob does the same for the job the cluster has just accepted, and is
 	// the only mode that waits for a job the status does not list yet.
 	followStartedJob
 )
 
-// startingJobPending reports whether a job the cluster has not listed yet is still worth
-// waiting for. Only the job the cluster has just handed out is: it exists, and the status
-// it is missing from is the one that has to catch up. A job named on the command line is
-// not, however many times it is looked up.
-func startingJobPending(mode progressMode, misses int) bool {
-	return mode == followStartedJob && misses < startedJobConfirmations
+// unseenLookups returns how many lookups a job the cluster has not reported yet is given
+// in mode, see startedJobConfirmations.
+func (m progressMode) unseenLookups() int {
+	if m == followStartedJob {
+		return startedJobConfirmations
+	}
+
+	return 1
 }
 
 // waitFor sleeps for d and returns the context error if the watch is canceled first.
@@ -101,86 +108,129 @@ const (
 	abortTooLate
 )
 
-// waitForAbort polls the state of an aborted job until it stops running, and reports how
-// it stopped. The cluster accepts an abort request before the job actually winds down, so
-// the abort is confirmed by the status that follows it.
+// jobWatch follows the status of a single job until the caller is satisfied with what it
+// reads, and decides what a job missing from the status means. Every command that sends
+// a request to the cluster and then waits for the state it leads to, and every command
+// that follows a job, goes through it, so that a job missing from the merged status is
+// treated the same way by all of them.
 //
-// The wait is bounded: a job that never reacts to the abort has to end the command instead
-// of being polled forever, and the deadline also cuts short a status request that is
-// already in flight. timeoutErr is what a job that kept reporting itself as running until
-// the wait ran out is reported as; poll returns the state it read along with its meaning,
-// so that the failure can name what the job was last doing.
-func (s *Service) waitForAbort(
-	ctx context.Context,
-	timeoutErr error,
-	poll func(ctx context.Context) (abortOutcome, string, error),
-) (abortOutcome, error) {
-	statusCtx, cancel := context.WithTimeout(ctx, s.abortTimeout)
-	defer cancel()
+// A lookup that does not find the job is a miss. A job that has never been reported is
+// given unseenLookups lookups to turn up; a job that was reported before has to be missed
+// several times in a row, see vanished. Either way, the lookups made while the job is
+// missing are paced by gapInterval, and once the misses run out the outcome is up to
+// missing.
+//
+// The wait is not bounded: a command that must not wait is run with --async, and one that
+// waits does so until the job reaches the state it waits for, the job is gone, or the
+// command is interrupted.
+type jobWatch[S any] struct {
+	logger *slog.Logger
+	// attrs name the job in the lines logged while it is missing.
+	attrs []any
+	// gapInterval paces the lookups made while the job is missing.
+	gapInterval time.Duration
+	// unseenLookups is how many lookups a job that has never been reported is given.
+	unseenLookups int
+
+	// lookup reads the status of the job. A job the cluster does not report comes back
+	// as an error that wraps asinfo.ErrNotFound; any other error ends the watch as it is.
+	lookup func(ctx context.Context) (S, error)
+	// handle is given every status that was read. It reports whether the watch is over
+	// and, when it is not, how long to wait before the next lookup.
+	handle func(ctx context.Context, status S) (done bool, next time.Duration, err error)
+	// vanished reports whether a job that was reported before, last as last, has been
+	// missing long enough to be accepted as gone. It defaults to vanishedJobConfirmations
+	// misses in a row.
+	vanished func(last S, misses int) bool
+	// missing decides how the watch ends once the job is accepted as missing. seen tells
+	// a job that was reported before from one that never was; last is the zero value in
+	// the latter case.
+	missing func(ctx context.Context, last S, seen bool) error
+	// describe names the state of a status in the lines logged while the job is missing.
+	// It is optional.
+	describe func(status S) string
+}
+
+// run follows the job until handle says the watch is over, the job is accepted as
+// missing, or ctx is done.
+func (w *jobWatch[S]) run(ctx context.Context) error {
+	if w.lookup == nil || w.handle == nil || w.missing == nil {
+		return errIncompleteJobWatch
+	}
+
+	var (
+		// last is the status read most recently, and seen says whether there is one.
+		last S
+		seen bool
+		// misses counts the lookups in a row that did not find the job.
+		misses int
+	)
 
 	for {
-		outcome, state, err := poll(statusCtx)
+		status, err := w.lookup(ctx)
 
-		// The terminal outcomes are named rather than taken as "anything but pending", so
-		// that an outcome no poll is supposed to return ends in the bounded wait running
-		// out instead of announcing a job that never stopped as stopped.
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			return 0, timeoutErr
+		case err != nil && !errors.Is(err, asinfo.ErrNotFound):
+			return err
 		case err != nil:
-			return 0, err
-		case outcome == abortStopped, outcome == abortTooLate:
-			return outcome, nil
-		}
+			misses++
 
-		// waitFor returns as soon as the command is canceled or the wait runs out, so
-		// the abort never keeps polling a job the caller stopped waiting for.
-		if err := waitFor(statusCtx, s.abortPollInterval); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return 0, fmt.Errorf("%w, last reported state %q", timeoutErr, state)
+			if w.gone(last, seen, misses) {
+				return w.missing(ctx, last, seen)
 			}
 
-			return 0, err
+			w.logStatusGap(last, seen, misses)
+
+			if err := waitFor(ctx, w.gapInterval); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		last, seen, misses = status, true, 0
+
+		done, next, err := w.handle(ctx, status)
+		if err != nil || done {
+			return err
+		}
+
+		if err := waitFor(ctx, next); err != nil {
+			return err
 		}
 	}
 }
 
-// waitForState polls until poll reports that the awaited state was reached. poll returns
-// the state it read along with whether it is the awaited one, so that a wait that runs
-// out can name what the job was last doing. A timeout of zero leaves the wait unbounded;
-// otherwise timeoutErr is what a wait that runs out is reported as, and the deadline
-// also cuts short a status request that is already in flight.
-func (s *Service) waitForState(
-	ctx context.Context,
-	timeout time.Duration,
-	timeoutErr error,
-	poll func(ctx context.Context) (bool, string, error),
-) error {
-	if timeout > 0 {
-		var cancel context.CancelFunc
+// gone reports whether a job missed by misses lookups in a row is to be accepted as
+// missing.
+func (w *jobWatch[S]) gone(last S, seen bool, misses int) bool {
+	switch {
+	case !seen:
+		return misses >= w.unseenLookups
+	case w.vanished != nil:
+		return w.vanished(last, misses)
+	default:
+		return misses >= vanishedJobConfirmations
+	}
+}
 
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+// logStatusGap reports a job that is temporarily missing from the cluster status. A gap
+// is a normal part of watching a job - the status is unavailable between stages, or
+// while a node is busy - so none of it reaches the user: both lines are logged on the
+// debug level, where a gap that outlives the routine confirmations says so, and is
+// repeated while it lasts.
+func (w *jobWatch[S]) logStatusGap(last S, seen bool, misses int) {
+	attrs := append(slices.Clone(w.attrs), slog.Int("attempt", misses))
+
+	if seen && w.describe != nil {
+		attrs = append(attrs, slog.String("last-state", w.describe(last)))
 	}
 
-	for {
-		done, state, err := poll(ctx)
+	if misses == vanishedJobConfirmations || misses%statusGapLogEvery == 0 {
+		w.logger.Debug("job status is unavailable, still waiting for the job", attrs...)
 
-		switch {
-		case timeout > 0 && errors.Is(err, context.DeadlineExceeded):
-			return timeoutErr
-		case err != nil:
-			return err
-		case done:
-			return nil
-		}
-
-		if err := waitFor(ctx, s.statePollInterval); err != nil {
-			if timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%w, last reported state %q", timeoutErr, state)
-			}
-
-			return err
-		}
+		return
 	}
+
+	w.logger.Debug("job status is temporarily unavailable", attrs...)
 }

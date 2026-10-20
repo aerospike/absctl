@@ -16,10 +16,10 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
+	"github.com/aerospike/backup-go/pkg/asinfo"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,9 +31,8 @@ const (
 	logAbortTooLate = "backup finished before it could be aborted"
 )
 
-// TestServiceAbortBackup covers the outcomes the abort reaches within a few polls. The
-// two that only time can produce - the bounded wait and a canceled command - are driven
-// separately below.
+// TestServiceAbortBackup covers the outcomes the abort reaches within a few polls. A
+// canceled command is driven separately below.
 //
 // The first status lookup is the pre-abort check, so every case that gets as far as
 // requesting the abort opens with a status that reports the job as running.
@@ -42,9 +41,11 @@ func TestServiceAbortBackup(t *testing.T) {
 
 	// runningStatus is the answer the pre-abort check needs to let the abort through.
 	runningStatus := statusAnswer{status: testStatus(infomodels.BackupStateBaseScanActive, 12)}
+	notFound := statusAnswer{err: asinfo.ErrNotFound}
 
 	tests := []struct {
 		name           string
+		async          bool
 		abortErr       error
 		answers        []statusAnswer
 		wantErr        error
@@ -77,12 +78,61 @@ func TestServiceAbortBackup(t *testing.T) {
 		},
 		{
 			// The cluster drops the state of a job that is no longer running, so a job
-			// that goes missing from the status after the abort has stopped too.
+			// that goes missing from the status after the abort has stopped too - once
+			// it was missed as many times as a just-started job is given to turn up.
 			name:           "confirms the abort for a job the cluster no longer reports",
 			answers:        []statusAnswer{runningStatus},
-			wantCalls:      2,
+			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
 			wantLogs:       []string{logAborted},
+		},
+		{
+			// A job reported while winding down has to be missed several times in a
+			// row before it is accepted as stopped, the same way "backup start" treats
+			// the job it follows.
+			name: "confirms the abort for a job that stopped reporting while winding down",
+			answers: append(
+				[]statusAnswer{runningStatus, {status: testStatus(infomodels.BackupStateAborting, 12)}},
+				repeatNotFound(vanishedJobConfirmations)...,
+			),
+			wantCalls:      2 + vanishedJobConfirmations,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborted},
+		},
+		{
+			// A single miss is a gap in the merged status, not a stopped job.
+			name: "waits through a job missing from the status for a moment",
+			answers: []statusAnswer{
+				runningStatus,
+				notFound,
+				{status: testStatus(infomodels.BackupStateAborting, 40)},
+				{status: testFinishedStatus(infomodels.BackupStateAborted, 40)},
+			},
+			wantCalls:      4,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborted},
+		},
+		{
+			// The same holds before the abort: a job a few lookups missed is still
+			// running on the other nodes, and still has to be aborted.
+			name: "aborts a job the pre-abort check missed a few times",
+			answers: append(
+				repeatNotFound(startedJobConfirmations-1),
+				runningStatus,
+				statusAnswer{status: testFinishedStatus(infomodels.BackupStateAborted, 12)},
+			),
+			wantCalls:      startedJobConfirmations + 1,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborting, logAborted},
+		},
+		{
+			name:           "returns as soon as the abort is accepted when async",
+			async:          true,
+			answers:        []statusAnswer{runningStatus},
+			wantCalls:      1,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logAborting},
+			notWantLogs:    []string{logAborted},
 		},
 		{
 			// The cluster keeps reporting the job while it winds down, so the state that
@@ -129,7 +179,7 @@ func TestServiceAbortBackup(t *testing.T) {
 			// complaining, so a job it does not report must not be asked to stop: the
 			// status right after such a request looks just like a job that was aborted.
 			name:           "does not abort a job the cluster does not report",
-			wantCalls:      1,
+			wantCalls:      startedJobConfirmations,
 			wantAbortCalls: 0,
 			wantLogs:       []string{msgNoRunningBackup},
 			notWantLogs:    []string{logAborting, logAborted},
@@ -139,7 +189,7 @@ func TestServiceAbortBackup(t *testing.T) {
 			// must not be read as a job to abort - the state of it would be dereferenced.
 			name:           "does not abort a job whose status comes back empty",
 			answers:        []statusAnswer{{}},
-			wantCalls:      1,
+			wantCalls:      startedJobConfirmations,
 			wantAbortCalls: 0,
 			wantLogs:       []string{msgNoRunningBackup},
 			notWantLogs:    []string{logAborting, logAborted},
@@ -149,7 +199,7 @@ func TestServiceAbortBackup(t *testing.T) {
 			// reported, which is what the cluster does to a job that stopped.
 			name:           "confirms the abort for a job whose status comes back empty",
 			answers:        []statusAnswer{runningStatus, {}},
-			wantCalls:      2,
+			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
 			wantLogs:       []string{logAborted},
 		},
@@ -206,6 +256,7 @@ func TestServiceAbortBackup(t *testing.T) {
 			t.Parallel()
 
 			svc, buf := newTestService(t)
+			svc.backupCfg.Abort.Async = tt.async
 			client := &fakeInfoClient{answers: tt.answers, abortErr: tt.abortErr}
 
 			err := svc.abortBackup(t.Context(), client)
@@ -235,62 +286,16 @@ func TestServiceAbortBackup(t *testing.T) {
 	}
 }
 
-// TestServiceAbortBackupTimesOut pins down the bound on the wait: a job that never reacts
-// to the abort has to end the command instead of being polled forever, and the failure
-// has to say so rather than claim the backup stopped.
-func TestServiceAbortBackupTimesOut(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-
-	client := &fakeInfoClient{
-		answers:    []statusAnswer{{status: testStatus(infomodels.BackupStateIncrScanActive, 80)}},
-		repeatLast: true,
-	}
-
-	err := svc.abortBackup(t.Context(), client)
-
-	require.ErrorIs(t, err, errAbortStatusTimeout)
-	// The last state the cluster reported belongs in the error: it is the only clue
-	// about what the job was still doing.
-	require.ErrorContains(t, err, infomodels.BackupStateIncrScanActive.Describe())
-	require.Greater(t, client.calls, 1, "the abort must keep polling until the wait runs out")
-	require.NotContains(t, buf.String(), logAborted)
-}
-
-// TestServiceAbortBackupStatusDeadline covers the wait running out while a status lookup
-// is in flight: the lookup comes back with the deadline instead of a state, and the
-// command has to report the wait it gave up on rather than pass a bare deadline on.
-func TestServiceAbortBackupStatusDeadline(t *testing.T) {
-	t.Parallel()
-
-	svc, buf := newTestService(t)
-
-	client := &fakeInfoClient{
-		answers: []statusAnswer{
-			{status: testStatus(infomodels.BackupStateIncrScanActive, 80)},
-			{err: fmt.Errorf("status request: %w", context.DeadlineExceeded)},
-		},
-	}
-
-	err := svc.abortBackup(t.Context(), client)
-
-	require.ErrorIs(t, err, errAbortStatusTimeout)
-	require.ErrorContains(t, err, testJobID)
-	assert.Equal(t, 2, client.calls, "the wait must end with the lookup that ran out of time")
-	assert.NotContains(t, buf.String(), logAborted)
-}
-
-// TestServiceAbortBackupCanceled makes sure a command the user interrupted is reported as
-// canceled and not as a timeout, and that the wait ends at once instead of sitting out the
-// poll interval.
+// TestServiceAbortBackupCanceled covers the only thing that ends the wait for a job that
+// keeps winding down: the wait is not bounded, so a command the user interrupted has to
+// end at once, as canceled, instead of sitting out the poll interval.
 func TestServiceAbortBackupCanceled(t *testing.T) {
 	t.Parallel()
 
 	svc, buf := newTestService(t)
 	// A poll interval longer than the test would tolerate: only the cancellation can
 	// end this wait.
-	svc.abortPollInterval = time.Minute
+	svc.statePollInterval = time.Minute
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -304,6 +309,5 @@ func TestServiceAbortBackupCanceled(t *testing.T) {
 	err := svc.abortBackup(ctx, client)
 
 	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, errAbortStatusTimeout)
 	assert.NotContains(t, buf.String(), logAborted)
 }

@@ -30,6 +30,7 @@ const (
 	testRestoreJobID     = "restore-job-1"
 	flagRestoreNamespace = "--namespace"
 	flagRestoreJobID     = "--job-id"
+	flagAsync            = "--async"
 )
 
 func TestServerRestore_NewFlagSet(t *testing.T) {
@@ -95,7 +96,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--parallel-read", testParallelRead,
 		"--apply-metadata-last",
 		"--incremental-path", testIncrementalPath,
-		"--async",
+		flagAsync,
 		"--extra-ttl", testExtraTTL,
 	}
 
@@ -313,7 +314,8 @@ func TestServerRestore_NewFlagSet_BackupIDRemoved(t *testing.T) {
 }
 
 // TestServerRestoreJob_NewFlagSet covers the commands that name a restore job and take a
-// single switch on top of it: --watch for progress, --async for open and clear-storage.
+// single switch on top of it: --watch for progress, --async for prepare, abort, open and
+// clear-storage.
 func TestServerRestoreJob_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
@@ -341,8 +343,30 @@ func TestServerRestoreJob_NewFlagSet(t *testing.T) {
 			},
 		},
 		{
+			name:       "prepare",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestorePrepare()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestorePrepare()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+		{
+			name:       "abort",
+			toggleFlag: flagAsync,
+			parse: func(args []string) (jobFlags, error) {
+				f := NewServerRestoreAbort()
+				err := f.NewFlagSet().Parse(args)
+				m := f.GetServerRestoreAbort()
+
+				return jobFlags{namespace: m.Namespace, jobID: m.JobID, toggle: m.Async}, err
+			},
+		},
+		{
 			name:       "open",
-			toggleFlag: "--async",
+			toggleFlag: flagAsync,
 			parse: func(args []string) (jobFlags, error) {
 				f := NewServerRestoreOpen()
 				err := f.NewFlagSet().Parse(args)
@@ -353,7 +377,7 @@ func TestServerRestoreJob_NewFlagSet(t *testing.T) {
 		},
 		{
 			name:       "clear storage",
-			toggleFlag: "--async",
+			toggleFlag: flagAsync,
 			parse: func(args []string) (jobFlags, error) {
 				f := NewServerRestoreClearStorage()
 				err := f.NewFlagSet().Parse(args)
