@@ -20,6 +20,8 @@ import (
 	"math"
 	"slices"
 	"strings"
+
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
 // Limits of the restore settings, as enforced by the server.
@@ -54,11 +56,13 @@ type ServerRestore struct {
 	// the first one, were written under, when it differs from Path.
 	IncrementalPath string
 	SetList         string
-	// FilterExp is a base64-encoded filter expression. Cold restore only.
-	FilterExp    string
-	NoIndexes    bool
-	NoUDFs       bool
-	FuzzyRestore bool
+	// FilterExp is a base64-encoded filter expression. Strict policy only.
+	FilterExp string
+	NoIndexes bool
+	NoUDFs    bool
+	// Policy selects the restore mode: strict, the cold partition hydration, or fuzzy,
+	// writes into the live namespace. Empty leaves it to the server default, strict.
+	Policy string
 	// Async returns from the start command as soon as the cluster accepts the job,
 	// instead of following the restore until it ends.
 	Async bool
@@ -196,16 +200,30 @@ func (s *ServerRestore) validateBackupIDs() error {
 	return nil
 }
 
-// validateRestoreMode checks the settings that depend on the restore mode. The server
-// ignores the fuzzy restore settings of a cold restore, so a value changed from its
-// default without fuzzy-restore is rejected rather than silently dropped.
+// validateRestoreMode checks the policy and the settings that depend on it. The server
+// rejects the fuzzy restore settings of a strict restore, so a value changed from its
+// default without the fuzzy policy fails the command before the cluster is reached.
 func (s *ServerRestore) validateRestoreMode() error {
-	if !s.FuzzyRestore {
+	switch infomodels.RestorePolicy(s.Policy) {
+	case "", infomodels.RestorePolicyStrict:
 		return s.validateColdRestore()
+	case infomodels.RestorePolicyFuzzy:
+		return s.validateFuzzyRestore()
+	default:
+		return fmt.Errorf("policy must be %s or %s, got %q",
+			infomodels.RestorePolicyStrict, infomodels.RestorePolicyFuzzy, s.Policy)
+	}
+}
+
+// validateFuzzyRestore checks the settings of a restore with the fuzzy policy.
+func (s *ServerRestore) validateFuzzyRestore() error {
+	if s.FilterExp != "" {
+		return fmt.Errorf("filter-exp is not supported with policy %s", infomodels.RestorePolicyFuzzy)
 	}
 
-	if s.FilterExp != "" {
-		return fmt.Errorf("filter-exp is not supported with fuzzy-restore")
+	if ids := s.BackupIDList(); len(ids) > 1 {
+		return fmt.Errorf("policy %s restores a single backup, got %d backup ids",
+			infomodels.RestorePolicyFuzzy, len(ids))
 	}
 
 	switch {
@@ -227,7 +245,7 @@ func (s *ServerRestore) validateRestoreMode() error {
 	return nil
 }
 
-// validateColdRestore rejects the fuzzy restore settings changed from their defaults.
+// validateColdRestore rejects the fuzzy policy settings changed from their defaults.
 // A value passed explicitly but equal to its default cannot be told apart from an unset
 // one, and is accepted.
 func (s *ServerRestore) validateColdRestore() error {
@@ -246,7 +264,7 @@ func (s *ServerRestore) validateColdRestore() error {
 
 	for _, f := range fuzzyOnly {
 		if f.set {
-			return fmt.Errorf("%s requires fuzzy-restore", f.name)
+			return fmt.Errorf("%s requires policy %s", f.name, infomodels.RestorePolicyFuzzy)
 		}
 	}
 

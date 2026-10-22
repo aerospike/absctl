@@ -22,6 +22,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/config/dto"
 	"github.com/aerospike/absctl/internal/models"
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +95,7 @@ backup:
     - bin2
   filter-exp: kwGTUQKkYmluMQE=
   no-indexes: true
+  policy: best-effort
   async: true
 list:
   path: some/prefix
@@ -126,14 +128,13 @@ restore:
   object-storage-type: aws-s3
   backup-ids:
     - bkp-1
-    - bkp-2
   job-id: rst-1
   path: some/prefix
   set-list:
     - set1
   no-indexes: true
   no-udfs: true
-  fuzzy-restore: true
+  policy: fuzzy
   allow-unhosted: true
   parallel-write: 16
   parallel-read: 4
@@ -143,7 +144,6 @@ restore:
   retry-multiplier: 1.5
   retry-max-attempts: 3
   ignore-record-error: true
-  incremental-path: incr/prefix
   async: true
   extra-ttl: 3600
 prepare:
@@ -511,6 +511,7 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Equal(t, "bin1,bin2", cfg.Start.BinList)
 				assert.Equal(t, "kwGTUQKkYmluMQE=", cfg.Start.FilterExp)
 				assert.True(t, cfg.Start.NoIndexes)
+				assert.Equal(t, string(infomodels.BackupPolicyBestEffort), cfg.Start.Policy)
 				assert.True(t, cfg.Start.Async)
 			},
 		},
@@ -701,14 +702,13 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
-				// The YAML carries a sequence, the model a comma separated list.
-				assert.Equal(t, "bkp-1,bkp-2", cfg.Start.BackupIDs)
+				assert.Equal(t, testServerBackupID, cfg.Start.BackupIDs)
 				assert.Equal(t, testServerRestoreJobID, cfg.Start.JobID)
 				assert.Equal(t, "some/prefix", cfg.Start.Path)
 				assert.Equal(t, "set1", cfg.Start.SetList)
 				assert.True(t, cfg.Start.NoIndexes)
 				assert.True(t, cfg.Start.NoUDFs)
-				assert.True(t, cfg.Start.FuzzyRestore)
+				assert.Equal(t, string(infomodels.RestorePolicyFuzzy), cfg.Start.Policy)
 				assert.True(t, cfg.Start.AllowUnhosted)
 				assert.Equal(t, 16, cfg.Start.ParallelWrite)
 				assert.Equal(t, 4, cfg.Start.ParallelRead)
@@ -718,7 +718,6 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.InDelta(t, 1.5, cfg.Start.RetryMultiplier, 0)
 				assert.Equal(t, 3, cfg.Start.RetryMaxAttempts)
 				assert.True(t, cfg.Start.IgnoreRecordError)
-				assert.Equal(t, "incr/prefix", cfg.Start.IncrementalPath)
 				assert.True(t, cfg.Start.Async)
 				assert.Equal(t, 3600, cfg.Start.ExtraTTL)
 			},

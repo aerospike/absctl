@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
 // Limits of the backup job settings, as enforced by the server. Zero leaves a setting
@@ -44,6 +46,9 @@ type ServerBackup struct {
 	FilterExp string
 	NoIndexes bool
 	NoUDFs    bool
+	// Policy is how consistent the backup must be: strict, best-effort or fuzzy. Empty
+	// leaves it to the server default.
+	Policy string
 	// Async returns from the start command as soon as the cluster accepts the job,
 	// instead of following the backup until it ends.
 	Async bool
@@ -96,11 +101,30 @@ func (s *ServerBackup) Validate() error {
 		return err
 	}
 
+	if err := s.validatePolicy(); err != nil {
+		return err
+	}
+
 	if err := s.validateJobSettings(); err != nil {
 		return err
 	}
 
 	return s.ServerCommon.Validate()
+}
+
+// validatePolicy checks that the policy, when set, is one the server accepts.
+func (s *ServerBackup) validatePolicy() error {
+	switch infomodels.BackupPolicy(s.Policy) {
+	case "",
+		infomodels.BackupPolicyStrict,
+		infomodels.BackupPolicyBestEffort,
+		infomodels.BackupPolicyFuzzy:
+		return nil
+	default:
+		return fmt.Errorf("policy must be %s, %s or %s, got %q",
+			infomodels.BackupPolicyStrict, infomodels.BackupPolicyBestEffort,
+			infomodels.BackupPolicyFuzzy, s.Policy)
+	}
 }
 
 // validateJobSettings checks the limits of the backup job settings, so that a value the

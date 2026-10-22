@@ -180,6 +180,7 @@ const (
 	DefaultServerBackupParallelRead       = 8
 	DefaultServerBackupParallelWrite      = 8
 	DefaultServerBackupS3Throughput       = 0
+	DefaultServerBackupPolicy             = ""
 )
 
 // Server-backup common.
@@ -216,7 +217,7 @@ const (
 	// Server-specific restore. The values match the defaults of the server.
 
 	DefaultServerRestoreJobID             = ""
-	DefaultServerRestoreFuzzyRestore      = false
+	DefaultServerRestorePolicy            = ""
 	DefaultServerRestoreAllowUnhosted     = false
 	DefaultServerRestoreParallelWrite     = 8
 	DefaultServerRestoreRecordsPerSecond  = 0

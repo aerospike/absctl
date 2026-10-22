@@ -138,18 +138,19 @@ func (s *Service) restoreRequest() *infomodels.RequestRestore {
 		RestoreDownloadThreads: start.ParallelRead,
 		RestoreRPS:             start.RecordsPerSecond,
 		ExtraTTL:               start.ExtraTTL,
+		Policy:                 infomodels.RestorePolicy(start.Policy),
 	}
 
-	if start.FuzzyRestore {
-		req.Fuzzy = &infomodels.RequestFuzzyRestore{
-			AllowUnhosted:       new(start.AllowUnhosted),
-			MaxInflight:         start.MaxInflight,
-			RetryBaseIntervalMs: new(start.RetryBaseInterval),
-			RetryMultiplier:     start.RetryMultiplier,
-			RetryMaxAttempts:    start.RetryMaxAttempts,
-			IgnoreRecordError:   new(start.IgnoreRecordError),
-			ApplyMetadataLast:   applyMetadataLast(start.ApplyMetadataLast),
-		}
+	// The server refuses the fuzzy only settings, whatever their values, with any other
+	// policy, so they are sent with the fuzzy policy only.
+	if req.Policy == infomodels.RestorePolicyFuzzy {
+		req.AllowUnhosted = new(start.AllowUnhosted)
+		req.MaxInflight = start.MaxInflight
+		req.RetryBaseIntervalMs = new(start.RetryBaseInterval)
+		req.RetryMultiplier = start.RetryMultiplier
+		req.RetryMaxAttempts = start.RetryMaxAttempts
+		req.IgnoreRecordError = new(start.IgnoreRecordError)
+		req.ApplyMetadataLast = applyMetadataLast(start.ApplyMetadataLast)
 	}
 
 	return req

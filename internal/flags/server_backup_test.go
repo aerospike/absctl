@@ -93,10 +93,36 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+	assert.Equal(t, models.DefaultServerBackupPolicy, result.Policy)
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
 	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
 	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
 	assert.Equal(t, models.DefaultServerBackupS3Throughput, result.S3Throughput)
+}
+
+func TestServerBackup_NewFlagSet_Policy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		givePolicy string
+	}{
+		{givePolicy: "strict"},
+		{givePolicy: "best-effort"},
+		{givePolicy: "fuzzy"},
+		// The flag carries any value, the model validates it.
+		{givePolicy: "eventual"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.givePolicy, func(t *testing.T) {
+			t.Parallel()
+
+			backup := NewServerBackup()
+			require.NoError(t, backup.NewFlagSet().Parse([]string{"--policy", tt.givePolicy}))
+
+			assert.Equal(t, tt.givePolicy, backup.GetServerBackup().Policy)
+		})
+	}
 }
 
 func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {

@@ -42,9 +42,9 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		"Comma separated list of the ids of the backups to restore from.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the restore job. A cold restore must use the job id passed to\n"+
-			"the restore preparation. If empty, the id of the single backup being\n"+
-			"restored is used, so it is required when several backup ids are given.")
+		"Id of the restore job. A strict (cold) restore must use the job id\n"+
+			"passed to the restore preparation. If empty, the id of the single backup\n"+
+			"being restored is used, so it is required when several backup ids are given.")
 	flagSet.StringVar(&f.Path, "path",
 		models.DefaultServerBackupPath,
 		"Key prefix in the bucket the backup was written under.")
@@ -58,7 +58,7 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		descSetListRestore)
 	flagSet.StringVar(&f.FilterExp, "filter-exp",
 		models.DefaultServerFilterExp,
-		"Base64 encoded filter expression. Cold restore only.")
+		"Base64 encoded filter expression. Strict policy only.")
 	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "I",
 		models.DefaultCommonNoIndexes,
 		descNoIndexesRestore)
@@ -83,10 +83,14 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		models.DefaultServerRestoreExtraTTL,
 		"Seconds to add to the expiry of every restored record that expires,\n"+
 			"from 0 to 315360000 (10 years). Records that never expire are unchanged.")
-	flagSet.BoolVar(&f.FuzzyRestore, "fuzzy-restore",
-		models.DefaultServerRestoreFuzzyRestore,
-		"Restore by writing records into the live namespace instead of\n"+
-			"the cold partition hydration. The flags below apply to a fuzzy restore only.")
+	flagSet.StringVar(&f.Policy, "policy",
+		models.DefaultServerRestorePolicy,
+		"Restore policy: strict or fuzzy. strict, the cold restore, hydrates the\n"+
+			"partitions of a prepared namespace from strict backups only. fuzzy\n"+
+			"writes the records of a single backup of any consistency into the\n"+
+			"live namespace.\n"+
+			"If empty, the server default is used, which is strict.\n"+
+			"The flags below apply to the fuzzy policy only.")
 	flagSet.BoolVar(&f.AllowUnhosted, "allow-unhosted",
 		models.DefaultServerRestoreAllowUnhosted,
 		"Allow the restore even if the principal does not host the namespace.")

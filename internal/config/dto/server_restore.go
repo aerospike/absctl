@@ -89,7 +89,7 @@ type ServerRestoreConfig struct {
 	ParallelWrite     *int     `yaml:"parallel-write"`
 	RecordsPerSecond  *int     `yaml:"records-per-second"`
 	ExtraTTL          *int     `yaml:"extra-ttl"`
-	FuzzyRestore      *bool    `yaml:"fuzzy-restore"`
+	Policy            *string  `yaml:"policy"`
 	AllowUnhosted     *bool    `yaml:"allow-unhosted"`
 	MaxInflight       *int     `yaml:"max-inflight"`
 	RetryBaseInterval *int     `yaml:"retry-base-interval"`
@@ -116,7 +116,7 @@ func defaultServerRestoreConfig() ServerRestoreConfig {
 		ParallelWrite:     new(models.DefaultServerRestoreParallelWrite),
 		RecordsPerSecond:  new(models.DefaultServerRestoreRecordsPerSecond),
 		ExtraTTL:          new(models.DefaultServerRestoreExtraTTL),
-		FuzzyRestore:      new(models.DefaultServerRestoreFuzzyRestore),
+		Policy:            new(models.DefaultServerRestorePolicy),
 		AllowUnhosted:     new(models.DefaultServerRestoreAllowUnhosted),
 		MaxInflight:       new(models.DefaultServerRestoreMaxInflight),
 		RetryBaseInterval: new(models.DefaultServerRestoreRetryBaseInterval),
@@ -149,7 +149,7 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 		ParallelWrite:     derefOr(r.Restore.ParallelWrite, models.DefaultServerRestoreParallelWrite),
 		RecordsPerSecond:  derefInt(r.Restore.RecordsPerSecond),
 		ExtraTTL:          derefInt(r.Restore.ExtraTTL),
-		FuzzyRestore:      derefBool(r.Restore.FuzzyRestore),
+		Policy:            derefString(r.Restore.Policy),
 		AllowUnhosted:     derefBool(r.Restore.AllowUnhosted),
 		MaxInflight:       derefOr(r.Restore.MaxInflight, models.DefaultServerRestoreMaxInflight),
 		RetryBaseInterval: derefOr(r.Restore.RetryBaseInterval, models.DefaultServerRestoreRetryBaseInterval),

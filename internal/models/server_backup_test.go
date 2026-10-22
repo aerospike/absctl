@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,7 @@ const (
 	testServerPath         = "backups/daily"
 	testParentPath         = "backups/../other"
 	errMsgParentPath       = `invalid path "backups/../other": must not contain '..'`
+	testUnknownPolicy      = "eventual"
 )
 
 func validServerBackup() *ServerBackup {
@@ -296,6 +298,55 @@ func TestServerBackup_Validate(t *testing.T) {
 				if tt.wantErrMsg != "" {
 					assert.Contains(t, err.Error(), tt.wantErrMsg)
 				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerBackup_ValidatePolicy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testUpperCasePolicy = "STRICT"
+		// errMsgBackupPolicy is the common part of the unknown backup policy errors.
+		errMsgBackupPolicy = `policy must be strict, best-effort or fuzzy, got "`
+	)
+
+	tests := []struct {
+		name       string
+		givePolicy string
+		wantErrMsg string
+	}{
+		{name: "empty uses the server default"},
+		{name: "strict", givePolicy: string(infomodels.BackupPolicyStrict)},
+		{name: "best effort", givePolicy: string(infomodels.BackupPolicyBestEffort)},
+		{name: "fuzzy", givePolicy: string(infomodels.BackupPolicyFuzzy)},
+		{
+			name:       "unknown",
+			givePolicy: testUnknownPolicy,
+			wantErrMsg: errMsgBackupPolicy + testUnknownPolicy,
+		},
+		{
+			// Policies are matched exactly, as the server does.
+			name:       "upper case",
+			givePolicy: testUpperCasePolicy,
+			wantErrMsg: errMsgBackupPolicy + testUpperCasePolicy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			backup := validServerBackup()
+			backup.Policy = tt.givePolicy
+
+			err := backup.Validate()
+
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
 				return
 			}
 			require.NoError(t, err)

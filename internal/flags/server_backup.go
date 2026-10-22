@@ -80,6 +80,13 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
 		models.DefaultCommonNoUDFs,
 		"Exclude user-defined functions from the backup.")
+	flagSet.StringVar(&f.Policy, "policy",
+		models.DefaultServerBackupPolicy,
+		"Backup policy: strict, best-effort or fuzzy. strict aborts the backup\n"+
+			"on any failure. best-effort commits the backup as fuzzy instead of\n"+
+			"aborting it on a failure after the base scan is durable cluster-wide.\n"+
+			"fuzzy runs the base scan only, without the change stream.\n"+
+			"If empty, the server default is used.")
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerBackupAsync,
 		"Return as soon as the cluster accepts the backup, without\n"+

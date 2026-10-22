@@ -50,6 +50,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		testParallelRead      = "32"
 		testIncrementalPath   = "backups/incr"
 		testExtraTTL          = "3600"
+		testPolicy            = "fuzzy"
 	)
 
 	want := &models.ServerRestore{
@@ -62,7 +63,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		FilterExp:         testFilterExp,
 		NoIndexes:         true,
 		NoUDFs:            true,
-		FuzzyRestore:      true,
+		Policy:            testPolicy,
 		AllowUnhosted:     true,
 		ParallelWrite:     16,
 		RecordsPerSecond:  1000,
@@ -86,7 +87,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--path", testPath,
 		"--filter-exp", testFilterExp,
 		"--no-udfs",
-		"--fuzzy-restore",
+		"--policy", testPolicy,
 		"--allow-unhosted",
 		"--max-inflight", testMaxInflight,
 		"--retry-base-interval", testRetryBaseInterval,
@@ -158,7 +159,7 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, result.FilterExp)
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
-	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, result.FuzzyRestore)
+	assert.Equal(t, models.DefaultServerRestorePolicy, result.Policy)
 	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, result.AllowUnhosted)
 	assert.Equal(t, models.DefaultServerRestoreParallelWrite, result.ParallelWrite)
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, result.RecordsPerSecond)

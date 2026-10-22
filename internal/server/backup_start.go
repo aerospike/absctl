@@ -119,6 +119,7 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 		BinList:        start.BinList,
 		ModifiedAfter:  ma,
 		ModifiedBefore: mb,
+		Policy:         infomodels.BackupPolicy(start.Policy),
 
 		BackupRPS:                    start.RecordsPerSecond,
 		BackupWorkerThreads:          start.ParallelRead,
