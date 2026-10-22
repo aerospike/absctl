@@ -83,7 +83,7 @@ Restore Flags:
                                      Requires more than one backup id.
   -s, --set-list string              Only restore the given sets from the backup.
                                      Default: restore all sets.
-      --filter-exp string            Base64 encoded filter expression. Cold restore only.
+      --filter-exp string            Base64 encoded filter expression. Strict policy only.
   -I, --no-indexes                   Don't restore any secondary indexes.
       --no-udfs                      Don't restore any UDFs.
       --async                        Return as soon as the cluster accepts the restore, without
@@ -94,8 +94,11 @@ Restore Flags:
   -L, --records-per-second int       Limit the records per second each node writes. If 0, no limit is applied.
       --extra-ttl int                Seconds to add to the expiry of every restored record that expires,
                                      from 0 to 315360000 (10 years). Records that never expire are unchanged.
-      --fuzzy-restore                Restore by writing records into the live namespace instead of
-                                     the cold partition hydration. The flags below apply to a fuzzy restore only.
+      --policy string                Restore policy: strict or fuzzy. strict hydrates the partitions of a
+                                     prepared namespace from strict backups only. fuzzy writes the records
+                                     of a single backup of any consistency into the live namespace.
+                                     If empty, the server default is used, which is strict.
+                                     The flags below apply to the fuzzy policy only.
       --allow-unhosted               Allow the restore even if the principal does not host the namespace.
       --max-inflight int             Maximum number of concurrent writes, up to 100000. (default 200)
       --retry-base-interval int      Base delay before a retry (in ms). 0 retries without a delay. (default 1000)
@@ -673,7 +676,7 @@ restore:
   # Only restore the given sets from the backup.
   # Default: restore all sets.
   set-list: []
-  # Base64 encoded filter expression. Cold restore only.
+  # Base64 encoded filter expression. Strict policy only.
   filter-exp: ""
   # Don't restore any secondary indexes.
   no-indexes: false
@@ -692,9 +695,12 @@ restore:
   # Seconds to add to the expiry of every restored record that expires,
   # from 0 to 315360000 (10 years). Records that never expire are unchanged.
   extra-ttl: 0
-  # Restore by writing records into the live namespace instead of
-  # the cold partition hydration. The flags below apply to a fuzzy restore only.
-  fuzzy-restore: false
+  # Restore policy: strict or fuzzy. strict hydrates the partitions of a
+  # prepared namespace from strict backups only. fuzzy writes the records
+  # of a single backup of any consistency into the live namespace.
+  # If empty, the server default is used, which is strict.
+  # The flags below apply to the fuzzy policy only.
+  policy: ""
   # Allow the restore even if the principal does not host the namespace.
   allow-unhosted: false
   # Maximum number of concurrent writes, up to 100000.

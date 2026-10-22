@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,11 @@ const (
 	// testServerBackupIDs is the list form a multi-backup restore is given.
 	testServerBackupIDs = testServerJobID + "," + testServerSecondJobID
 	errMsgJobIDRequired = "job-id is required"
-	errMsgRequiresFuzzy = "requires fuzzy-restore"
+	errMsgRequiresFuzzy = "requires policy fuzzy"
+	// errMsgAllowUnhostedRequiresFuzzy is reported for allow-unhosted without the fuzzy policy.
+	errMsgAllowUnhostedRequiresFuzzy = "allow-unhosted " + errMsgRequiresFuzzy
+	// errMsgRestorePolicy is the common part of the unknown restore policy errors.
+	errMsgRestorePolicy = `policy must be strict or fuzzy, got "`
 	// errMsgParallelRead is the common part of the parallel read range errors.
 	errMsgParallelRead = "parallel-read must be between 1 and 128, got "
 )
@@ -54,7 +59,7 @@ func validServerRestore() *ServerRestore {
 
 func validServerFuzzyRestore() *ServerRestore {
 	restore := validServerRestore()
-	restore.FuzzyRestore = true
+	restore.Policy = string(infomodels.RestorePolicyFuzzy)
 
 	return restore
 }
@@ -225,7 +230,57 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 				restore.FilterExp = testServerFilterExp
 				return restore
 			},
-			wantErrMsg: "filter-exp is not supported with fuzzy-restore",
+			wantErrMsg: "filter-exp is not supported with policy fuzzy",
+		},
+		{
+			name: "several backup ids with fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerBackupIDs
+				return restore
+			},
+			wantErrMsg: "policy fuzzy restores a single backup, got 2 backup ids",
+		},
+		{
+			name: "valid strict restore with several backup ids and filter expression",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = string(infomodels.RestorePolicyStrict)
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerBackupIDs
+				restore.FilterExp = testServerFilterExp
+				return restore
+			},
+		},
+		{
+			name: "allow unhosted with strict policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = string(infomodels.RestorePolicyStrict)
+				restore.AllowUnhosted = true
+				return restore
+			},
+			wantErrMsg: errMsgAllowUnhostedRequiresFuzzy,
+		},
+		{
+			name: "unknown policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = testUnknownPolicy
+				return restore
+			},
+			wantErrMsg: errMsgRestorePolicy + testUnknownPolicy + `"`,
+		},
+		{
+			// The backup policy best-effort is not a restore policy.
+			name: "backup only policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = string(infomodels.BackupPolicyBestEffort)
+				return restore
+			},
+			wantErrMsg: errMsgRestorePolicy + string(infomodels.BackupPolicyBestEffort),
 		},
 		{
 			name: "parallel write below range",
@@ -338,13 +393,13 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "retry-max-attempts must be positive",
 		},
 		{
-			name: "allow unhosted without fuzzy restore",
+			name: "allow unhosted without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.AllowUnhosted = true
 				return restore
 			},
-			wantErrMsg: "allow-unhosted " + errMsgRequiresFuzzy,
+			wantErrMsg: errMsgAllowUnhostedRequiresFuzzy,
 		},
 		{
 			// The worker threads and the rate limit apply to both kinds of restore.
@@ -433,7 +488,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: errMsgParentPath,
 		},
 		{
-			name: "apply metadata last without fuzzy restore",
+			name: "apply metadata last without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.ApplyMetadataLast = true
@@ -442,7 +497,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "apply-metadata-last " + errMsgRequiresFuzzy,
 		},
 		{
-			name: "max inflight without fuzzy restore",
+			name: "max inflight without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.MaxInflight = 100
@@ -451,7 +506,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "max-inflight " + errMsgRequiresFuzzy,
 		},
 		{
-			name: "retry base interval without fuzzy restore",
+			name: "retry base interval without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.RetryBaseInterval = 100
@@ -460,7 +515,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "retry-base-interval " + errMsgRequiresFuzzy,
 		},
 		{
-			name: "retry multiplier without fuzzy restore",
+			name: "retry multiplier without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.RetryMultiplier = 2
@@ -469,7 +524,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "retry-multiplier " + errMsgRequiresFuzzy,
 		},
 		{
-			name: "retry max attempts without fuzzy restore",
+			name: "retry max attempts without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.RetryMaxAttempts = 1
@@ -478,7 +533,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: "retry-max-attempts " + errMsgRequiresFuzzy,
 		},
 		{
-			name: "ignore record error without fuzzy restore",
+			name: "ignore record error without fuzzy policy",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
 				restore.IgnoreRecordError = true

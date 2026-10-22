@@ -81,6 +81,7 @@ type ServerBackupConfig struct {
 	FilterExp      *string  `yaml:"filter-exp"`
 	NoIndexes      *bool    `yaml:"no-indexes"`
 	NoUDFs         *bool    `yaml:"no-udfs"`
+	Policy         *string  `yaml:"policy"`
 	Async          *bool    `yaml:"async"`
 
 	RecordsPerSecond *int `yaml:"records-per-second"`
@@ -101,6 +102,7 @@ func defaultServerBackupConfig() ServerBackupConfig {
 		FilterExp:        new(models.DefaultServerFilterExp),
 		NoIndexes:        new(models.DefaultCommonNoIndexes),
 		NoUDFs:           new(models.DefaultCommonNoUDFs),
+		Policy:           new(models.DefaultServerBackupPolicy),
 		Async:            new(models.DefaultServerBackupAsync),
 		RecordsPerSecond: new(models.DefaultServerBackupRecordsPerSecond),
 		ParallelRead:     new(models.DefaultServerBackupParallelRead),
@@ -126,6 +128,7 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		FilterExp:      derefString(b.Backup.FilterExp),
 		NoIndexes:      derefBool(b.Backup.NoIndexes),
 		NoUDFs:         derefBool(b.Backup.NoUDFs),
+		Policy:         derefString(b.Backup.Policy),
 		Async:          derefBool(b.Backup.Async),
 
 		RecordsPerSecond: derefInt(b.Backup.RecordsPerSecond),

@@ -93,6 +93,11 @@ Backup Flags:
                                      tombstones are always backed up.
   -I, --no-indexes                   Exclude indexes from the backup.
   -u, --no-udfs                      Exclude user-defined functions from the backup.
+      --policy string                Backup policy: strict, best-effort or fuzzy. strict aborts the backup
+                                     on any failure. best-effort commits the backup as fuzzy instead of
+                                     aborting it on a failure after the base scan is durable cluster-wide.
+                                     fuzzy runs the base scan only, without the change stream.
+                                     If empty, the server default is used.
       --async                        Return as soon as the cluster accepts the backup, without
                                      following its progress. Use the progress command to follow
                                      the backup later.
@@ -559,6 +564,12 @@ backup:
   no-indexes: false
   # Exclude user-defined functions from the backup.
   no-udfs: false
+  # Backup policy: strict, best-effort or fuzzy. strict aborts the backup
+  # on any failure. best-effort commits the backup as fuzzy instead of
+  # aborting it on a failure after the base scan is durable cluster-wide.
+  # fuzzy runs the base scan only, without the change stream.
+  # If empty, the server default is used.
+  policy: ""
   # Return as soon as the cluster accepts the backup, without
   # following its progress. Use the progress command to follow
   # the backup later.

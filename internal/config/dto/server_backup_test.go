@@ -49,6 +49,7 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, derefString(backup.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
+	assert.Equal(t, models.DefaultServerBackupPolicy, derefString(backup.Policy))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
 	assert.Equal(t, models.DefaultServerBackupParallelRead, derefInt(backup.ParallelRead))
@@ -93,6 +94,7 @@ func TestServerBackupToModels(t *testing.T) {
 	parallelRead := 8
 	parallelWrite := 4
 	s3Throughput := 10
+	policy := "best-effort"
 
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
@@ -106,6 +108,7 @@ func TestServerBackupToModels(t *testing.T) {
 			FilterExp:      &filterExp,
 			NoIndexes:      &noIndexes,
 			NoUDFs:         &noUDFs,
+			Policy:         &policy,
 			Async:          &async,
 
 			RecordsPerSecond: &recordsPerSecond,
@@ -133,6 +136,7 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.True(t, start.NoIndexes)
 	assert.True(t, start.NoUDFs)
 	assert.True(t, start.Async)
+	assert.Equal(t, policy, start.Policy)
 	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
 	assert.Equal(t, parallelRead, start.ParallelRead)
 	assert.Equal(t, parallelWrite, start.ParallelWrite)

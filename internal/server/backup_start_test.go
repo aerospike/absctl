@@ -70,6 +70,7 @@ func TestServiceBackupRequest(t *testing.T) {
 				FilterExp:     testRequestFilterExp,
 				NoIndexes:     true,
 				NoUDFs:        true,
+				Policy:        string(infomodels.BackupPolicyBestEffort),
 
 				RecordsPerSecond: testBackupRPS,
 				ParallelRead:     testParallelRead,
@@ -88,11 +89,40 @@ func TestServiceBackupRequest(t *testing.T) {
 					RequestCommon: common,
 					BinList:       testRequestBinList,
 					ModifiedAfter: strconv.FormatInt(modifiedAfter.Unix(), 10),
+					Policy:        infomodels.BackupPolicyBestEffort,
 
 					BackupRPS:                    testBackupRPS,
 					BackupWorkerThreads:          testParallelRead,
 					BackupUploadThreads:          testParallelWrite,
 					BackupS3ThroughputTargetGbps: testS3Throughput,
+				}
+			},
+		},
+		{
+			name: "strict policy",
+			give: &models.ServerBackup{
+				Namespace:   testRequestNamespace,
+				StorageType: testRequestStorage,
+				Policy:      string(infomodels.BackupPolicyStrict),
+			},
+			want: func() *infomodels.RequestBackup {
+				return &infomodels.RequestBackup{
+					RequestCommon: testRequestCommon(),
+					Policy:        infomodels.BackupPolicyStrict,
+				}
+			},
+		},
+		{
+			name: "fuzzy policy",
+			give: &models.ServerBackup{
+				Namespace:   testRequestNamespace,
+				StorageType: testRequestStorage,
+				Policy:      string(infomodels.BackupPolicyFuzzy),
+			},
+			want: func() *infomodels.RequestBackup {
+				return &infomodels.RequestBackup{
+					RequestCommon: testRequestCommon(),
+					Policy:        infomodels.BackupPolicyFuzzy,
 				}
 			},
 		},
