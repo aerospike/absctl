@@ -25,7 +25,7 @@ import (
 
 const (
 	testServerRestoreJobID = "restore-job-1"
-	testServerSecondJobID  = "backup-job-2"
+	testServerSecondJobID  = "261025T130000-cd34"
 	// testServerBackupIDs is the list form a multi-backup restore is given.
 	testServerBackupIDs = testServerJobID + "," + testServerSecondJobID
 	errMsgJobIDRequired = "job-id is required"
@@ -629,6 +629,17 @@ func TestServerRestore_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "backup-ids must not contain an empty id",
+		},
+		{
+			name: "backup id of another form in the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.JobID = testServerRestoreJobID
+				restore.BackupIDs = testServerJobID + "," + testNotBackupID
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
 		},
 		{
 			name: "trailing separator in the backup id list",

@@ -63,8 +63,9 @@ const (
 	testRequestEndpoint  = "http://127.0.0.1:9000"
 	testRequestSetList   = "set1,set2"
 	testRequestFilterExp = "kwGTUQKkYmluMQE="
-	testRequestBackupID  = "bkp-1"
-	testRequestBackupID2 = "bkp-2"
+	// Backup ids have the job id form, the only one a manifest is looked up by.
+	testRequestBackupID  = "261025T120000-ab12"
+	testRequestBackupID2 = "261025T130000-cd34"
 	// testRequestBackupIDs is the list form a multi-backup restore is given.
 	testRequestBackupIDs = testRequestBackupID + "," + testRequestBackupID2
 	testRequestJobID     = "rst-1"

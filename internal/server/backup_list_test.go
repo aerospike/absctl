@@ -24,17 +24,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const logNoBackups = "backups not found"
-
 // fakeBackupLister answers the two lookups listing makes: the manifests under the
 // configured path, and the single manifest that path may name itself.
 type fakeBackupLister struct {
 	all    []servermodels.Metadata
 	allErr error
 
-	md      servermodels.Metadata
-	mdErr   error
-	mdCalls int
+	md    servermodels.Metadata
+	mdErr error
+	mdIDs []string
 }
 
 func (f *fakeBackupLister) FetchAllMetadata(_ context.Context) ([]servermodels.Metadata, error) {
@@ -45,8 +43,8 @@ func (f *fakeBackupLister) FetchAllMetadata(_ context.Context) ([]servermodels.M
 	return f.all, nil
 }
 
-func (f *fakeBackupLister) GetMetadata(_ context.Context, _ string) (servermodels.Metadata, error) {
-	f.mdCalls++
+func (f *fakeBackupLister) GetMetadata(_ context.Context, backupID string) (servermodels.Metadata, error) {
+	f.mdIDs = append(f.mdIDs, backupID)
 
 	if f.mdErr != nil {
 		return servermodels.Metadata{}, f.mdErr
@@ -61,51 +59,65 @@ func (f *fakeBackupLister) GetMetadata(_ context.Context, _ string) (servermodel
 func TestServiceListBackups(t *testing.T) {
 	t.Parallel()
 
-	md := servermodels.Metadata{BackupID: testJobID, Namespace: testNamespace}
+	md := servermodels.Metadata{BackupID: testRequestBackupID, Namespace: testNamespace}
 
 	tests := []struct {
 		name        string
 		l           *fakeBackupLister
 		wantErr     error
-		wantMDCalls int
+		givePath    string
+		wantMDIDs   []string
 		wantLogs    []string
 		notWantLogs []string
 	}{
 		{
 			name:     "prints the backups under the path",
 			l:        &fakeBackupLister{all: []servermodels.Metadata{md}},
+			givePath: testBackupPath,
 			wantLogs: []string{logBackupEntry},
 		},
 		{
 			// A path that names one backup holds nothing under itself, so the listing
-			// comes back empty and the path itself carries the manifest.
-			name:        "reads a path that names a single backup",
+			// comes back empty and the backup is read by its id one level up.
+			name:      "reads a path that names a single backup",
+			l:         &fakeBackupLister{md: md},
+			givePath:  testMetadataKey,
+			wantMDIDs: []string{testRequestBackupID},
+			wantLogs:  []string{logBackupEntry},
+		},
+		{
+			// Only a job id names a backup, so any other empty path is not read at all.
+			name:        "reports a path that does not name a backup",
 			l:           &fakeBackupLister{md: md},
-			wantMDCalls: 1,
-			wantLogs:    []string{logBackupEntry},
+			givePath:    testBackupPath,
+			wantLogs:    []string{msgNoBackups},
+			notWantLogs: []string{logBackupEntry},
 		},
 		{
 			// A path with neither manifests under it nor one of its own is empty, which
 			// is an answer and not a failure.
 			name:        "reports a path that holds no backups",
 			l:           &fakeBackupLister{mdErr: lister.ErrMetadataNotFound},
-			wantMDCalls: 1,
-			wantLogs:    []string{logNoBackups},
+			givePath:    testMetadataKey,
+			wantMDIDs:   []string{testRequestBackupID},
+			wantLogs:    []string{msgNoBackups},
 			notWantLogs: []string{logBackupEntry},
 		},
 		{
-			name:    "propagates a failed listing",
-			l:       &fakeBackupLister{allErr: errBoom},
-			wantErr: errBoom,
+			name:     "propagates a failed listing",
+			l:        &fakeBackupLister{allErr: errBoom},
+			givePath: testBackupPath,
+			wantErr:  errBoom,
 		},
 		{
 			// Storage that cannot be read says nothing about whether the path names a
 			// backup, and must not be reported as an empty path.
 			name:        "propagates a failed read of a single backup",
 			l:           &fakeBackupLister{mdErr: errBoom},
+			givePath:    testMetadataKey,
 			wantErr:     errBoom,
-			wantMDCalls: 1,
-			notWantLogs: []string{logNoBackups},
+			wantMDIDs:   []string{testRequestBackupID},
+			notWantLogs: []string{msgNoBackups},
 		},
 	}
 
@@ -115,7 +127,7 @@ func TestServiceListBackups(t *testing.T) {
 
 			svc, buf := newTestService(t)
 
-			err := svc.listBackups(t.Context(), tt.l, testBackupPath)
+			err := svc.listBackups(t.Context(), tt.l, tt.l, tt.givePath)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -123,7 +135,7 @@ func TestServiceListBackups(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.wantMDCalls, tt.l.mdCalls)
+			assert.Equal(t, tt.wantMDIDs, tt.l.mdIDs)
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)
@@ -132,6 +144,28 @@ func TestServiceListBackups(t *testing.T) {
 			for _, notWant := range tt.notWantLogs {
 				assert.NotContains(t, buf.String(), notWant)
 			}
+		})
+	}
+}
+
+func TestParentPrefix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		give string
+		want string
+	}{
+		{name: "bucket root", give: "", want: ""},
+		{name: "top-level backup", give: testRequestBackupID, want: ""},
+		{name: "nested backup", give: testMetadataKey, want: testBackupPath},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, parentPrefix(tt.give))
 		})
 	}
 }

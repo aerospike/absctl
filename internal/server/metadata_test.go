@@ -15,10 +15,12 @@
 package server
 
 import (
-	"context"
+	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go/pkg/server/lister"
 	servermodels "github.com/aerospike/backup-go/pkg/server/lister/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,41 +39,49 @@ func TestMetadataS3Config(t *testing.T) {
 	assert.Equal(t, 0, shared.RequestTimeout)
 }
 
-// recordingMetadataGetter records the keys the manifests are read with.
-type recordingMetadataGetter struct {
-	keys []string
-}
-
-func (r *recordingMetadataGetter) GetMetadata(_ context.Context, key string) (servermodels.Metadata, error) {
-	r.keys = append(r.keys, key)
-
-	return servermodels.Metadata{}, nil
-}
-
-func TestPrefixedMetadataGetter(t *testing.T) {
+func TestMetadataGetter(t *testing.T) {
 	t.Parallel()
+
+	manifest, err := json.Marshal(servermodels.Metadata{BackupID: testRequestBackupID})
+	require.NoError(t, err)
 
 	tests := []struct {
 		name       string
 		givePrefix string
 		wantKey    string
 	}{
-		{name: "no prefix", givePrefix: "", wantKey: testRequestBackupID},
-		{name: "prefix", givePrefix: testBackupPath, wantKey: testMetadataKey},
-		{name: "prefix with trailing slash", givePrefix: testBackupPath + "/", wantKey: testMetadataKey},
+		{name: "no prefix", givePrefix: "", wantKey: testRequestBackupID + testManifestSuffix},
+		{name: "prefix", givePrefix: testBackupPath, wantKey: testMetadataKey + testManifestSuffix},
+		{
+			name:       "prefix with trailing slash",
+			givePrefix: testBackupPath + "/",
+			wantKey:    testMetadataKey + testManifestSuffix,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			rec := &recordingMetadataGetter{}
-			g := prefixedMetadataGetter{metadataGetter: rec, prefix: tt.givePrefix}
+			client := &fakeManifestS3{manifest: manifest}
+			g := newMetadataGetter(client, testBucket, tt.givePrefix, slog.New(slog.DiscardHandler))
 
 			_, err := g.GetMetadata(t.Context(), testRequestBackupID)
 			require.NoError(t, err)
 
-			assert.Equal(t, []string{tt.wantKey}, rec.keys)
+			assert.Equal(t, []string{tt.wantKey}, client.keys)
 		})
 	}
+}
+
+func TestMetadataGetterRejectsPath(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeManifestS3{}
+	g := newMetadataGetter(client, testBucket, "", slog.New(slog.DiscardHandler))
+
+	// A storage path is not a backup id, so nothing is read for it.
+	_, err := g.GetMetadata(t.Context(), testMetadataKey)
+	require.ErrorIs(t, err, lister.ErrInvalidBackupID)
+	assert.Empty(t, client.keys)
 }

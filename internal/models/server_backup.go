@@ -198,6 +198,10 @@ func (s *ServerBackupValidate) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
+	if err := validateBackupID("backup-id", s.JobID); err != nil {
+		return err
+	}
+
 	if err := validatePath(s.Path); err != nil {
 		return err
 	}
@@ -228,6 +232,10 @@ func (s *ServerBackupProgress) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
+	if err := validateBackupID("backup-id", s.JobID); err != nil {
+		return err
+	}
+
 	return validatePath(s.Path)
 }
 
@@ -248,5 +256,5 @@ func (s *ServerBackupAbort) Validate() error {
 		return fmt.Errorf("backup-id is required")
 	}
 
-	return nil
+	return validateBackupID("backup-id", s.JobID)
 }

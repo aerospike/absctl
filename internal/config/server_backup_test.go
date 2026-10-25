@@ -25,7 +25,7 @@ import (
 
 const (
 	testServerNamespace = "test-ns"
-	testServerJobID     = "backup-job-1"
+	testServerJobID     = "261025T120000-ab12"
 	testServerListPath  = "/backups"
 	testServerStorage   = models.StorageTypeAwsS3
 )

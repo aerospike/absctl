@@ -156,12 +156,6 @@ func TestServiceBackupRequest(t *testing.T) {
 	}
 }
 
-// stubMetadataS3Client is a metadataS3Client that hands out a client without opening
-// anything, so the listers can be built in a test.
-func stubMetadataS3Client(_ context.Context, _ *models.AwsS3) (s3API, error) {
-	return &fakeManifestS3{}, nil
-}
-
 func TestServiceStartedBackupMetadataLister(t *testing.T) {
 	t.Parallel()
 
@@ -170,7 +164,7 @@ func TestServiceStartedBackupMetadataLister(t *testing.T) {
 		giveAsync  bool
 		givePath   string
 		wantLister bool
-		wantPrefix string
+		wantKey    string
 	}{
 		{
 			name:      "async start reads no manifest",
@@ -180,18 +174,19 @@ func TestServiceStartedBackupMetadataLister(t *testing.T) {
 		{
 			name:       "no path",
 			wantLister: true,
+			wantKey:    testRequestBackupID + testManifestSuffix,
 		},
 		{
 			name:       "path",
 			givePath:   testBackupPath,
 			wantLister: true,
-			wantPrefix: testBackupPath,
+			wantKey:    testMetadataKey + testManifestSuffix,
 		},
 		{
 			name:       "path is normalized",
 			givePath:   "/" + testBackupPath + "/",
 			wantLister: true,
-			wantPrefix: testBackupPath,
+			wantKey:    testMetadataKey + testManifestSuffix,
 		},
 	}
 
@@ -199,13 +194,16 @@ func TestServiceStartedBackupMetadataLister(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			client := &fakeManifestS3{manifest: []byte("{}")}
 			svc := &Service{
 				backupCfg: &config.ServerBackupServiceConfig{
 					Start: &models.ServerBackup{Path: tt.givePath, Async: tt.giveAsync},
 					AwsS3: testRequestS3(),
 				},
-				logger:           slog.New(slog.DiscardHandler),
-				metadataS3Client: stubMetadataS3Client,
+				logger: slog.New(slog.DiscardHandler),
+				metadataS3Client: func(context.Context, *models.AwsS3) (s3API, error) {
+					return client, nil
+				},
 			}
 
 			l, err := svc.startedBackupMetadataLister(t.Context())
@@ -216,9 +214,10 @@ func TestServiceStartedBackupMetadataLister(t *testing.T) {
 				return
 			}
 
-			g, ok := l.(prefixedMetadataGetter)
-			require.True(t, ok)
-			assert.Equal(t, tt.wantPrefix, g.prefix)
+			// The lister reads a manifest by its backup id under the started path.
+			_, err = l.GetMetadata(t.Context(), testRequestBackupID)
+			require.NoError(t, err)
+			assert.Equal(t, []string{tt.wantKey}, client.keys)
 		})
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/aerospike/aerospike-client-go/v8"
+	"github.com/aerospike/backup-go/pkg/asinfo"
 )
 
 // StorageTypeAwsS3 is the object storage type of the server-integrated backup and restore.
@@ -30,6 +31,11 @@ const StorageTypeAwsS3 = "aws-s3"
 // The cluster reports an unknown type only after the job has been submitted,
 // so the value is checked locally to fail fast on a typo.
 var supportedStorageTypes = []string{StorageTypeAwsS3}
+
+// backupIDForm describes the form of a backup id in error messages: the UTC start time
+// and a suffix of 4 base36 characters (0-9, a-z), with an example.
+const backupIDForm = "YYMMDDThhmmss-xxxx, where xxxx is 4 characters of 0-9 or a-z, " +
+	"e.g. 261025T120000-ab12"
 
 // ServerCommon contains flags that will be mapped to ServerBackup and ServerRestore.
 type ServerCommon struct {
@@ -86,4 +92,15 @@ func validatePath(p string) error {
 // the backup has to be written under the same normalized prefix to be found afterwards.
 func NormalizeS3Prefix(p string) string {
 	return strings.Trim(path.Clean("/"+p), "/")
+}
+
+// validateBackupID checks that id, given with flag, has the form of a backup id. The
+// manifest of a backup is looked up by that id alone, so any other value would fail only
+// after the cluster and the object storage are reached.
+func validateBackupID(flag, id string) error {
+	if !asinfo.IsJobID(id) {
+		return fmt.Errorf("%s %q is not a backup id, expected the form %s", flag, id, backupIDForm)
+	}
+
+	return nil
 }
