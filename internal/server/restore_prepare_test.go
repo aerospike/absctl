@@ -40,6 +40,8 @@ func TestServicePrepareRestore(t *testing.T) {
 	clearing := restoreAnswer{status: testClearStatus(infomodels.ClearStateClearing, infomodels.NamespaceStatePreparing)}
 	required := restoreAnswer{status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing)}
 	ready := restoreAnswer{status: testClearStatus(infomodels.ClearStateNone, infomodels.NamespaceStateReady)}
+	readyNoClear := restoreAnswer{status: testClearStatus("", infomodels.NamespaceStateReady)}
+	preparingNoClear := restoreAnswer{status: testClearStatus("", infomodels.NamespaceStatePreparing)}
 
 	tests := []struct {
 		name             string
@@ -68,6 +70,23 @@ func TestServicePrepareRestore(t *testing.T) {
 			wantPrepareCalls: 1,
 			wantLogs:         []string{msgNamespaceReady},
 			notWantLogs:      []string{logPreparing, logClearStorageHint},
+		},
+		{
+			// No node reports a clear state, so READY alone ends the wait.
+			name:             "accepts a ready namespace without a clear state",
+			answers:          []restoreAnswer{readyNoClear},
+			wantCalls:        1,
+			wantPrepareCalls: 1,
+			wantLogs:         []string{msgNamespaceReady},
+			notWantLogs:      []string{logPreparing, logClearStorageHint},
+		},
+		{
+			name:             "waits for the namespace to become ready without a clear state",
+			answers:          []restoreAnswer{preparingNoClear, readyNoClear},
+			wantCalls:        2,
+			wantPrepareCalls: 1,
+			wantLogs:         []string{logPreparing, msgNamespaceReady},
+			notWantLogs:      []string{logClearStorageHint},
 		},
 		{
 			// A node whose storage has to be cleared never gets ready on its own, so

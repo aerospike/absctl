@@ -17,6 +17,8 @@
 .idea
 .vscode
 .DS_Store
+.claude
+CLAUDE.md
 
 # Go workspace file
 go.work

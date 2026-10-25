@@ -50,7 +50,7 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, derefString(restore.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(restore.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(restore.NoUDFs))
-	assert.Equal(t, models.DefaultServerRestoreFuzzyRestore, derefBool(restore.FuzzyRestore))
+	assert.Equal(t, models.DefaultServerRestorePolicy, derefString(restore.Policy))
 	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, derefBool(restore.AllowUnhosted))
 	assert.Equal(t, models.DefaultServerRestoreParallelWrite, derefInt(restore.ParallelWrite))
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, derefInt(restore.RecordsPerSecond))
@@ -116,6 +116,7 @@ func TestServerRestoreToModels(t *testing.T) {
 	clearNamespace := "ns6"
 	incrementalPath := "incr/prefix"
 	extraTTL := 3600
+	policy := "fuzzy"
 
 	restore := &ServerRestore{
 		Restore: ServerRestoreConfig{
@@ -128,7 +129,7 @@ func TestServerRestoreToModels(t *testing.T) {
 			FilterExp:         &filterExp,
 			NoIndexes:         &enabled,
 			NoUDFs:            &enabled,
-			FuzzyRestore:      &enabled,
+			Policy:            &policy,
 			AllowUnhosted:     &enabled,
 			ParallelWrite:     &parallelWrite,
 			RecordsPerSecond:  &recordsPerSecond,
@@ -169,7 +170,7 @@ func TestServerRestoreToModels(t *testing.T) {
 		FilterExp:         filterExp,
 		NoIndexes:         true,
 		NoUDFs:            true,
-		FuzzyRestore:      true,
+		Policy:            policy,
 		AllowUnhosted:     true,
 		ParallelWrite:     parallelWrite,
 		RecordsPerSecond:  recordsPerSecond,

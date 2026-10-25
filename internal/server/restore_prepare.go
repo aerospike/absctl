@@ -97,7 +97,9 @@ func (s *Service) prepareRestore(ctx context.Context, client restorePreparer) er
 			clearRequired = true
 
 			return true, 0, nil
-		case namespaceReady(status):
+		case namespaceReady(status),
+			// No node reports a clear state, so nothing can hold the namespace back.
+			status.Clear == "" && status.NsState == infomodels.NamespaceStateReady:
 			return true, 0, nil
 		}
 

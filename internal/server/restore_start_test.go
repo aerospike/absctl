@@ -153,8 +153,8 @@ func TestServiceRestoreRequest(t *testing.T) {
 			},
 		},
 		{
-			// A cold restore sends no fuzzy block at all: the server refuses fuzzy only
-			// parameters on a cold restore.
+			// A restore without a policy sends no fuzzy only parameters: the server
+			// refuses them with its default policy, strict.
 			name: "cold restore",
 			give: &models.ServerRestore{
 				Namespace:        testRequestNamespace,
@@ -198,7 +198,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 				StorageType:       testRequestStorage,
 				BackupIDs:         testRequestBackupID,
 				JobID:             testRequestJobID,
-				FuzzyRestore:      true,
+				Policy:            string(infomodels.RestorePolicyFuzzy),
 				AllowUnhosted:     true,
 				ParallelWrite:     testRestoreParallelWrite,
 				RecordsPerSecond:  testRestoreRPS,
@@ -219,15 +219,14 @@ func TestServiceRestoreRequest(t *testing.T) {
 					RestoreWorkerThreads:   testRestoreParallelWrite,
 					RestoreDownloadThreads: testRestoreParallelRead,
 					RestoreRPS:             testRestoreRPS,
-					Fuzzy: &infomodels.RequestFuzzyRestore{
-						AllowUnhosted:       new(true),
-						MaxInflight:         500,
-						RetryBaseIntervalMs: new(2000),
-						RetryMultiplier:     1.5,
-						RetryMaxAttempts:    3,
-						IgnoreRecordError:   new(true),
-						ApplyMetadataLast:   new(true),
-					},
+					Policy:                 infomodels.RestorePolicyFuzzy,
+					AllowUnhosted:          new(true),
+					MaxInflight:            500,
+					RetryBaseIntervalMs:    new(2000),
+					RetryMultiplier:        1.5,
+					RetryMaxAttempts:       3,
+					IgnoreRecordError:      new(true),
+					ApplyMetadataLast:      new(true),
 				}
 			},
 		},
@@ -237,22 +236,45 @@ func TestServiceRestoreRequest(t *testing.T) {
 			// is left out unless set.
 			name: "fuzzy restore with defaults",
 			give: &models.ServerRestore{
-				Namespace:    testRequestNamespace,
-				StorageType:  testRequestStorage,
-				BackupIDs:    testRequestBackupID,
-				JobID:        testRequestJobID,
-				FuzzyRestore: true,
+				Namespace:   testRequestNamespace,
+				StorageType: testRequestStorage,
+				BackupIDs:   testRequestBackupID,
+				JobID:       testRequestJobID,
+				Policy:      string(infomodels.RestorePolicyFuzzy),
+			},
+			want: func() *infomodels.RequestRestore {
+				return &infomodels.RequestRestore{
+					RequestCommon:       testRequestCommon(),
+					JobID:               testRequestJobID,
+					BackupIDs:           testRequestBackupID,
+					Policy:              infomodels.RestorePolicyFuzzy,
+					AllowUnhosted:       new(false),
+					RetryBaseIntervalMs: new(0),
+					IgnoreRecordError:   new(false),
+				}
+			},
+		},
+		{
+			// The flags and the YAML config fill the fuzzy only settings with their
+			// defaults, which the strict policy must not send.
+			name: "strict restore with fuzzy settings at their defaults",
+			give: &models.ServerRestore{
+				Namespace:         testRequestNamespace,
+				StorageType:       testRequestStorage,
+				BackupIDs:         testRequestBackupIDs,
+				JobID:             testRequestJobID,
+				Policy:            string(infomodels.RestorePolicyStrict),
+				MaxInflight:       models.DefaultServerRestoreMaxInflight,
+				RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
+				RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
+				RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon: testRequestCommon(),
 					JobID:         testRequestJobID,
-					BackupIDs:     testRequestBackupID,
-					Fuzzy: &infomodels.RequestFuzzyRestore{
-						AllowUnhosted:       new(false),
-						RetryBaseIntervalMs: new(0),
-						IgnoreRecordError:   new(false),
-					},
+					BackupIDs:     testRequestBackupIDs,
+					Policy:        infomodels.RestorePolicyStrict,
 				}
 			},
 		},
