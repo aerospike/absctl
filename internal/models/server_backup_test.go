@@ -30,8 +30,6 @@ const (
 	testNotBackupID        = "backup-job-1"
 	errMsgNotBackupID      = "is not a backup id"
 	testServerListPath     = "/backups"
-	testServerStorage      = StorageTypeAwsS3
-	testUnsupportedStorage = "gcp-storage"
 	testServerFilterExp    = "kwGTUQKkYmluMQE="
 	testInvalidFilterExp   = "not-base64!"
 	errMsgInvalidFilterExp = "invalid filter-exp: must be a base64-encoded filter expression"
@@ -43,8 +41,7 @@ const (
 
 func validServerBackup() *ServerBackup {
 	return &ServerBackup{
-		Namespace:   testServerNamespace,
-		StorageType: testServerStorage,
+		Namespace: testServerNamespace,
 	}
 }
 
@@ -70,16 +67,6 @@ func TestServerBackup_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing storage type",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.StorageType = ""
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "missing namespace",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
@@ -88,16 +75,6 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
-		},
-		{
-			name: "unsupported storage type",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.StorageType = testUnsupportedStorage
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "unsupported storage-type",
 		},
 		{
 			name: "invalid modified after",

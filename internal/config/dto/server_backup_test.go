@@ -40,7 +40,6 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	backup := defaultServerBackupConfig()
 
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(backup.Namespace))
-	assert.Equal(t, models.DefaultServerBackupObjectStorageType, derefString(backup.StorageType))
 	assert.Equal(t, models.DefaultBackupModifiedAfter, derefString(backup.ModifiedAfter))
 	assert.Equal(t, models.DefaultBackupModifiedBefore, derefString(backup.ModifiedBefore))
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(backup.Path))
@@ -78,7 +77,6 @@ func TestServerBackupToModels(t *testing.T) {
 	t.Parallel()
 
 	namespace := "ns1"
-	storageType := "aws-s3"
 	modifiedAfter := "2026-01-01_00:00:00"
 	modifiedBefore := "2026-02-01_00:00:00"
 	noIndexes := true
@@ -99,7 +97,6 @@ func TestServerBackupToModels(t *testing.T) {
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
 			Namespace:      &namespace,
-			StorageType:    &storageType,
 			Path:           &backupPath,
 			ModifiedAfter:  &modifiedAfter,
 			ModifiedBefore: &modifiedBefore,
@@ -125,7 +122,6 @@ func TestServerBackupToModels(t *testing.T) {
 	start := backup.ToModelServerBackup()
 	require.NotNil(t, start)
 	assert.Equal(t, namespace, start.Namespace)
-	assert.Equal(t, storageType, start.StorageType)
 	assert.Equal(t, modifiedAfter, start.ModifiedAfter)
 	assert.Equal(t, modifiedBefore, start.ModifiedBefore)
 	// The model carries a comma separated list, the YAML a sequence.

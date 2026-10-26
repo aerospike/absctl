@@ -34,9 +34,6 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to restore.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type",
-		models.DefaultServerBackupObjectStorageType,
-		"Type of object storage. Example: aws-s3")
 	flagSet.StringVar(&f.BackupIDs, "backup-ids",
 		models.DefaultServerBackupJobID,
 		"Comma separated list of the ids of the backups to restore from.")

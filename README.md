@@ -110,14 +110,12 @@ docker run -v <host-path>:<container-path> aerospike/absctl:<version> \
 docker run aerospike/absctl:<version> absctl snapshot-backup start \
   -h <aerospike-address> \
   --namespace <namespace> \
-  --object-storage-type aws-s3 \
   --s3-bucket-name <bucket>
 
 # Server-integrated restore
 docker run aerospike/absctl:<version> absctl snapshot-restore start \
   -h <aerospike-address> \
   --namespace <namespace> \
-  --object-storage-type aws-s3 \
   --backup-id <backup-id> \
   --s3-bucket-name <bucket>
 ```
@@ -221,7 +219,6 @@ Server-integrated commands trigger backup and restore operations that run inside
 absctl snapshot-backup start \
   -h 127.0.0.1:3000 \
   --namespace test \
-  --object-storage-type aws-s3 \
   --s3-bucket-name my-backup-bucket
 ```
 
@@ -252,7 +249,6 @@ absctl snapshot-restore prepare \
 absctl snapshot-restore start \
   -h 127.0.0.1:3000 \
   --namespace test \
-  --object-storage-type aws-s3 \
   --backup-id <backup-id> \
   --s3-bucket-name my-backup-bucket
 ```

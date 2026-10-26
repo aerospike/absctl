@@ -185,10 +185,9 @@ const (
 
 // Server-backup common.
 const (
-	DefaultServerBackupObjectStorageType = ""
-	DefaultServerBackupJobID             = ""
-	DefaultServerBackupPath              = ""
-	DefaultServerFilterExp               = ""
+	DefaultServerBackupJobID = ""
+	DefaultServerBackupPath  = ""
+	DefaultServerFilterExp   = ""
 )
 
 // Restore.

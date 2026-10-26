@@ -27,7 +27,6 @@ const (
 	testServerNamespace = "test-ns"
 	testServerJobID     = "261025T120000-ab12"
 	testServerListPath  = "/backups"
-	testServerStorage   = models.StorageTypeAwsS3
 )
 
 // validServerObjectStorage returns the S3 section a server-integrated command
@@ -45,8 +44,7 @@ func validServerObjectStorage() *models.AwsS3 {
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
+			Namespace: testServerNamespace,
 		},
 		List: &models.ServerBackupList{
 			Path: testServerListPath,
@@ -186,17 +184,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing storage type",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.Start.StorageType = ""
-				return cfg
-			},
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "nil list skips list validation",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
@@ -228,7 +215,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
-			name: "missing bucket name",
+			name: "empty object storage",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
 				cfg.AwsS3.BucketName = ""
@@ -236,7 +223,19 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   true,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgStorageNotConfigured,
+		},
+		{
+			name: "missing bucket name",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: testErrMsgBucketRequired,
 		},
 		{
 			name: "nil object storage",
@@ -247,7 +246,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   true,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 		{
 			name: "valid abort config without object storage",

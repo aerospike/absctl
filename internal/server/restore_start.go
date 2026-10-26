@@ -71,7 +71,10 @@ func (s *Service) startRestore(ctx context.Context, client restoreStarter, layou
 			slog.String("job-id", start.RestoreJobID()))
 	}
 
-	rReq := s.restoreRequest()
+	rReq, err := s.restoreRequest()
+	if err != nil {
+		return err
+	}
 
 	if err := client.StartRestore(ctx, rReq); err != nil {
 		return fmt.Errorf("failed to start restore: %w", err)
@@ -116,12 +119,17 @@ func (s *Service) checkRestoreBackupsExist(ctx context.Context, client s3API) er
 }
 
 // restoreRequest maps the restore configuration onto the request the cluster is sent.
-func (s *Service) restoreRequest() *infomodels.RequestRestore {
+func (s *Service) restoreRequest() (*infomodels.RequestRestore, error) {
 	start := s.restoreCfg.Start
+
+	objectStorage, err := s.restoreCfg.ObjectStorageType()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve object storage type: %w", err)
+	}
 
 	req := &infomodels.RequestRestore{
 		Namespace:              start.Namespace,
-		Storage:                start.StorageType,
+		Storage:                objectStorage,
 		Path:                   models.NormalizeS3Prefix(start.Path),
 		Bucket:                 s.restoreCfg.AwsS3.BucketName,
 		Region:                 s.restoreCfg.AwsS3.Region,
@@ -153,7 +161,7 @@ func (s *Service) restoreRequest() *infomodels.RequestRestore {
 		req.ApplyMetadataLast = applyMetadataLast(start.ApplyMetadataLast)
 	}
 
-	return req
+	return req, nil
 }
 
 // applyMetadataLast returns the apply-metadata-last setting to send. It is sent only

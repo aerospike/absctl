@@ -32,7 +32,6 @@ func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
 			Namespace:         testServerNamespace,
-			StorageType:       testServerStorage,
 			BackupIDs:         testServerJobID,
 			ParallelWrite:     models.DefaultServerRestoreParallelWrite,
 			MaxInflight:       models.DefaultServerRestoreMaxInflight,
@@ -186,17 +185,6 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing storage type",
-			cfg: func() *ServerRestoreServiceConfig {
-				cfg := validServerRestoreServiceConfig()
-				cfg.Start.StorageType = ""
-				return cfg
-			},
-			isBackup:   false,
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "missing namespace in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
@@ -208,7 +196,7 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: testErrMsgNamespaceRequired,
 		},
 		{
-			name: "missing bucket name in start",
+			name: "empty object storage in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
 				cfg.AwsS3.BucketName = ""
@@ -216,7 +204,19 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgStorageNotConfigured,
+		},
+		{
+			name: "missing bucket name in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: testErrMsgBucketRequired,
 		},
 		{
 			name: "nil start skips object storage check",

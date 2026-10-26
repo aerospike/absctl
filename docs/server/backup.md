@@ -71,45 +71,44 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Backup Flags:
-  -n, --namespace string             The namespace to be backed up.
-      --object-storage-type string   Type of object storage. Example: aws-s3
-      --path string                  Key prefix in the bucket to write the backup under.
-  -a, --modified-after string        <YYYY-MM-DD_HH:MM:SS>
-                                     Perform an incremental backup; only include records
-                                     that changed after the given date and time. The system's
-                                     local timezone applies. If only HH:MM:SS is specified, then
-                                     today's date is assumed as the date. If only YYYY-MM-DD is
-                                     specified, then 00:00:00 (midnight) is assumed as the time.
+  -n, --namespace string         The namespace to be backed up.
+      --path string              Key prefix in the bucket to write the backup under.
+  -a, --modified-after string    <YYYY-MM-DD_HH:MM:SS>
+                                 Perform an incremental backup; only include records
+                                 that changed after the given date and time. The system's
+                                 local timezone applies. If only HH:MM:SS is specified, then
+                                 today's date is assumed as the date. If only YYYY-MM-DD is
+                                 specified, then 00:00:00 (midnight) is assumed as the time.
 
-  -b, --modified-before string       <YYYY-MM-DD_HH:MM:SS>
-                                     Only include records that last changed before the given
-                                     date and time. May combined with --modified-after to specify a range.
-  -s, --set-list string              The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
-                                     If empty, include all sets.
-  -B, --bin-list string              Only include the given bins in the backup.
-                                     Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
-                                     If empty include all bins.
-  -f, --filter-exp string            Base64 encoded filter expression. Only live records are filtered,
-                                     tombstones are always backed up.
-  -I, --no-indexes                   Exclude indexes from the backup.
-  -u, --no-udfs                      Exclude user-defined functions from the backup.
-      --policy string                Backup policy: strict, best-effort or fuzzy. strict aborts the backup
-                                     on any failure. best-effort commits the backup as fuzzy instead of
-                                     aborting it on a failure after the base scan is durable cluster-wide.
-                                     fuzzy runs the base scan only, without the change stream.
-                                     If empty, the server default is used.
-      --async                        Return as soon as the cluster accepts the backup, without
-                                     following its progress. Use the progress command to follow
-                                     the backup later.
-  -L, --records-per-second int       Limit the records per second of each scan on each node.
-                                     A non-zero value must be at least 5 x --parallel-read.
-                                     If 0, the server default is used, which is no limit.
-      --parallel-read int            Number of scan threads per node, from 1 to 128.
-                                     If 0, the server default is used. (default 8)
-      --parallel-write int           Number of upload threads per node, from 1 to 128.
-                                     If 0, the server default is used. (default 8)
-      --s3-throughput int            Target throughput of the S3 client per node, in gigabits per second
-                                     (Gbit/s), from 1 to 400. If 0, the server default is used.
+  -b, --modified-before string   <YYYY-MM-DD_HH:MM:SS>
+                                 Only include records that last changed before the given
+                                 date and time. May combined with --modified-after to specify a range.
+  -s, --set-list string          The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
+                                 If empty, include all sets.
+  -B, --bin-list string          Only include the given bins in the backup.
+                                 Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
+                                 If empty include all bins.
+  -f, --filter-exp string        Base64 encoded filter expression. Only live records are filtered,
+                                 tombstones are always backed up.
+  -I, --no-indexes               Exclude indexes from the backup.
+  -u, --no-udfs                  Exclude user-defined functions from the backup.
+      --policy string            Backup policy: strict, best-effort or fuzzy. strict aborts the backup
+                                 on any failure. best-effort commits the backup as fuzzy instead of
+                                 aborting it on a failure after the base scan is durable cluster-wide.
+                                 fuzzy runs the base scan only, without the change stream.
+                                 If empty, the server default is used.
+      --async                    Return as soon as the cluster accepts the backup, without
+                                 following its progress. Use the progress command to follow
+                                 the backup later.
+  -L, --records-per-second int   Limit the records per second of each scan on each node.
+                                 A non-zero value must be at least 5 x --parallel-read.
+                                 If 0, the server default is used, which is no limit.
+      --parallel-read int        Number of scan threads per node, from 1 to 128.
+                                 If 0, the server default is used. (default 8)
+      --parallel-write int       Number of upload threads per node, from 1 to 128.
+                                 If 0, the server default is used. (default 8)
+      --s3-throughput int        Target throughput of the S3 client per node, in gigabits per second
+                                 (Gbit/s), from 1 to 400. If 0, the server default is used.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -533,8 +532,6 @@ cluster:
 backup:
   # The namespace to be backed up.
   namespace: source-ns1
-  # Type of object storage. Example: aws-s3
-  object-storage-type: aws-s3
   # Key prefix in the bucket to write the backup under.
   path: ""
   # <YYYY-MM-DD_HH:MM:SS>
