@@ -16,7 +16,6 @@ package models
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
@@ -36,39 +35,23 @@ const (
 type ServerBackup struct {
 	ServerCommon
 
-	// Path is the key prefix the backup is written under.
-	Path           string
 	ModifiedBefore string
 	ModifiedAfter  string
-	SetList        string
 	BinList        string
-	// FilterExp is a base64-encoded filter expression.
-	FilterExp string
-	NoIndexes bool
-	NoUDFs    bool
-	// Policy is how consistent the backup must be: strict, best-effort or fuzzy. Empty
-	// leaves it to the server default.
-	Policy string
-	// Async returns from the start command as soon as the cluster accepts the job,
-	// instead of following the backup until it ends.
-	Async bool
 
-	// The settings below are sent only when they are not zero, so that the server
-	// applies its own default otherwise.
-
-	// RecordsPerSecond limits the records per second of each scan on each node.
-	RecordsPerSecond int
-	// ParallelRead is the number of scan threads per node.
-	ParallelRead int
-	// ParallelWrite is the number of upload threads per node.
-	ParallelWrite int
-	// S3Throughput is the target throughput of the S3 client per node, in Gbit/s.
+	// S3Throughput is the target throughput of the S3 client per node, in Gbit/s. Like
+	// ParallelRead, ParallelWrite and RecordsPerSecond, it is sent only when it is not
+	// zero, so that the server applies its own default otherwise.
 	S3Throughput int
 }
 
 func (s *ServerBackup) Validate() error {
 	if s == nil {
 		return nil
+	}
+
+	if err := s.ServerCommon.Validate(); err != nil {
+		return err
 	}
 
 	var modifiedAfter, modifiedBefore time.Time
@@ -93,23 +76,11 @@ func (s *ServerBackup) Validate() error {
 		return fmt.Errorf("modified-before must be strictly greater than modified-after")
 	}
 
-	if err := validatePath(s.Path); err != nil {
-		return err
-	}
-
-	if err := validateFilterExp(s.FilterExp); err != nil {
-		return err
-	}
-
 	if err := s.validatePolicy(); err != nil {
 		return err
 	}
 
-	if err := s.validateJobSettings(); err != nil {
-		return err
-	}
-
-	return s.ServerCommon.Validate()
+	return s.validateJobSettings()
 }
 
 // validatePolicy checks that the policy, when set, is one the server accepts.
@@ -131,9 +102,6 @@ func (s *ServerBackup) validatePolicy() error {
 // server refuses fails the command before the cluster is reached.
 func (s *ServerBackup) validateJobSettings() error {
 	switch {
-	case s.RecordsPerSecond < 0 || int64(s.RecordsPerSecond) > math.MaxUint32:
-		return fmt.Errorf("records-per-second must be between 0 and %d, got %d",
-			uint32(math.MaxUint32), s.RecordsPerSecond)
 	case s.ParallelRead < 0 || s.ParallelRead > maxServerBackupParallel:
 		return fmt.Errorf("parallel-read must be between 0 and %d, got %d",
 			maxServerBackupParallel, s.ParallelRead)

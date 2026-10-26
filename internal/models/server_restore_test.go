@@ -43,7 +43,6 @@ const (
 func validServerRestore() *ServerRestore {
 	return &ServerRestore{
 		Namespace:         testServerNamespace,
-		StorageType:       testServerStorage,
 		BackupIDs:         testServerJobID,
 		ParallelRead:      DefaultServerRestoreParallelRead,
 		AllowUnhosted:     DefaultServerRestoreAllowUnhosted,
@@ -578,26 +577,6 @@ func TestServerRestore_Validate(t *testing.T) {
 				return nil
 			},
 			wantErr: false,
-		},
-		{
-			name: "missing storage type",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.StorageType = ""
-				return restore
-			},
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
-			name: "unsupported storage type",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.StorageType = testUnsupportedStorage
-				return restore
-			},
-			wantErr:    true,
-			wantErrMsg: "unsupported storage-type",
 		},
 		{
 			name: "missing namespace",

@@ -140,9 +140,8 @@ func TestServiceRestoreRequest(t *testing.T) {
 		{
 			name: "job id defaults to backup id",
 			give: &models.ServerRestore{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
-				BackupIDs:   testRequestBackupID,
+				Namespace: testRequestNamespace,
+				BackupIDs: testRequestBackupID,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
@@ -158,7 +157,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 			name: "cold restore",
 			give: &models.ServerRestore{
 				Namespace:        testRequestNamespace,
-				StorageType:      testRequestStorage,
 				BackupIDs:        testRequestBackupID,
 				JobID:            testRequestJobID,
 				Path:             testBackupPath,
@@ -195,7 +193,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 			name: "fuzzy restore",
 			give: &models.ServerRestore{
 				Namespace:         testRequestNamespace,
-				StorageType:       testRequestStorage,
 				BackupIDs:         testRequestBackupID,
 				JobID:             testRequestJobID,
 				Policy:            string(infomodels.RestorePolicyFuzzy),
@@ -236,11 +233,10 @@ func TestServiceRestoreRequest(t *testing.T) {
 			// is left out unless set.
 			name: "fuzzy restore with defaults",
 			give: &models.ServerRestore{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
-				BackupIDs:   testRequestBackupID,
-				JobID:       testRequestJobID,
-				Policy:      string(infomodels.RestorePolicyFuzzy),
+				Namespace: testRequestNamespace,
+				BackupIDs: testRequestBackupID,
+				JobID:     testRequestJobID,
+				Policy:    string(infomodels.RestorePolicyFuzzy),
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
@@ -260,7 +256,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 			name: "strict restore with fuzzy settings at their defaults",
 			give: &models.ServerRestore{
 				Namespace:         testRequestNamespace,
-				StorageType:       testRequestStorage,
 				BackupIDs:         testRequestBackupIDs,
 				JobID:             testRequestJobID,
 				Policy:            string(infomodels.RestorePolicyStrict),
@@ -283,10 +278,9 @@ func TestServiceRestoreRequest(t *testing.T) {
 			// list reaches the request unchanged.
 			name: "several backup ids",
 			give: &models.ServerRestore{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
-				BackupIDs:   testRequestBackupIDs,
-				JobID:       testRequestJobID,
+				Namespace: testRequestNamespace,
+				BackupIDs: testRequestBackupIDs,
+				JobID:     testRequestJobID,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
@@ -300,7 +294,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 			name: "incremental path is normalized",
 			give: &models.ServerRestore{
 				Namespace:       testRequestNamespace,
-				StorageType:     testRequestStorage,
 				BackupIDs:       testRequestBackupIDs,
 				JobID:           testRequestJobID,
 				IncrementalPath: "/" + testIncrementalPath + "/",
@@ -323,7 +316,39 @@ func TestServiceRestoreRequest(t *testing.T) {
 			svc := &Service{restoreCfg: &config.ServerRestoreServiceConfig{Start: tt.give}}
 			svc.restoreCfg.AwsS3 = testRequestS3()
 
-			assert.Equal(t, tt.want(), svc.restoreRequest())
+			got, err := svc.restoreRequest()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want(), got)
+		})
+	}
+}
+
+func TestServiceRestoreRequestWithoutObjectStorage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		awsS3 *models.AwsS3
+	}{
+		{name: "no s3 section"},
+		{name: "s3 section without bucket", awsS3: &models.AwsS3{Region: testRequestRegion}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &Service{restoreCfg: &config.ServerRestoreServiceConfig{
+				Start: &models.ServerRestore{
+					Namespace: testRequestNamespace,
+					BackupIDs: testRequestBackupID,
+				},
+			}}
+			svc.restoreCfg.AwsS3 = tt.awsS3
+
+			got, err := svc.restoreRequest()
+			require.ErrorContains(t, err, errMsgBucketRequired)
+			assert.Nil(t, got)
 		})
 	}
 }

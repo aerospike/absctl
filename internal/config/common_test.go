@@ -19,12 +19,57 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
-	testBucket   = "test-bucket"
-	testEndpoint = "test-endpoint"
+	testBucket               = "test-bucket"
+	testEndpoint             = "test-endpoint"
+	testErrMsgBucketRequired = "s3-bucket-name is required"
 )
+
+func TestServiceConfigCommon_ObjectStorageType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		awsS3      *models.AwsS3
+		want       string
+		wantErrMsg string
+	}{
+		{
+			name:  "s3 with bucket",
+			awsS3: &models.AwsS3{BucketName: testBucket},
+			want:  models.StorageTypeAwsS3,
+		},
+		{
+			name:       "s3 without bucket",
+			awsS3:      &models.AwsS3{Endpoint: testEndpoint},
+			wantErrMsg: testErrMsgBucketRequired,
+		},
+		{
+			name:       "no object storage",
+			wantErrMsg: testErrMsgBucketRequired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &ServiceConfigCommon{AwsS3: tt.awsS3}
+
+			got, err := cfg.ObjectStorageType()
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
 
 func TestValidateStorages(t *testing.T) {
 	t.Parallel()

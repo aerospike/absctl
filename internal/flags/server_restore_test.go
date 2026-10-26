@@ -37,7 +37,6 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
 	const (
-		testStorage           = "aws-s3"
 		testPath              = "backups/daily"
 		testSetList           = "set1,set2"
 		testFilterExp         = "kwGTUQKkYmluMQE="
@@ -55,7 +54,6 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 
 	want := &models.ServerRestore{
 		Namespace:         testRestoreNamespace,
-		StorageType:       testStorage,
 		BackupIDs:         testRestoreBackupIDs,
 		JobID:             testRestoreJobID,
 		Path:              testPath,
@@ -81,7 +79,6 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 	}
 
 	commonArgs := []string{
-		"--object-storage-type", testStorage,
 		"--backup-ids", testRestoreBackupIDs,
 		flagRestoreJobID, testRestoreJobID,
 		"--path", testPath,
@@ -151,7 +148,6 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	result := restore.GetServerRestore()
 
 	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
-	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
 	assert.Equal(t, models.DefaultServerBackupJobID, result.BackupIDs)
 	assert.Equal(t, models.DefaultServerRestoreJobID, result.JobID)
 	assert.Equal(t, models.DefaultServerBackupPath, result.Path)

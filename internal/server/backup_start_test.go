@@ -51,8 +51,7 @@ func TestServiceBackupRequest(t *testing.T) {
 		{
 			name: "defaults send the bools as false",
 			give: &models.ServerBackup{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
+				Namespace: testRequestNamespace,
 			},
 			want: func() *infomodels.RequestBackup {
 				return &infomodels.RequestBackup{RequestCommon: testRequestCommon()}
@@ -62,7 +61,6 @@ func TestServiceBackupRequest(t *testing.T) {
 			name: "every field",
 			give: &models.ServerBackup{
 				Namespace:     testRequestNamespace,
-				StorageType:   testRequestStorage,
 				Path:          testBackupPath,
 				ModifiedAfter: testModifiedAfter,
 				SetList:       testRequestSetList,
@@ -101,9 +99,8 @@ func TestServiceBackupRequest(t *testing.T) {
 		{
 			name: "strict policy",
 			give: &models.ServerBackup{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
-				Policy:      string(infomodels.BackupPolicyStrict),
+				Namespace: testRequestNamespace,
+				Policy:    string(infomodels.BackupPolicyStrict),
 			},
 			want: func() *infomodels.RequestBackup {
 				return &infomodels.RequestBackup{
@@ -115,9 +112,8 @@ func TestServiceBackupRequest(t *testing.T) {
 		{
 			name: "fuzzy policy",
 			give: &models.ServerBackup{
-				Namespace:   testRequestNamespace,
-				StorageType: testRequestStorage,
-				Policy:      string(infomodels.BackupPolicyFuzzy),
+				Namespace: testRequestNamespace,
+				Policy:    string(infomodels.BackupPolicyFuzzy),
 			},
 			want: func() *infomodels.RequestBackup {
 				return &infomodels.RequestBackup{
@@ -130,7 +126,6 @@ func TestServiceBackupRequest(t *testing.T) {
 			name: "invalid modified before",
 			give: &models.ServerBackup{
 				Namespace:      testRequestNamespace,
-				StorageType:    testRequestStorage,
 				ModifiedBefore: "not-a-date",
 			},
 			wantErr: true,
@@ -152,6 +147,33 @@ func TestServiceBackupRequest(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want(), got)
+		})
+	}
+}
+
+func TestServiceBackupRequestWithoutObjectStorage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		awsS3 *models.AwsS3
+	}{
+		{name: "no s3 section"},
+		{name: "s3 section without bucket", awsS3: &models.AwsS3{Region: testRequestRegion}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &Service{backupCfg: &config.ServerBackupServiceConfig{
+				Start: &models.ServerBackup{Namespace: testRequestNamespace},
+			}}
+			svc.backupCfg.AwsS3 = tt.awsS3
+
+			got, err := svc.backupRequest()
+			require.ErrorContains(t, err, errMsgBucketRequired)
+			assert.Nil(t, got)
 		})
 	}
 }

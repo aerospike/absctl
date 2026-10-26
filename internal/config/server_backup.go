@@ -15,8 +15,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 )
@@ -84,7 +82,7 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 
 	// Abort talks only to the cluster; the other subcommands need object storage.
 	if s.needsObjectStorage() {
-		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+		if _, err := s.ObjectStorageType(); err != nil {
 			return err
 		}
 	}
@@ -98,16 +96,4 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 
 func (s *ServerBackupServiceConfig) needsObjectStorage() bool {
 	return s.Start != nil || s.List != nil || s.Validation != nil || s.Progress != nil
-}
-
-// validateServerObjectStorage makes sure the object storage of a
-// server-integrated command is addressable. An empty S3 section would otherwise
-// pass silently: AwsS3.IsConfigured reports false, validateStorages skips it,
-// and the command only fails later against an empty bucket name.
-func validateServerObjectStorage(awsS3 *models.AwsS3) error {
-	if awsS3 == nil || awsS3.BucketName == "" {
-		return fmt.Errorf("s3-bucket-name is required")
-	}
-
-	return nil
 }

@@ -500,12 +500,10 @@ func serverBackupExampleDTO() *dto.ServerBackup {
 	b := dto.DefaultServerBackup()
 
 	ns := "source-ns1"
-	storageType := "aws-s3"
 	jobID := "backup-id-1"
 	path := "backup_dir"
 
 	b.Backup.Namespace = &ns
-	b.Backup.StorageType = &storageType
 	b.Backup.SetList = []string{"set1", "set2"}
 
 	b.List.Path = &path
@@ -524,12 +522,10 @@ func serverRestoreExampleDTO() *dto.ServerRestore {
 	r := dto.DefaultServerRestore()
 
 	ns := "source-ns1"
-	storageType := "aws-s3"
 	jobID := "restore-job-1"
 	path := "backup_dir"
 
 	r.Restore.Namespace = &ns
-	r.Restore.StorageType = &storageType
 	r.Restore.BackupIDs = []string{"backup-id-1", "backup-id-2"}
 	r.Restore.JobID = &jobID
 	r.Restore.Path = &path

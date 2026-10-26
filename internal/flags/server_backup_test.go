@@ -35,7 +35,6 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 
 	args := []string{
 		"--namespace", "test-ns",
-		"--object-storage-type", "aws-s3",
 		"--modified-after", "2023-09-02_12:00:00",
 		"--modified-before", "2023-09-03_12:00:00",
 	}
@@ -46,7 +45,6 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 	result := backup.GetServerBackup()
 
 	assert.Equal(t, "test-ns", result.Namespace)
-	assert.Equal(t, "aws-s3", result.StorageType)
 	assert.Equal(t, "2023-09-02_12:00:00", result.ModifiedAfter)
 	assert.Equal(t, "2023-09-03_12:00:00", result.ModifiedBefore)
 }
@@ -83,7 +81,6 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	result := backup.GetServerBackup()
 
 	assert.Equal(t, models.DefaultCommonNamespace, result.Namespace)
-	assert.Equal(t, models.DefaultServerBackupObjectStorageType, result.StorageType)
 	assert.Equal(t, models.DefaultBackupModifiedAfter, result.ModifiedAfter)
 	assert.Equal(t, models.DefaultBackupModifiedBefore, result.ModifiedBefore)
 	assert.Equal(t, models.DefaultServerBackupPath, result.Path)

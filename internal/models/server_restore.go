@@ -50,31 +50,10 @@ type ServerRestore struct {
 	JobID string
 	// BackupIDs is a comma-separated list of the ids of the backups to restore from.
 	BackupIDs string
-	// Path is the key prefix the backup was written under.
-	Path string
 	// IncrementalPath is the key prefix the incremental backups, every backup id after
 	// the first one, were written under, when it differs from Path.
 	IncrementalPath string
-	SetList         string
-	// FilterExp is a base64-encoded filter expression. Strict policy only.
-	FilterExp string
-	NoIndexes bool
-	NoUDFs    bool
-	// Policy selects the restore mode: strict, the cold partition hydration, or fuzzy,
-	// writes into the live namespace. Empty leaves it to the server default, strict.
-	Policy string
-	// Async returns from the start command as soon as the cluster accepts the job,
-	// instead of following the restore until it ends.
-	Async bool
 
-	// The fields below apply to both cold and fuzzy restore.
-
-	// ParallelRead is the number of threads per node that download the backup files.
-	ParallelRead int
-	// ParallelWrite is the number of threads per node that apply the records.
-	ParallelWrite int
-	// RecordsPerSecond limits the records per second each node applies.
-	RecordsPerSecond int
 	// ExtraTTL is added to the expiry of every restored record that expires, in seconds.
 	ExtraTTL int
 
@@ -117,11 +96,11 @@ func (s *ServerRestore) Validate() error {
 		return nil
 	}
 
-	if err := s.validateBackupIDs(); err != nil {
+	if err := s.ServerCommon.Validate(); err != nil {
 		return err
 	}
 
-	if err := validatePath(s.Path); err != nil {
+	if err := s.validateBackupIDs(); err != nil {
 		return err
 	}
 
@@ -129,19 +108,11 @@ func (s *ServerRestore) Validate() error {
 		return err
 	}
 
-	if err := validateFilterExp(s.FilterExp); err != nil {
-		return err
-	}
-
 	if err := s.validateRestoreMode(); err != nil {
 		return err
 	}
 
-	if err := s.validateJobSettings(); err != nil {
-		return err
-	}
-
-	return s.ServerCommon.Validate()
+	return s.validateJobSettings()
 }
 
 // validateIncrementalPath checks the path of the incremental backups. The server refuses
@@ -169,9 +140,6 @@ func (s *ServerRestore) validateJobSettings() error {
 	case s.ParallelWrite < minServerRestoreParallelWrite || s.ParallelWrite > maxServerRestoreParallelWrite:
 		return fmt.Errorf("parallel-write must be between %d and %d, got %d",
 			minServerRestoreParallelWrite, maxServerRestoreParallelWrite, s.ParallelWrite)
-	case s.RecordsPerSecond < 0 || int64(s.RecordsPerSecond) > math.MaxUint32:
-		return fmt.Errorf("records-per-second must be between 0 and %d, got %d",
-			uint32(math.MaxUint32), s.RecordsPerSecond)
 	case s.ExtraTTL < 0 || s.ExtraTTL > maxServerRestoreExtraTTL:
 		return fmt.Errorf("extra-ttl must be between 0 and %d, got %d",
 			maxServerRestoreExtraTTL, s.ExtraTTL)
@@ -207,7 +175,9 @@ func (s *ServerRestore) validateBackupIDs() error {
 	return nil
 }
 
-// validateRestoreMode checks the policy and the settings that depend on it. The server
+// validateRestoreMode checks the policy and the settings that depend on it. The policy
+// is strict, the cold partition hydration, or fuzzy, writes into the live namespace;
+// empty leaves it to the server default, strict. The server
 // rejects the fuzzy restore settings of a strict restore, so a value changed from its
 // default without the fuzzy policy fails the command before the cluster is reached.
 func (s *ServerRestore) validateRestoreMode() error {

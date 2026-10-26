@@ -15,7 +15,9 @@
 package models
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"path"
 	"slices"
 	"strings"
@@ -27,11 +29,6 @@ import (
 // StorageTypeAwsS3 is the object storage type of the server-integrated backup and restore.
 const StorageTypeAwsS3 = "aws-s3"
 
-// supportedStorageTypes lists every value accepted by --object-storage-type.
-// The cluster reports an unknown type only after the job has been submitted,
-// so the value is checked locally to fail fast on a typo.
-var supportedStorageTypes = []string{StorageTypeAwsS3}
-
 // backupIDForm describes the form of a backup id in error messages: the UTC start time
 // and a suffix of 4 base36 characters (0-9, a-z), with an example.
 const backupIDForm = "YYMMDDThhmmss-xxxx, where xxxx is 4 characters of 0-9 or a-z, " +
@@ -39,22 +36,54 @@ const backupIDForm = "YYMMDDThhmmss-xxxx, where xxxx is 4 characters of 0-9 or a
 
 // ServerCommon contains flags that will be mapped to ServerBackup and ServerRestore.
 type ServerCommon struct {
-	Namespace   string
-	StorageType string
+	// Namespace is the namespace to be backed up or restored.
+	Namespace string
+	// Path is the key prefix the backup is written under or read from.
+	Path string
+	// SetList is a comma-separated list of set names.
+	SetList string
+	// FilterExp is a base64-encoded filter expression. A restore accepts it with the
+	// strict policy only.
+	FilterExp string
+	NoIndexes bool
+	NoUDFs    bool
+	// Policy is the consistency policy of the job. The values accepted by backup and
+	// restore differ and are checked by each of them. Empty leaves it to the server default.
+	Policy string
+	// Async returns from the start command as soon as the cluster accepts the job,
+	// instead of following the job until it ends.
+	Async bool
+
+	// The settings below are checked by backup and restore against their own limits.
+
+	// ParallelRead is the number of read threads per node: the scan threads of a backup,
+	// the threads that download the backup files of a restore.
+	ParallelRead int
+	// ParallelWrite is the number of write threads per node: the upload threads of a
+	// backup, the threads that apply the records of a restore.
+	ParallelWrite int
+	// RecordsPerSecond limits the records per second each node reads (backup) or
+	// applies (restore). Zero means no limit.
+	RecordsPerSecond int
 }
 
+// Validate checks the settings that backup and restore share and check the same way.
 func (s *ServerCommon) Validate() error {
 	if s.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
-	if s.StorageType == "" {
-		return fmt.Errorf("storage-type is required")
+	if err := validatePath(s.Path); err != nil {
+		return err
 	}
 
-	if !slices.Contains(supportedStorageTypes, s.StorageType) {
-		return fmt.Errorf("unsupported storage-type %q, supported types: %s",
-			s.StorageType, strings.Join(supportedStorageTypes, ", "))
+	if err := validateFilterExp(s.FilterExp); err != nil {
+		return err
+	}
+
+	if s.RecordsPerSecond < 0 || int64(s.RecordsPerSecond) > math.MaxUint32 {
+		return fmt.Errorf("records-per-second must be between 0 and %d, got %d",
+			uint32(math.MaxUint32), s.RecordsPerSecond)
 	}
 
 	return nil

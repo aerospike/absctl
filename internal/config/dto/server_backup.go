@@ -72,7 +72,6 @@ func (b *ServerBackup) LoadSecrets(ctx context.Context) error {
 // ServerBackupConfig maps the "backup" section, used by "snapshot-backup start".
 type ServerBackupConfig struct {
 	Namespace      *string  `yaml:"namespace"`
-	StorageType    *string  `yaml:"object-storage-type"`
 	Path           *string  `yaml:"path"`
 	ModifiedAfter  *string  `yaml:"modified-after"`
 	ModifiedBefore *string  `yaml:"modified-before"`
@@ -93,7 +92,6 @@ type ServerBackupConfig struct {
 func defaultServerBackupConfig() ServerBackupConfig {
 	return ServerBackupConfig{
 		Namespace:        new(models.DefaultCommonNamespace),
-		StorageType:      new(models.DefaultServerBackupObjectStorageType),
 		Path:             new(models.DefaultServerBackupPath),
 		ModifiedAfter:    new(models.DefaultBackupModifiedAfter),
 		ModifiedBefore:   new(models.DefaultBackupModifiedBefore),
@@ -119,7 +117,6 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 
 	return &models.ServerBackup{
 		Namespace:      derefString(b.Backup.Namespace),
-		StorageType:    derefString(b.Backup.StorageType),
 		Path:           derefString(b.Backup.Path),
 		ModifiedAfter:  derefString(b.Backup.ModifiedAfter),
 		ModifiedBefore: derefString(b.Backup.ModifiedBefore),

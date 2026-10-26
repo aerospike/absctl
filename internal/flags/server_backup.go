@@ -43,10 +43,6 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to be backed up.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type",
-		models.DefaultServerBackupObjectStorageType,
-		"Type of object storage. "+
-			"Example: aws-s3")
 	flagSet.StringVar(&f.Path, "path",
 		models.DefaultServerBackupPath,
 		"Key prefix in the bucket to write the backup under.")

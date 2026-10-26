@@ -85,7 +85,6 @@ cluster:
       port: 3000
 backup:
   namespace: test
-  object-storage-type: aws-s3
   path: backups/daily
   set-list:
     - set1
@@ -125,7 +124,6 @@ cluster:
       port: 3000
 restore:
   namespace: test
-  object-storage-type: aws-s3
   backup-ids:
     - 261025T120000-ab12
   job-id: rst-1
@@ -505,7 +503,6 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Progress)
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
-				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
 				assert.Equal(t, "backups/daily", cfg.Start.Path)
 				assert.Equal(t, "set1,set2", cfg.Start.SetList)
 				assert.Equal(t, "bin1,bin2", cfg.Start.BinList)
@@ -701,7 +698,6 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
-				assert.Equal(t, "aws-s3", cfg.Start.StorageType)
 				assert.Equal(t, testServerBackupID, cfg.Start.BackupIDs)
 				assert.Equal(t, testServerRestoreJobID, cfg.Start.JobID)
 				assert.Equal(t, "some/prefix", cfg.Start.Path)

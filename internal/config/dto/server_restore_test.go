@@ -42,7 +42,6 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	restore := defaultServerRestoreConfig()
 
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(restore.Namespace))
-	assert.Equal(t, models.DefaultServerBackupObjectStorageType, derefString(restore.StorageType))
 	assert.Empty(t, restore.BackupIDs)
 	assert.Equal(t, models.DefaultServerRestoreJobID, derefString(restore.JobID))
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(restore.Path))
@@ -96,7 +95,6 @@ func TestServerRestoreToModels(t *testing.T) {
 	t.Parallel()
 
 	namespace := "ns1"
-	storageType := "aws-s3"
 	jobID := "rst-1"
 	path := "some/prefix"
 	filterExp := "kwGTUQKkYmluMQE="
@@ -121,7 +119,6 @@ func TestServerRestoreToModels(t *testing.T) {
 	restore := &ServerRestore{
 		Restore: ServerRestoreConfig{
 			Namespace:         &namespace,
-			StorageType:       &storageType,
 			BackupIDs:         []string{"bkp-1", "bkp-2"},
 			JobID:             &jobID,
 			Path:              &path,
@@ -160,10 +157,9 @@ func TestServerRestoreToModels(t *testing.T) {
 	start := restore.ToModelServerRestore()
 	require.NotNil(t, start)
 	assert.Equal(t, &models.ServerRestore{
-		Namespace:   namespace,
-		StorageType: storageType,
-		JobID:       jobID,
-		Path:        path,
+		Namespace: namespace,
+		JobID:     jobID,
+		Path:      path,
 		// The model carries a comma separated list, the YAML a sequence.
 		BackupIDs:         "bkp-1,bkp-2",
 		SetList:           "set1,set2",

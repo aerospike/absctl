@@ -104,9 +104,14 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 		ma = strconv.FormatInt(mat.Unix(), 10)
 	}
 
+	objectStorage, err := s.backupCfg.ObjectStorageType()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve object storage type: %w", err)
+	}
+
 	return &infomodels.RequestBackup{
 		Namespace:      start.Namespace,
-		Storage:        start.StorageType,
+		Storage:        objectStorage,
 		Path:           models.NormalizeS3Prefix(start.Path),
 		Bucket:         s.backupCfg.AwsS3.BucketName,
 		Region:         s.backupCfg.AwsS3.Region,
