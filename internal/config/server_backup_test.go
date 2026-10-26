@@ -215,10 +215,22 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
+			name: "empty object storage",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: testErrMsgStorageNotConfigured,
+		},
+		{
 			name: "missing bucket name",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
 				return cfg
 			},
 			isBackup:   true,
@@ -234,7 +246,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   true,
 			wantErr:    true,
-			wantErrMsg: testErrMsgBucketRequired,
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 		{
 			name: "valid abort config without object storage",

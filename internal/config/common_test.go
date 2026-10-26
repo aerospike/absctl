@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	testBucket               = "test-bucket"
-	testEndpoint             = "test-endpoint"
-	testErrMsgBucketRequired = "s3-bucket-name is required"
+	testBucket                     = "test-bucket"
+	testEndpoint                   = "test-endpoint"
+	testErrMsgStorageNotConfigured = "object storage is not configured"
+	testErrMsgBucketRequired       = "bucket name is required"
 )
 
 func TestServiceConfigCommon_ObjectStorageType(t *testing.T) {
@@ -43,13 +44,19 @@ func TestServiceConfigCommon_ObjectStorageType(t *testing.T) {
 			want:  models.StorageTypeAwsS3,
 		},
 		{
-			name:       "s3 without bucket",
-			awsS3:      &models.AwsS3{Endpoint: testEndpoint},
-			wantErrMsg: testErrMsgBucketRequired,
+			// The bucket is checked by AwsS3.Validate, not here.
+			name:  "s3 without bucket",
+			awsS3: &models.AwsS3{Endpoint: testEndpoint},
+			want:  models.StorageTypeAwsS3,
+		},
+		{
+			name:       "empty s3 section",
+			awsS3:      &models.AwsS3{},
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 		{
 			name:       "no object storage",
-			wantErrMsg: testErrMsgBucketRequired,
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 	}
 

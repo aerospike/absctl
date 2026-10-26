@@ -146,13 +146,12 @@ func validateStorages(
 
 // ObjectStorageType returns the type of the object storage the server-integrated commands
 // are configured with. It is derived from the configured storage section, so that no
-// separate flag has to repeat it. An empty S3 section would otherwise pass silently:
-// AwsS3.IsConfigured reports false, validateStorages skips it, and the command only
-// fails later against an empty bucket name.
+// separate flag has to repeat it. The settings of that section, such as the bucket name,
+// are checked by its own Validate.
 func (r *ServiceConfigCommon) ObjectStorageType() (string, error) {
-	if r.AwsS3 != nil && r.AwsS3.BucketName != "" {
+	if r.AwsS3.IsConfigured() {
 		return models.StorageTypeAwsS3, nil
 	}
 
-	return "", errors.New("s3-bucket-name is required")
+	return "", errors.New("object storage is not configured")
 }

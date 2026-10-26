@@ -58,13 +58,14 @@ const (
 
 	testRequestNamespace = "source-ns"
 	testRequestStorage   = models.StorageTypeAwsS3
-	// errMsgBucketRequired is the error of a server-integrated command without a bucket.
-	errMsgBucketRequired = "s3-bucket-name is required"
-	testRequestRegion    = "eu-central-1"
-	testRequestProfile   = "default"
-	testRequestEndpoint  = "http://127.0.0.1:9000"
-	testRequestSetList   = "set1,set2"
-	testRequestFilterExp = "kwGTUQKkYmluMQE="
+	// errMsgStorageNotConfigured is the error of a server-integrated command without
+	// object storage.
+	errMsgStorageNotConfigured = "object storage is not configured"
+	testRequestRegion          = "eu-central-1"
+	testRequestProfile         = "default"
+	testRequestEndpoint        = "http://127.0.0.1:9000"
+	testRequestSetList         = "set1,set2"
+	testRequestFilterExp       = "kwGTUQKkYmluMQE="
 	// Backup ids have the job id form, the only one a manifest is looked up by.
 	testRequestBackupID  = "261025T120000-ab12"
 	testRequestBackupID2 = "261025T130000-cd34"

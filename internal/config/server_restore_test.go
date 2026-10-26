@@ -196,10 +196,22 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: testErrMsgNamespaceRequired,
 		},
 		{
+			name: "empty object storage in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: testErrMsgStorageNotConfigured,
+		},
+		{
 			name: "missing bucket name in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
 				return cfg
 			},
 			isBackup:   false,

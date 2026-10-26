@@ -331,7 +331,7 @@ func TestServiceRestoreRequestWithoutObjectStorage(t *testing.T) {
 		awsS3 *models.AwsS3
 	}{
 		{name: "no s3 section"},
-		{name: "s3 section without bucket", awsS3: &models.AwsS3{Region: testRequestRegion}},
+		{name: "empty s3 section", awsS3: &models.AwsS3{}},
 	}
 
 	for _, tt := range tests {
@@ -347,7 +347,7 @@ func TestServiceRestoreRequestWithoutObjectStorage(t *testing.T) {
 			svc.restoreCfg.AwsS3 = tt.awsS3
 
 			got, err := svc.restoreRequest()
-			require.ErrorContains(t, err, errMsgBucketRequired)
+			require.ErrorContains(t, err, errMsgStorageNotConfigured)
 			assert.Nil(t, got)
 		})
 	}
