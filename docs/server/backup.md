@@ -107,8 +107,6 @@ Backup Flags:
                                  If 0, the server default is used. (default 8)
       --parallel-write int       Number of upload threads per node, from 1 to 128.
                                  If 0, the server default is used. (default 8)
-      --s3-throughput int        Target throughput of the S3 client per node, in gigabits per second
-                                 (Gbit/s), from 1 to 400. If 0, the server default is used.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -119,8 +117,12 @@ Any AWS parameter can be retrieved from Secret Agent.
       --s3-region string              The S3 region that the bucket(s) exist in.
       --s3-profile string             The S3 profile to use for credentials.
       --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
       --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
       --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
+      --s3-throughput int             Target throughput of the S3 client per node, in gigabits per second
+                                      (Gbit/s), from 1 to 400. If 0, the server default is used.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -168,31 +170,27 @@ For S3, the storage bucket name must be set with the --s3-bucket-name flag.
 --directory path will only contain the folder name.
 --s3-endpoint-override is used for MinIO storage instead of AWS.
 Any AWS parameter can be retrieved from Secret Agent.
-      --s3-bucket-name string             Existing S3 bucket name
-      --s3-region string                  The S3 region that the bucket(s) exist in.
-      --s3-profile string                 The S3 profile to use for credentials.
-      --s3-access-key-id string           S3 access key ID. If not set, profile auth info will be used.
-      --s3-secret-access-key string       S3 secret access key. If not set, profile auth info will be used.
-      --s3-endpoint-override string       An alternate URL endpoint to send S3 API calls to.
-      --s3-tier string                    If is set, tool will try to restore archived files to the specified tier.
-                                          Attention! This triggers an asynchronous process that cannot be terminated.
-                                          Tiers are: Standard, Bulk, Expedited.
-      --s3-restore-poll-duration int      How often ((in ms)) a backup client checks object status when restoring an archived object. (default 60000)
-      --s3-retry-read-backoff int         The initial delay (in ms) between retry attempts. In case of connection errors
-                                          tool will retry reading the object from the last known position. (default 1000)
-      --s3-retry-read-multiplier float    Multiplier is used to increase the delay between subsequent retry attempts.
-                                          Used in combination with initial delay. (default 2)
-      --s3-retry-read-max-attempts uint   The maximum number of retry attempts that will be made. If set to 0, no retries will be performed. (default 3)
-      --s3-retry-max-attempts int         Maximum number of attempts that should be made in case of an error. (default 10)
-      --s3-retry-max-backoff int          Max backoff duration (in ms) between retried attempts.
-                                          The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff. (default 90000)
-      --s3-max-conns-per-host int         Max connections per host optionally limits the total number of connections per host,
-                                          including connections in the dialing, active, and idle states. On limit violation, dials will block.
-                                          Should be greater than --parallel to avoid download speed degradation.
-                                          0 means no limit.
-      --s3-request-timeout int            Timeout (in ms) specifies a time limit for requests made by this Client.
-                                          The timeout includes connection time, any redirects, and reading the response body.
-                                          0 means no limit. (default 600000)
+      --s3-bucket-name string         Existing S3 bucket name
+      --s3-region string              The S3 region that the bucket(s) exist in.
+      --s3-profile string             The S3 profile to use for credentials.
+      --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
+      --s3-retry-max-attempts int     Maximum number of attempts that should be made in case of an error.
+                                      Used locally by absctl only, it is not sent to the server. (default 10)
+      --s3-retry-max-backoff int      Max backoff duration (in ms) between retried attempts.
+                                      The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.
+                                      Used locally by absctl only, it is not sent to the server. (default 90000)
+      --s3-max-conns-per-host int     Max connections per host optionally limits the total number of connections per host,
+                                      including connections in the dialing, active, and idle states. On limit violation, dials will block.
+                                      0 means no limit.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-request-timeout int        Timeout (in ms) specifies a time limit for requests made by this Client.
+                                      The timeout includes connection time, any redirects, and reading the response body.
+                                      0 means no limit.
+                                      Used locally by absctl only, it is not sent to the server. (default 600000)
 ```
 
 ## progress
@@ -267,31 +265,23 @@ For S3, the storage bucket name must be set with the --s3-bucket-name flag.
 --directory path will only contain the folder name.
 --s3-endpoint-override is used for MinIO storage instead of AWS.
 Any AWS parameter can be retrieved from Secret Agent.
-      --s3-bucket-name string             Existing S3 bucket name
-      --s3-region string                  The S3 region that the bucket(s) exist in.
-      --s3-profile string                 The S3 profile to use for credentials.
-      --s3-access-key-id string           S3 access key ID. If not set, profile auth info will be used.
-      --s3-secret-access-key string       S3 secret access key. If not set, profile auth info will be used.
-      --s3-endpoint-override string       An alternate URL endpoint to send S3 API calls to.
-      --s3-tier string                    If is set, tool will try to restore archived files to the specified tier.
-                                          Attention! This triggers an asynchronous process that cannot be terminated.
-                                          Tiers are: Standard, Bulk, Expedited.
-      --s3-restore-poll-duration int      How often ((in ms)) a backup client checks object status when restoring an archived object. (default 60000)
-      --s3-retry-read-backoff int         The initial delay (in ms) between retry attempts. In case of connection errors
-                                          tool will retry reading the object from the last known position. (default 1000)
-      --s3-retry-read-multiplier float    Multiplier is used to increase the delay between subsequent retry attempts.
-                                          Used in combination with initial delay. (default 2)
-      --s3-retry-read-max-attempts uint   The maximum number of retry attempts that will be made. If set to 0, no retries will be performed. (default 3)
-      --s3-retry-max-attempts int         Maximum number of attempts that should be made in case of an error. (default 10)
-      --s3-retry-max-backoff int          Max backoff duration (in ms) between retried attempts.
-                                          The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff. (default 90000)
-      --s3-max-conns-per-host int         Max connections per host optionally limits the total number of connections per host,
-                                          including connections in the dialing, active, and idle states. On limit violation, dials will block.
-                                          Should be greater than --parallel to avoid download speed degradation.
-                                          0 means no limit.
-      --s3-request-timeout int            Timeout (in ms) specifies a time limit for requests made by this Client.
-                                          The timeout includes connection time, any redirects, and reading the response body.
-                                          0 means no limit. (default 600000)
+      --s3-bucket-name string         Existing S3 bucket name
+      --s3-region string              The S3 region that the bucket(s) exist in.
+      --s3-profile string             The S3 profile to use for credentials.
+      --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
+      --s3-retry-max-attempts int     Maximum number of attempts that should be made in case of an error.
+                                      Used locally by absctl only, it is not sent to the server. (default 10)
+      --s3-retry-max-backoff int      Max backoff duration (in ms) between retried attempts.
+                                      The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.
+                                      Used locally by absctl only, it is not sent to the server. (default 90000)
+      --s3-max-conns-per-host int     Max connections per host optionally limits the total number of connections per host,
+                                      including connections in the dialing, active, and idle states. On limit violation, dials will block.
+                                      0 means no limit.
+                                      Used locally by absctl only, it is not sent to the server.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -342,31 +332,27 @@ For S3, the storage bucket name must be set with the --s3-bucket-name flag.
 --directory path will only contain the folder name.
 --s3-endpoint-override is used for MinIO storage instead of AWS.
 Any AWS parameter can be retrieved from Secret Agent.
-      --s3-bucket-name string             Existing S3 bucket name
-      --s3-region string                  The S3 region that the bucket(s) exist in.
-      --s3-profile string                 The S3 profile to use for credentials.
-      --s3-access-key-id string           S3 access key ID. If not set, profile auth info will be used.
-      --s3-secret-access-key string       S3 secret access key. If not set, profile auth info will be used.
-      --s3-endpoint-override string       An alternate URL endpoint to send S3 API calls to.
-      --s3-tier string                    If is set, tool will try to restore archived files to the specified tier.
-                                          Attention! This triggers an asynchronous process that cannot be terminated.
-                                          Tiers are: Standard, Bulk, Expedited.
-      --s3-restore-poll-duration int      How often ((in ms)) a backup client checks object status when restoring an archived object. (default 60000)
-      --s3-retry-read-backoff int         The initial delay (in ms) between retry attempts. In case of connection errors
-                                          tool will retry reading the object from the last known position. (default 1000)
-      --s3-retry-read-multiplier float    Multiplier is used to increase the delay between subsequent retry attempts.
-                                          Used in combination with initial delay. (default 2)
-      --s3-retry-read-max-attempts uint   The maximum number of retry attempts that will be made. If set to 0, no retries will be performed. (default 3)
-      --s3-retry-max-attempts int         Maximum number of attempts that should be made in case of an error. (default 10)
-      --s3-retry-max-backoff int          Max backoff duration (in ms) between retried attempts.
-                                          The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff. (default 90000)
-      --s3-max-conns-per-host int         Max connections per host optionally limits the total number of connections per host,
-                                          including connections in the dialing, active, and idle states. On limit violation, dials will block.
-                                          Should be greater than --parallel to avoid download speed degradation.
-                                          0 means no limit.
-      --s3-request-timeout int            Timeout (in ms) specifies a time limit for requests made by this Client.
-                                          The timeout includes connection time, any redirects, and reading the response body.
-                                          0 means no limit. (default 600000)
+      --s3-bucket-name string         Existing S3 bucket name
+      --s3-region string              The S3 region that the bucket(s) exist in.
+      --s3-profile string             The S3 profile to use for credentials.
+      --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
+      --s3-retry-max-attempts int     Maximum number of attempts that should be made in case of an error.
+                                      Used locally by absctl only, it is not sent to the server. (default 10)
+      --s3-retry-max-backoff int      Max backoff duration (in ms) between retried attempts.
+                                      The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.
+                                      Used locally by absctl only, it is not sent to the server. (default 90000)
+      --s3-max-conns-per-host int     Max connections per host optionally limits the total number of connections per host,
+                                      including connections in the dialing, active, and idle states. On limit violation, dials will block.
+                                      0 means no limit.
+                                      Used locally by absctl only, it is not sent to the server.
+      --s3-request-timeout int        Timeout (in ms) specifies a time limit for requests made by this Client.
+                                      The timeout includes connection time, any redirects, and reading the response body.
+                                      0 means no limit.
+                                      Used locally by absctl only, it is not sent to the server. (default 600000)
 ```
 
 ## abort
@@ -581,9 +567,6 @@ backup:
   # Number of upload threads per node, from 1 to 128.
   # If 0, the server default is used.
   parallel-write: 8
-  # Target throughput of the S3 client per node, in gigabits per second
-  # (Gbit/s), from 1 to 400. If 0, the server default is used.
-  s3-throughput: 0
 list:
   # Path to list backups from.
   path: backup_dir
@@ -639,7 +622,29 @@ aws:
     # An alternate URL endpoint to send S3 API calls to.
     endpoint-override: ""
     # S3 access key ID. If not set, profile auth info will be used.
+    # Used locally by absctl only, it is not sent to the server.
     access-key-id: ""
     # S3 secret access key. If not set, profile auth info will be used.
+    # Used locally by absctl only, it is not sent to the server.
     secret-access-key: ""
+    # Maximum number of attempts that should be made in case of an error.
+    # Used locally by absctl only, it is not sent to the server.
+    retry-max-attempts: 10
+    # Max backoff duration (in ms) between retried attempts.
+    # The delay increases exponentially with each retry up to the maximum specified by s3-retry-max-backoff.
+    # Used locally by absctl only, it is not sent to the server.
+    retry-max-backoff: 90000
+    # Max connections per host optionally limits the total number of connections per host,
+    # including connections in the dialing, active, and idle states. On limit violation, dials will block.
+    # 0 means no limit.
+    # Used locally by absctl only, it is not sent to the server.
+    max-conns-per-host: 0
+    # Timeout (in ms) specifies a time limit for requests made by this Client.
+    # The timeout includes connection time, any redirects, and reading the response body.
+    # 0 means no limit.
+    # Used locally by absctl only, it is not sent to the server.
+    request-timeout: 600000
+    # Target throughput of the S3 client per node, in gigabits per second
+    # (Gbit/s), from 1 to 400. If 0, the server default is used.
+    throughput: 0
 ```

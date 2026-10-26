@@ -34,7 +34,7 @@ type ServerBackup struct {
 	Abort       ServerBackupAbortConfig    `yaml:"abort"`
 	SecretAgent SecretAgent                `yaml:"secret-agent"`
 	Aws         struct {
-		S3 ObjectStorageS3 `yaml:"s3"`
+		S3 SnapshotS3 `yaml:"s3"`
 	} `yaml:"aws"`
 }
 
@@ -50,8 +50,8 @@ func DefaultServerBackup() *ServerBackup {
 		Abort:       defaultServerBackupAbortConfig(),
 		SecretAgent: defaultSecretAgent(),
 		Aws: struct {
-			S3 ObjectStorageS3 `yaml:"s3"`
-		}{S3: defaultObjectStorageS3()},
+			S3 SnapshotS3 `yaml:"s3"`
+		}{S3: defaultSnapshotS3()},
 	}
 }
 
@@ -64,7 +64,7 @@ func (b *ServerBackup) LoadSecrets(ctx context.Context) error {
 		return nil
 	}
 
-	fields := collectServerSecretableFields(&b.Cluster, &b.Aws.S3)
+	fields := collectServerSecretableFields(&b.Cluster, &b.Aws.S3.AwsS3Common)
 
 	return resolveSecretFields(ctx, saCfg, fields...)
 }
@@ -86,7 +86,6 @@ type ServerBackupConfig struct {
 	RecordsPerSecond *int `yaml:"records-per-second"`
 	ParallelRead     *int `yaml:"parallel-read"`
 	ParallelWrite    *int `yaml:"parallel-write"`
-	S3Throughput     *int `yaml:"s3-throughput"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
@@ -105,7 +104,6 @@ func defaultServerBackupConfig() ServerBackupConfig {
 		RecordsPerSecond: new(models.DefaultServerBackupRecordsPerSecond),
 		ParallelRead:     new(models.DefaultServerBackupParallelRead),
 		ParallelWrite:    new(models.DefaultServerBackupParallelWrite),
-		S3Throughput:     new(models.DefaultServerBackupS3Throughput),
 	}
 }
 
@@ -131,7 +129,6 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		RecordsPerSecond: derefInt(b.Backup.RecordsPerSecond),
 		ParallelRead:     derefInt(b.Backup.ParallelRead),
 		ParallelWrite:    derefInt(b.Backup.ParallelWrite),
-		S3Throughput:     derefInt(b.Backup.S3Throughput),
 	}
 }
 

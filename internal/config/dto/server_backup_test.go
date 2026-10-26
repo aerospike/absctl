@@ -53,7 +53,6 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
 	assert.Equal(t, models.DefaultServerBackupParallelRead, derefInt(backup.ParallelRead))
 	assert.Equal(t, models.DefaultServerBackupParallelWrite, derefInt(backup.ParallelWrite))
-	assert.Equal(t, models.DefaultServerBackupS3Throughput, derefInt(backup.S3Throughput))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -91,7 +90,6 @@ func TestServerBackupToModels(t *testing.T) {
 	recordsPerSecond := 5000
 	parallelRead := 8
 	parallelWrite := 4
-	s3Throughput := 10
 	policy := "best-effort"
 
 	backup := &ServerBackup{
@@ -111,7 +109,6 @@ func TestServerBackupToModels(t *testing.T) {
 			RecordsPerSecond: &recordsPerSecond,
 			ParallelRead:     &parallelRead,
 			ParallelWrite:    &parallelWrite,
-			S3Throughput:     &s3Throughput,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
@@ -136,7 +133,6 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
 	assert.Equal(t, parallelRead, start.ParallelRead)
 	assert.Equal(t, parallelWrite, start.ParallelWrite)
-	assert.Equal(t, s3Throughput, start.S3Throughput)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)
@@ -184,10 +180,10 @@ func TestServerBackupLoadSecretsNoAgent(t *testing.T) {
 	assert.Equal(t, "secrets:resource:key", derefString(backup.Aws.S3.BucketName))
 }
 
-func TestDefaultObjectStorageS3(t *testing.T) {
+func TestDefaultSnapshotS3(t *testing.T) {
 	t.Parallel()
 
-	s3 := defaultObjectStorageS3()
+	s3 := defaultSnapshotS3()
 
 	assert.Equal(t, models.DefaultS3BucketName, derefString(s3.BucketName))
 	assert.Equal(t, models.DefaultS3Region, derefString(s3.Region))
@@ -195,9 +191,14 @@ func TestDefaultObjectStorageS3(t *testing.T) {
 	assert.Equal(t, models.DefaultS3Endpoint, derefString(s3.EndpointOverride))
 	assert.Equal(t, models.DefaultS3AccessKeyID, derefString(s3.AccessKeyID))
 	assert.Equal(t, models.DefaultS3SecretAccessKey, derefString(s3.SecretAccessKey))
+	assert.Equal(t, models.DefaultS3RetryMaxAttempts, derefInt(s3.RetryMaxAttempts))
+	assert.Equal(t, models.DefaultS3RetryMaxBackoff, derefInt(s3.RetryMaxBackoff))
+	assert.Equal(t, models.DefaultCloudMaxConnsPerHost, derefInt(s3.MaxConnsPerHost))
+	assert.Equal(t, models.DefaultCloudRequestTimeout, derefInt(s3.RequestTimeout))
+	assert.Equal(t, models.DefaultSnapshotS3Throughput, derefInt(s3.Throughput))
 }
 
-func TestObjectStorageS3ToModelAwsS3(t *testing.T) {
+func TestSnapshotS3ToModelSnapshotS3(t *testing.T) {
 	t.Parallel()
 
 	bucket := "my-bucket"
@@ -206,36 +207,42 @@ func TestObjectStorageS3ToModelAwsS3(t *testing.T) {
 	endpoint := "http://127.0.0.1:9000"
 	accessKey := "access"
 	secretKey := "secret"
+	retryMaxAttempts := 3
+	retryMaxBackoff := 1000
+	maxConnsPerHost := 16
+	requestTimeout := 5000
+	throughput := 10
 
-	s3 := &ObjectStorageS3{
+	s3 := &SnapshotS3{
 		BucketName:       &bucket,
 		Region:           &region,
 		Profile:          &profile,
 		EndpointOverride: &endpoint,
 		AccessKeyID:      &accessKey,
 		SecretAccessKey:  &secretKey,
+		RetryMaxAttempts: &retryMaxAttempts,
+		RetryMaxBackoff:  &retryMaxBackoff,
+		MaxConnsPerHost:  &maxConnsPerHost,
+		RequestTimeout:   &requestTimeout,
+		Throughput:       &throughput,
 	}
 
-	got := s3.ToModelAwsS3()
-	require.NotNil(t, got)
+	want := &models.SnapshotS3{
+		BucketName:       bucket,
+		Region:           region,
+		Profile:          profile,
+		Endpoint:         endpoint,
+		AccessKeyID:      accessKey,
+		SecretAccessKey:  secretKey,
+		RetryMaxAttempts: retryMaxAttempts,
+		RetryMaxBackoff:  retryMaxBackoff,
+		MaxConnsPerHost:  maxConnsPerHost,
+		RequestTimeout:   requestTimeout,
+		Throughput:       throughput,
+	}
 
-	assert.Equal(t, bucket, got.BucketName)
-	assert.Equal(t, region, got.Region)
-	assert.Equal(t, profile, got.Profile)
-	assert.Equal(t, endpoint, got.Endpoint)
-	assert.Equal(t, accessKey, got.AccessKeyID)
-	assert.Equal(t, secretKey, got.SecretAccessKey)
+	assert.Equal(t, want, s3.ToModelSnapshotS3())
 
-	// The client-side knobs have no flag on the snapshot commands, so they are
-	// filled with the defaults that keep models.AwsS3 validation happy.
-	assert.Equal(t, models.DefaultS3RestorePollDuration, got.RestorePollDuration)
-	assert.Equal(t, models.DefaultS3RetryMaxAttempts, got.RetryMaxAttempts)
-	assert.Equal(t, models.DefaultS3RetryMaxBackoff, got.RetryMaxBackoff)
-	assert.Equal(t, models.DefaultS3ChunkSize, got.ChunkSize)
-	assert.Equal(t, models.DefaultCloudRetryReadBackoff, got.RetryReadBackoff)
-	assert.InEpsilon(t, models.DefaultCloudRetryReadMultiplier, got.RetryReadMultiplier, 0.0)
-	assert.Equal(t, models.DefaultCloudRetryReadMaxAttempts, got.RetryReadMaxAttempts)
-
-	var nilS3 *ObjectStorageS3
-	assert.Nil(t, nilS3.ToModelAwsS3())
+	var nilS3 *SnapshotS3
+	assert.Nil(t, nilS3.ToModelSnapshotS3())
 }

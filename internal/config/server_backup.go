@@ -27,6 +27,10 @@ type ServerBackupServiceConfig struct {
 	Progress   *models.ServerBackupProgress
 	Abort      *models.ServerBackupAbort
 
+	// S3Throughput is the target throughput of the server S3 client per node, in
+	// Gbit/s. Only Start uses it.
+	S3Throughput int
+
 	ServiceConfigCommon
 }
 
@@ -42,9 +46,9 @@ func NewServerBackupServiceConfig(
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
 	secretAgent *models.SecretAgent,
-	awsS3 *models.AwsS3,
+	s3 *models.SnapshotS3,
 ) *ServerBackupServiceConfig {
-	return &ServerBackupServiceConfig{
+	cfg := &ServerBackupServiceConfig{
 		Start:        start,
 		List:         list,
 		Validation:   validation,
@@ -54,8 +58,14 @@ func NewServerBackupServiceConfig(
 		ClientConfig: clientConfig,
 		ClientPolicy: clientPolicy,
 		SecretAgent:  secretAgent,
-		AwsS3:        awsS3,
+		AwsS3:        s3.ToAwsS3(),
 	}
+
+	if s3 != nil {
+		cfg.S3Throughput = s3.Throughput
+	}
+
+	return cfg
 }
 
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
@@ -78,6 +88,14 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 
 	if err := s.Abort.Validate(); err != nil {
 		return err
+	}
+
+	// The throughput is sent to the server by Start only, so the other subcommands
+	// ignore it.
+	if s.Start != nil {
+		if err := models.ValidateS3Throughput(s.S3Throughput); err != nil {
+			return err
+		}
 	}
 
 	// Abort talks only to the cluster; the other subcommands need object storage.

@@ -255,3 +255,42 @@ func TestServerRestoreLoadSecretsNoAgent(t *testing.T) {
 	require.NoError(t, restore.LoadSecrets(t.Context()))
 	assert.Equal(t, "secrets:resource:key", derefString(restore.Cluster.Password))
 }
+
+func TestSnapshotRestoreS3ToModelSnapshotS3(t *testing.T) {
+	t.Parallel()
+
+	bucket := "my-bucket"
+	region := "eu-central-1"
+	profile := "default"
+	endpoint := "http://127.0.0.1:9000"
+	accessKey := "access"
+	secretKey := "secret"
+
+	s3 := &SnapshotRestoreS3{
+		BucketName:       &bucket,
+		Region:           &region,
+		Profile:          &profile,
+		EndpointOverride: &endpoint,
+		AccessKeyID:      &accessKey,
+		SecretAccessKey:  &secretKey,
+	}
+
+	// The restore schema has no local S3 client settings, so they keep their defaults.
+	want := &models.SnapshotS3{
+		BucketName:       bucket,
+		Region:           region,
+		Profile:          profile,
+		Endpoint:         endpoint,
+		AccessKeyID:      accessKey,
+		SecretAccessKey:  secretKey,
+		RetryMaxAttempts: models.DefaultS3RetryMaxAttempts,
+		RetryMaxBackoff:  models.DefaultS3RetryMaxBackoff,
+		MaxConnsPerHost:  models.DefaultCloudMaxConnsPerHost,
+		RequestTimeout:   models.DefaultCloudRequestTimeout,
+	}
+
+	assert.Equal(t, want, s3.ToModelSnapshotS3())
+
+	var nilS3 *SnapshotRestoreS3
+	assert.Nil(t, nilS3.ToModelSnapshotS3())
+}

@@ -129,6 +129,6 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 		BackupRPS:                    start.RecordsPerSecond,
 		BackupWorkerThreads:          start.ParallelRead,
 		BackupUploadThreads:          start.ParallelWrite,
-		BackupS3ThroughputTargetGbps: start.S3Throughput,
+		BackupS3ThroughputTargetGbps: s.backupCfg.S3Throughput,
 	}, nil
 }

@@ -179,7 +179,7 @@ const (
 	DefaultServerBackupRecordsPerSecond   = 0
 	DefaultServerBackupParallelRead       = 8
 	DefaultServerBackupParallelWrite      = 8
-	DefaultServerBackupS3Throughput       = 0
+	DefaultSnapshotS3Throughput           = 0
 	DefaultServerBackupPolicy             = ""
 )
 
