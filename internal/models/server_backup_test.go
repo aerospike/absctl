@@ -24,8 +24,11 @@ import (
 )
 
 const (
-	testServerNamespace    = "test-ns"
-	testServerJobID        = "backup-job-1"
+	testServerNamespace = "test-ns"
+	testServerJobID     = "261025T120000-ab12"
+	// testNotBackupID is an id that does not have the form of a backup id.
+	testNotBackupID        = "backup-job-1"
+	errMsgNotBackupID      = "is not a backup id"
 	testServerListPath     = "/backups"
 	testServerStorage      = StorageTypeAwsS3
 	testUnsupportedStorage = "gcp-storage"
@@ -431,6 +434,12 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
+			name:       "backup id of another form",
+			progress:   &ServerBackupProgress{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
+		},
+		{
 			name: "watch enabled",
 			progress: &ServerBackupProgress{
 				JobID: testServerJobID,
@@ -502,6 +511,12 @@ func TestServerBackupAbort_Validate(t *testing.T) {
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
 		},
+		{
+			name:       "backup id of another form",
+			abort:      &ServerBackupAbort{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
+		},
 	}
 
 	for _, tt := range tests {
@@ -548,6 +563,12 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			validation: &ServerBackupValidate{},
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name:       "backup id of another form",
+			validation: &ServerBackupValidate{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
 		},
 		{
 			name: "zero sample size validates all segments",

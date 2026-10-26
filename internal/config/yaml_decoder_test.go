@@ -71,7 +71,7 @@ invalid: yaml: content:
 	testServerRestoreJobID = "rst-1"
 	// testServerBackupID and testServerBackupKeyPrefix are the backup the
 	// snapshot-backup sections of the fixtures below name.
-	testServerBackupID        = "bkp-1"
+	testServerBackupID        = "261025T120000-ab12"
 	testServerBackupKeyPrefix = "backups/daily"
 
 	// validServerBackupYAML describes the whole snapshot-backup command tree:
@@ -100,15 +100,15 @@ backup:
 list:
   path: some/prefix
 validate:
-  backup-id: bkp-1
+  backup-id: 261025T120000-ab12
   path: backups/daily
   sample-size: 500
 progress:
-  backup-id: bkp-1
+  backup-id: 261025T120000-ab12
   path: backups/daily
   watch: true
 abort:
-  backup-id: bkp-1
+  backup-id: 261025T120000-ab12
 aws:
   s3:
     bucket-name: my-bucket
@@ -127,7 +127,7 @@ restore:
   namespace: test
   object-storage-type: aws-s3
   backup-ids:
-    - bkp-1
+    - 261025T120000-ab12
   job-id: rst-1
   path: some/prefix
   set-list:
@@ -574,7 +574,7 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Validation)
 				assert.Nil(t, cfg.Progress)
 
-				assert.Equal(t, "bkp-1", cfg.Abort.JobID)
+				assert.Equal(t, testServerBackupID, cfg.Abort.JobID)
 			},
 		},
 	}
@@ -623,7 +623,7 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 		},
 		{
 			name:    "restore backup-id",
-			yaml:    "restore:\n  backup-id: bkp-1\n",
+			yaml:    "restore:\n  backup-id: 261025T120000-ab12\n",
 			wantKey: "backup-id",
 			decode: func(ctx context.Context, filename string) error {
 				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
@@ -650,7 +650,7 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 		},
 		{
 			name:    "prepare backup-id",
-			yaml:    "prepare:\n  backup-id: bkp-1\n",
+			yaml:    "prepare:\n  backup-id: 261025T120000-ab12\n",
 			wantKey: "backup-id",
 			decode: func(ctx context.Context, filename string) error {
 				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandPrepare)
@@ -659,7 +659,7 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 		},
 		{
 			name:    "abort backup-id",
-			yaml:    "abort:\n  backup-id: bkp-1\n",
+			yaml:    "abort:\n  backup-id: 261025T120000-ab12\n",
 			wantKey: "backup-id",
 			decode: func(ctx context.Context, filename string) error {
 				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandAbort)

@@ -181,8 +181,9 @@ func (s *ServerRestore) validateJobSettings() error {
 }
 
 // validateBackupIDs checks the backup id list the server is sent verbatim. The server
-// rejects an empty element of the list, and an id list cannot name the restore job, so
-// both are caught here rather than after the cluster and the object storage are reached.
+// rejects an empty element of the list, every backup is looked up by its id, and an id
+// list cannot name the restore job, so all of these are caught here rather than after
+// the cluster and the object storage are reached.
 func (s *ServerRestore) validateBackupIDs() error {
 	if s.BackupIDs == "" {
 		return errors.New("backup-ids is required")
@@ -191,6 +192,12 @@ func (s *ServerRestore) validateBackupIDs() error {
 	ids := s.BackupIDList()
 	if slices.Contains(ids, "") {
 		return errors.New("backup-ids must not contain an empty id")
+	}
+
+	for _, id := range ids {
+		if err := validateBackupID("backup-ids", id); err != nil {
+			return err
+		}
 	}
 
 	if s.JobID == "" && len(ids) > 1 {

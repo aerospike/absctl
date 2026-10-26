@@ -186,12 +186,12 @@ func (s *Service) checkBackupsExist(
 // checkBackupExists validates that the backup backupID, written under prefix, exists and
 // is complete.
 func (s *Service) checkBackupExists(ctx context.Context, client s3API, bucket, prefix, backupID string) error {
-	md, err := newPrefixedMetadataGetter(client, bucket, prefix, s.logger).GetMetadata(ctx, backupID)
+	md, err := newMetadataGetter(client, bucket, prefix, s.logger).GetMetadata(ctx, backupID)
 	if err != nil {
 		return fmt.Errorf("failed to check if backup exists: %w", err)
 	}
 
-	if md.Status != servermodels.MetadataStatusComplete {
+	if md.Status != servermodels.BackupStatusComplete {
 		return fmt.Errorf("backup %s is not complete, has status %s", backupID, md.Status)
 	}
 

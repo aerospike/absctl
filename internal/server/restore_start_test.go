@@ -46,7 +46,7 @@ func TestServiceStartRestore(t *testing.T) {
 	manifest, err := json.Marshal(servermodels.Metadata{
 		BackupID:  testRequestBackupID,
 		Namespace: testRequestNamespace,
-		Status:    servermodels.MetadataStatusComplete,
+		Status:    servermodels.BackupStatusComplete,
 	})
 	require.NoError(t, err)
 
@@ -334,7 +334,7 @@ func TestServiceCheckBackupExistsReadsUnderPrefix(t *testing.T) {
 	manifest, err := json.Marshal(servermodels.Metadata{
 		BackupID:  testRequestBackupID,
 		Namespace: testRequestNamespace,
-		Status:    servermodels.MetadataStatusComplete,
+		Status:    servermodels.BackupStatusComplete,
 	})
 	require.NoError(t, err)
 
@@ -368,7 +368,7 @@ func TestServiceCheckBackupsExistReadsEveryBackup(t *testing.T) {
 	manifest, err := json.Marshal(servermodels.Metadata{
 		BackupID:  testRequestBackupID,
 		Namespace: testRequestNamespace,
-		Status:    servermodels.MetadataStatusComplete,
+		Status:    servermodels.BackupStatusComplete,
 	})
 	require.NoError(t, err)
 
@@ -413,7 +413,7 @@ func TestServiceCheckRestoreBackupsExist(t *testing.T) {
 	manifest, err := json.Marshal(servermodels.Metadata{
 		BackupID:  testRequestBackupID,
 		Namespace: testRequestNamespace,
-		Status:    servermodels.MetadataStatusComplete,
+		Status:    servermodels.BackupStatusComplete,
 	})
 	require.NoError(t, err)
 

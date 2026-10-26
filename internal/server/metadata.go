@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path"
 	"time"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -74,29 +73,13 @@ func (s *Service) newMetadataLister(ctx context.Context, prefix string) (metadat
 		return nil, err
 	}
 
-	return newPrefixedMetadataGetter(s3Client, s.backupCfg.AwsS3.BucketName, prefix, s.logger), nil
+	return newMetadataGetter(s3Client, s.backupCfg.AwsS3.BucketName, prefix, s.logger), nil
 }
 
-// prefixedMetadataGetter reads the manifests of backups written under a key prefix.
-// lister.Lister applies its prefix to listing only, so a single manifest is addressed
-// by its full key.
-type prefixedMetadataGetter struct {
-	metadataGetter
-	prefix string
-}
-
-// newPrefixedMetadataGetter returns the reader of manifests under prefix in bucket. The
-// lister gets no prefix of its own, so that the prefix is applied in one place only.
-func newPrefixedMetadataGetter(client s3API, bucket, prefix string, logger *slog.Logger) prefixedMetadataGetter {
-	return prefixedMetadataGetter{
-		metadataGetter: lister.NewLister(client, bucket, "", lister.WithLogger(logger)),
-		prefix:         prefix,
-	}
-}
-
-// GetMetadata reads the manifest of backupID under the prefix.
-func (g prefixedMetadataGetter) GetMetadata(ctx context.Context, backupID string) (servermodels.Metadata, error) {
-	return g.metadataGetter.GetMetadata(ctx, path.Join(g.prefix, backupID))
+// newMetadataGetter returns the reader of manifests of backups written under
+// prefix in bucket. The lister looks a backup up by its job id under its own prefix.
+func newMetadataGetter(client s3API, bucket, prefix string, logger *slog.Logger) *lister.Lister {
+	return lister.NewLister(client, bucket, prefix, lister.WithLogger(logger))
 }
 
 // metadataS3Config returns a copy of cfg with a bounded request timeout, so that reading

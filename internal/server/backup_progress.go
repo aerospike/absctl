@@ -297,8 +297,8 @@ func (s *Service) printMetadata(ctx context.Context, l metadataGetter, jobID str
 }
 
 // printMetadataEntry prints a single backup manifest.
-func (s *Service) printMetadataEntry(md servermodels.Metadata) error {
-	return logging.PrintMetadata([]servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger)
+func (s *Service) printMetadataEntry(md *servermodels.Metadata) error {
+	return logging.PrintMetadata([]*servermodels.Metadata{md}, s.backupCfg.App.LogJSON, s.logger)
 }
 
 // fetchMetadata reads the backup manifest from object storage. Only a missing manifest is
@@ -309,14 +309,14 @@ func (s *Service) fetchMetadata(
 	l metadataGetter,
 	jobID string,
 	wait bool,
-) (servermodels.Metadata, error) {
+) (*servermodels.Metadata, error) {
 	if !wait {
 		md, err := l.GetMetadata(ctx, jobID)
 		if err != nil {
-			return servermodels.Metadata{}, fmt.Errorf("failed to get backup metadata: %w", err)
+			return nil, fmt.Errorf("failed to get backup metadata: %w", err)
 		}
 
-		return md, nil
+		return &md, nil
 	}
 
 	var (
@@ -345,12 +345,12 @@ func (s *Service) fetchMetadata(
 
 	switch {
 	case permErr != nil:
-		return servermodels.Metadata{}, fmt.Errorf("failed to get backup metadata: %w", permErr)
+		return nil, fmt.Errorf("failed to get backup metadata: %w", permErr)
 	case retryErr != nil:
-		return servermodels.Metadata{}, fmt.Errorf("timed out waiting for backup metadata: %w", retryErr)
+		return nil, fmt.Errorf("timed out waiting for backup metadata: %w", retryErr)
 	}
 
-	return md, nil
+	return &md, nil
 }
 
 // backupSnapshot describes the progress of a backup job.
