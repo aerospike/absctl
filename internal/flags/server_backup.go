@@ -101,10 +101,6 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 		models.DefaultServerBackupParallelWrite,
 		"Number of upload threads per node, from 1 to 128.\n"+
 			"If 0, the server default is used.")
-	flagSet.IntVar(&f.S3Throughput, "s3-throughput",
-		models.DefaultServerBackupS3Throughput,
-		"Target throughput of the S3 client per node, in gigabits per second\n"+
-			"(Gbit/s), from 1 to 400. If 0, the server default is used.")
 
 	return flagSet
 }

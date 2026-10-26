@@ -24,8 +24,7 @@ import (
 // Limits of the backup job settings, as enforced by the server. Zero leaves a setting
 // to the server default, so it is accepted by each of them.
 const (
-	maxServerBackupParallel     = 128
-	maxServerBackupS3Throughput = 400
+	maxServerBackupParallel = 128
 	// minServerBackupRPSPerReader is how many records per second each scan thread
 	// needs at least: a non-zero limit below it is refused by the server.
 	minServerBackupRPSPerReader = 5
@@ -38,11 +37,6 @@ type ServerBackup struct {
 	ModifiedBefore string
 	ModifiedAfter  string
 	BinList        string
-
-	// S3Throughput is the target throughput of the S3 client per node, in Gbit/s. Like
-	// ParallelRead, ParallelWrite and RecordsPerSecond, it is sent only when it is not
-	// zero, so that the server applies its own default otherwise.
-	S3Throughput int
 }
 
 func (s *ServerBackup) Validate() error {
@@ -108,9 +102,6 @@ func (s *ServerBackup) validateJobSettings() error {
 	case s.ParallelWrite < 0 || s.ParallelWrite > maxServerBackupParallel:
 		return fmt.Errorf("parallel-write must be between 0 and %d, got %d",
 			maxServerBackupParallel, s.ParallelWrite)
-	case s.S3Throughput < 0 || s.S3Throughput > maxServerBackupS3Throughput:
-		return fmt.Errorf("s3-throughput must be between 0 and %d, got %d",
-			maxServerBackupS3Throughput, s.S3Throughput)
 	}
 
 	// The minimum depends on the number of scan threads, which is only known here when

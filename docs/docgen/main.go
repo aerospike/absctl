@@ -466,9 +466,16 @@ func buildServerSections(operation string) []docSection {
 	})
 
 	// Object storage flags. The server transfers the data itself, so this is
-	// the reduced S3 flag set, not the full client-side one.
+	// the reduced S3 flag set, not the full client-side one. The backup schema
+	// holds the flags of every snapshot-backup subcommand.
+	s3FlagSet := flags.NewSnapshotS3(flags.SnapshotS3ModeRestoreStart).NewFlagSet()
+	if operation == opBackup {
+		s3FlagSet = flags.NewSnapshotS3(flags.SnapshotS3ModeBackupStart).NewFlagSet()
+		s3FlagSet.AddFlagSet(flags.NewSnapshotS3(flags.SnapshotS3ModeReader).NewFlagSet())
+	}
+
 	sections = append(sections, docSection{
-		FS:         flags.NewObjectStorageS3().NewFlagSet(),
+		FS:         s3FlagSet,
 		YAMLPrefix: "aws.s3",
 		FlagToYAMLPath: func(prefix string, f *pflag.Flag) string {
 			return prefix + "." + strings.TrimPrefix(f.Name, "s3-")
@@ -512,7 +519,7 @@ func serverBackupExampleDTO() *dto.ServerBackup {
 	b.Progress.JobID = &jobID
 
 	applyServerClusterExample(&b.Cluster)
-	applyServerS3Example(&b.Aws.S3)
+	applyServerS3Example(&b.Aws.S3.AwsS3Common)
 
 	return b
 }
@@ -546,7 +553,7 @@ func serverRestoreExampleDTO() *dto.ServerRestore {
 	r.ClearStorage.JobID = &jobID
 
 	applyServerClusterExample(&r.Cluster)
-	applyServerS3Example(&r.Aws.S3)
+	applyServerS3Example(&r.Aws.S3.AwsS3Common)
 
 	return r
 }
@@ -567,7 +574,7 @@ func applyServerClusterExample(c *dto.Cluster) {
 }
 
 // applyServerS3Example fills the object storage section with example values.
-func applyServerS3Example(s3 *dto.ObjectStorageS3) {
+func applyServerS3Example(s3 *dto.AwsS3Common) {
 	bucket := "backup-bucket"
 	region := "us-east-1"
 	s3.BucketName = &bucket

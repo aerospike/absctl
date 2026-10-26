@@ -116,7 +116,9 @@ Any AWS parameter can be retrieved from Secret Agent.
       --s3-region string              The S3 region that the bucket(s) exist in.
       --s3-profile string             The S3 profile to use for credentials.
       --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
       --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
+                                      Used locally by absctl only, it is not sent to the server.
       --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
 
 Secret Agent Flags:
@@ -786,7 +788,9 @@ aws:
     # An alternate URL endpoint to send S3 API calls to.
     endpoint-override: ""
     # S3 access key ID. If not set, profile auth info will be used.
+    # Used locally by absctl only, it is not sent to the server.
     access-key-id: ""
     # S3 secret access key. If not set, profile auth info will be used.
+    # Used locally by absctl only, it is not sent to the server.
     secret-access-key: ""
 ```

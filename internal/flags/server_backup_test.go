@@ -94,7 +94,6 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
 	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
 	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
-	assert.Equal(t, models.DefaultServerBackupS3Throughput, result.S3Throughput)
 }
 
 func TestServerBackup_NewFlagSet_Policy(t *testing.T) {
@@ -129,13 +128,11 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 		testRecordsPerSecond = "5000"
 		testParallelRead     = "8"
 		testParallelWrite    = "4"
-		testS3Throughput     = "10"
 	)
 
 	commonArgs := []string{
 		"--parallel-read", testParallelRead,
 		"--parallel-write", testParallelWrite,
-		"--s3-throughput", testS3Throughput,
 	}
 
 	tests := []struct {
@@ -165,7 +162,6 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 			assert.Equal(t, 5000, result.RecordsPerSecond)
 			assert.Equal(t, 8, result.ParallelRead)
 			assert.Equal(t, 4, result.ParallelWrite)
-			assert.Equal(t, 10, result.S3Throughput)
 		})
 	}
 }

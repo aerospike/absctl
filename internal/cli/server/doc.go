@@ -154,9 +154,10 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 	common := newCommonFlagSets(rc)
 
 	startFS := bc.start.NewFlagSet()
-	objectStoreFS := bc.objectStorageS3.NewFlagSet()
+	objectStoreFS := bc.s3Start.NewFlagSet()
 	listFS := bc.list.NewFlagSet()
-	awsFS := bc.aws.NewFlagSet()
+	awsFS := bc.s3Reader.NewFlagSet()
+	awsProgressFS := bc.s3Progress.NewFlagSet()
 	validationFS := bc.validate.NewFlagSet()
 	progressFS := bc.progress.NewFlagSet()
 	abortFS := bc.abort.NewFlagSet()
@@ -181,7 +182,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Short:    ShortBackupProgress,
 			Long:     LongBackupProgress,
 			Usage:    flags.SectionTextUsageBackupProgress,
-			Sections: backupProgressHelpSections(common, progressFS, awsFS),
+			Sections: backupProgressHelpSections(common, progressFS, awsProgressFS),
 		},
 		{
 			Name:     UseValidate,
@@ -207,7 +208,7 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 	common := newCommonFlagSets(rc)
 
 	startFS := rf.start.NewFlagSet()
-	objectStoreFS := rf.objectStorageS3.NewFlagSet()
+	objectStoreFS := rf.s3Start.NewFlagSet()
 	prepareFS := rf.prepare.NewFlagSet()
 	progressFS := rf.progress.NewFlagSet()
 	abortFS := rf.abort.NewFlagSet()

@@ -35,19 +35,19 @@ type restoreCtx struct {
 	abort    *flags.ServerRestoreAbort
 	open     *flags.ServerRestoreOpen
 	clear    *flags.ServerRestoreClearStorage
-	// objectStorageS3 is the restore read source (start).
-	objectStorageS3 *flags.ObjectStorageS3
+	// s3Start is the restore read source (start).
+	s3Start *flags.SnapshotS3
 }
 
 func newRestoreCtx() *restoreCtx {
 	return &restoreCtx{
-		start:           flags.NewServerRestore(),
-		prepare:         flags.NewServerRestorePrepare(),
-		progress:        flags.NewServerRestoreProgress(),
-		abort:           flags.NewServerRestoreAbort(),
-		open:            flags.NewServerRestoreOpen(),
-		clear:           flags.NewServerRestoreClearStorage(),
-		objectStorageS3: flags.NewObjectStorageS3(),
+		start:    flags.NewServerRestore(),
+		prepare:  flags.NewServerRestorePrepare(),
+		progress: flags.NewServerRestoreProgress(),
+		abort:    flags.NewServerRestoreAbort(),
+		open:     flags.NewServerRestoreOpen(),
+		clear:    flags.NewServerRestoreClearStorage(),
+		s3Start:  flags.NewSnapshotS3(flags.SnapshotS3ModeRestoreStart),
 	}
 }
 
@@ -131,7 +131,7 @@ func setHelpRestore(cmd *cobra.Command) {
 
 func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	startFlags := rf.start.NewFlagSet()
-	objectStoreFlagSet := rf.objectStorageS3.NewFlagSet()
+	objectStoreFlagSet := rf.s3Start.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   UseStart,
@@ -142,7 +142,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 				func() *config.ServerRestoreServiceConfig {
 					return newRestoreServiceConfig(rc,
 						config.ServerRestoreCommands{Start: rf.start.GetServerRestore()},
-						rf.objectStorageS3.ToAwsS3())
+						rf.s3Start.ToAwsS3())
 				})
 			if err != nil {
 				return err

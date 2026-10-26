@@ -159,17 +159,20 @@ func dtoToServerBackupServiceConfig(
 		return nil, fmt.Errorf("failed to map to aerospike config: %w", err)
 	}
 
+	s3 := dtoBackup.Aws.S3.ToModelSnapshotS3()
+
 	cfg := &ServerBackupServiceConfig{
 		App:          dtoBackup.App.ToModelApp(),
 		ClientConfig: asConfig,
 		ClientPolicy: dtoBackup.Cluster.ToModelClientPolicy(),
 		SecretAgent:  dtoBackup.SecretAgent.ToModelSecretAgent(),
-		AwsS3:        dtoBackup.Aws.S3.ToModelAwsS3(),
+		AwsS3:        s3.ToAwsS3(),
 	}
 
 	switch command {
 	case ServerBackupCommandStart:
 		cfg.Start = dtoBackup.ToModelServerBackup()
+		cfg.S3Throughput = s3.Throughput
 	case ServerBackupCommandList:
 		cfg.List = dtoBackup.ToModelServerBackupList()
 	case ServerBackupCommandValidate:
@@ -233,7 +236,7 @@ func dtoToServerRestoreServiceConfig(
 		ClientConfig: asConfig,
 		ClientPolicy: dtoRestore.Cluster.ToModelClientPolicy(),
 		SecretAgent:  dtoRestore.SecretAgent.ToModelSecretAgent(),
-		AwsS3:        dtoRestore.Aws.S3.ToModelAwsS3(),
+		AwsS3:        dtoRestore.Aws.S3.ToModelSnapshotS3().ToAwsS3(),
 	}
 
 	switch command {

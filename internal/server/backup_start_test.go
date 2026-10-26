@@ -43,10 +43,12 @@ func TestServiceBackupRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name    string
-		give    *models.ServerBackup
-		want    func() *infomodels.RequestBackup
-		wantErr bool
+		name string
+		give *models.ServerBackup
+		// giveS3Throughput is the throughput of the server S3 client.
+		giveS3Throughput int
+		want             func() *infomodels.RequestBackup
+		wantErr          bool
 	}{
 		{
 			name: "defaults send the bools as false",
@@ -73,8 +75,8 @@ func TestServiceBackupRequest(t *testing.T) {
 				RecordsPerSecond: testBackupRPS,
 				ParallelRead:     testParallelRead,
 				ParallelWrite:    testParallelWrite,
-				S3Throughput:     testS3Throughput,
 			},
+			giveS3Throughput: testS3Throughput,
 			want: func() *infomodels.RequestBackup {
 				common := testRequestCommon()
 				common.Path = testBackupPath
@@ -136,7 +138,10 @@ func TestServiceBackupRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := &Service{backupCfg: &config.ServerBackupServiceConfig{Start: tt.give}}
+			svc := &Service{backupCfg: &config.ServerBackupServiceConfig{
+				Start:        tt.give,
+				S3Throughput: tt.giveS3Throughput,
+			}}
 			svc.backupCfg.AwsS3 = testRequestS3()
 
 			got, err := svc.backupRequest()

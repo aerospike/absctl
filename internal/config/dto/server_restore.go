@@ -35,7 +35,7 @@ type ServerRestore struct {
 	ClearStorage ServerRestoreClearConfig    `yaml:"clear-storage"`
 	SecretAgent  SecretAgent                 `yaml:"secret-agent"`
 	Aws          struct {
-		S3 ObjectStorageS3 `yaml:"s3"`
+		S3 SnapshotRestoreS3 `yaml:"s3"`
 	} `yaml:"aws"`
 }
 
@@ -52,8 +52,8 @@ func DefaultServerRestore() *ServerRestore {
 		ClearStorage: defaultServerRestoreClearConfig(),
 		SecretAgent:  defaultSecretAgent(),
 		Aws: struct {
-			S3 ObjectStorageS3 `yaml:"s3"`
-		}{S3: defaultObjectStorageS3()},
+			S3 SnapshotRestoreS3 `yaml:"s3"`
+		}{S3: defaultSnapshotRestoreS3()},
 	}
 }
 
@@ -66,7 +66,7 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 		return nil
 	}
 
-	fields := collectServerSecretableFields(&r.Cluster, &r.Aws.S3)
+	fields := collectServerSecretableFields(&r.Cluster, &r.Aws.S3.AwsS3Common)
 
 	return resolveSecretFields(ctx, saCfg, fields...)
 }

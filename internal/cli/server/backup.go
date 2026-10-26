@@ -33,10 +33,12 @@ type backupCtx struct {
 	progress *flags.ServerBackupProgress
 	abort    *flags.ServerBackupAbort
 
-	// aws is the listing/validation source (list, validate, progress).
-	aws *flags.AwsS3
-	// objectStorageS3 is the backup write target (start).
-	objectStorageS3 *flags.ObjectStorageS3
+	// s3Start is the backup write target (start).
+	s3Start *flags.SnapshotS3
+	// s3Reader is the listing/validation source (list, validate).
+	s3Reader *flags.SnapshotS3
+	// s3Progress is the backup metadata source (progress).
+	s3Progress *flags.SnapshotS3
 }
 
 func newBackupCtx() *backupCtx {
@@ -47,8 +49,9 @@ func newBackupCtx() *backupCtx {
 		progress: flags.NewServerBackupProgress(),
 		abort:    flags.NewServerBackupAbort(),
 
-		aws:             flags.NewAwsS3(flags.OperationRestore),
-		objectStorageS3: flags.NewObjectStorageS3(),
+		s3Start:    flags.NewSnapshotS3(flags.SnapshotS3ModeBackupStart),
+		s3Reader:   flags.NewSnapshotS3(flags.SnapshotS3ModeReader),
+		s3Progress: flags.NewSnapshotS3(flags.SnapshotS3ModeProgress),
 	}
 }
 
@@ -112,7 +115,7 @@ func setHelpBackup(cmd *cobra.Command) {
 
 func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	startFlagSet := bf.start.NewFlagSet()
-	objectStoreFlagSet := bf.objectStorageS3.NewFlagSet()
+	objectStoreFlagSet := bf.s3Start.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   UseStart,
@@ -128,7 +131,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
 						rc.secretAgent.GetSecretAgent(),
-						bf.objectStorageS3.ToAwsS3(),
+						bf.s3Start.GetSnapshotS3(),
 					)
 				})
 			if err != nil {
@@ -175,7 +178,7 @@ func setHelpBackupStart(
 }
 
 func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
-	awsFlagSet := bf.aws.NewFlagSet()
+	awsFlagSet := bf.s3Reader.NewFlagSet()
 	listFlagSet := bf.list.NewFlagSet()
 
 	cmd := &cobra.Command{
@@ -193,7 +196,7 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
 						rc.secretAgent.GetSecretAgent(),
-						bf.aws.GetAwsS3(),
+						bf.s3Reader.GetSnapshotS3(),
 					)
 				})
 			if err != nil {
@@ -235,7 +238,7 @@ func setHelpBackupList(cmd *cobra.Command, appFS, listFS, awsFS *pflag.FlagSet) 
 }
 
 func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
-	awsFlagSet := bf.aws.NewFlagSet()
+	awsFlagSet := bf.s3Progress.NewFlagSet()
 	progressFlagSet := bf.progress.NewFlagSet()
 
 	cmd := &cobra.Command{
@@ -253,7 +256,7 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
 						rc.secretAgent.GetSecretAgent(),
-						bf.aws.GetAwsS3(),
+						bf.s3Progress.GetSnapshotS3(),
 					)
 				})
 			if err != nil {
@@ -298,7 +301,7 @@ func setHelpBackupProgress(cmd *cobra.Command, common commonFlagSets, progressFs
 
 func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	validationFlagSet := bf.validate.NewFlagSet()
-	awsFlagSet := bf.aws.NewFlagSet()
+	awsFlagSet := bf.s3Reader.NewFlagSet()
 
 	cmd := &cobra.Command{
 		Use:   UseValidate,
@@ -315,7 +318,7 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 						rc.aerospike.NewAerospikeConfig(),
 						rc.clientPolicy.GetClientPolicy(),
 						rc.secretAgent.GetSecretAgent(),
-						bf.aws.GetAwsS3(),
+						bf.s3Reader.GetSnapshotS3(),
 					)
 				})
 			if err != nil {

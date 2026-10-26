@@ -162,7 +162,6 @@ func TestServerBackup_Validate(t *testing.T) {
 				backup.RecordsPerSecond = math.MaxUint32
 				backup.ParallelRead = maxServerBackupParallel
 				backup.ParallelWrite = maxServerBackupParallel
-				backup.S3Throughput = maxServerBackupS3Throughput
 				return backup
 			},
 		},
@@ -244,26 +243,6 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "parallel-write must be between 0 and 128, got 129",
-		},
-		{
-			name: "s3 throughput above range",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.S3Throughput = maxServerBackupS3Throughput + 1
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "s3-throughput must be between 0 and 400, got 401",
-		},
-		{
-			name: "negative s3 throughput",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.S3Throughput = -1
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "s3-throughput must be between 0 and 400, got -1",
 		},
 	}
 

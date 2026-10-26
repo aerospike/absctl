@@ -479,41 +479,81 @@ func (a *AwsS3) ToModelAwsS3() *models.AwsS3 {
 	}
 }
 
-// ObjectStorageS3 is the S3 schema used by the server-integrated commands
-// (snapshot-backup, snapshot-restore). The Aerospike server performs the
-// transfer itself, so only the connection settings are configurable here — the
-// client-side tuning knobs exposed by AwsS3 have no equivalent flag.
-type ObjectStorageS3 struct {
+// SnapshotS3 is the S3 schema of the snapshot-backup commands. The Aerospike server
+// performs the transfer itself, so besides the connection settings it holds only the
+// target throughput of the server and the settings of the local S3 client that reads
+// backup metadata and segments. The other client-side settings of AwsS3 do not apply.
+type SnapshotS3 struct {
 	AwsS3Common `yaml:",inline"`
+
+	RetryMaxAttempts *int `yaml:"retry-max-attempts"`
+	RetryMaxBackoff  *int `yaml:"retry-max-backoff"`
+	MaxConnsPerHost  *int `yaml:"max-conns-per-host"`
+	RequestTimeout   *int `yaml:"request-timeout"`
+	Throughput       *int `yaml:"throughput"`
 }
 
-func defaultObjectStorageS3() ObjectStorageS3 {
-	return ObjectStorageS3{AwsS3Common: defaultAwsS3Common()}
+func defaultSnapshotS3() SnapshotS3 {
+	return SnapshotS3{
+		AwsS3Common:      defaultAwsS3Common(),
+		RetryMaxAttempts: new(models.DefaultS3RetryMaxAttempts),
+		RetryMaxBackoff:  new(models.DefaultS3RetryMaxBackoff),
+		MaxConnsPerHost:  new(models.DefaultCloudMaxConnsPerHost),
+		RequestTimeout:   new(models.DefaultCloudRequestTimeout),
+		Throughput:       new(models.DefaultSnapshotS3Throughput),
+	}
 }
 
-// ToModelAwsS3 maps the reduced schema onto models.AwsS3, filling the
-// client-side fields with the same defaults flags.ObjectStorageS3.ToAwsS3 uses
-// so the shared validation passes.
-func (o *ObjectStorageS3) ToModelAwsS3() *models.AwsS3 {
-	if o == nil {
+// ToModelSnapshotS3 maps the schema onto its model.
+func (s *SnapshotS3) ToModelSnapshotS3() *models.SnapshotS3 {
+	if s == nil {
 		return nil
 	}
 
-	return &models.AwsS3{
-		BucketName:      derefString(o.BucketName),
-		Region:          derefString(o.Region),
-		Profile:         derefString(o.Profile),
-		Endpoint:        derefString(o.EndpointOverride),
-		AccessKeyID:     derefString(o.AccessKeyID),
-		SecretAccessKey: derefString(o.SecretAccessKey),
-		// Set defaults to pass validation.
-		RestorePollDuration:  models.DefaultS3RestorePollDuration,
-		RetryMaxAttempts:     models.DefaultS3RetryMaxAttempts,
-		RetryMaxBackoff:      models.DefaultS3RetryMaxBackoff,
-		ChunkSize:            models.DefaultS3ChunkSize,
-		RetryReadBackoff:     models.DefaultCloudRetryReadBackoff,
-		RetryReadMultiplier:  models.DefaultCloudRetryReadMultiplier,
-		RetryReadMaxAttempts: models.DefaultCloudRetryReadMaxAttempts,
+	return &models.SnapshotS3{
+		BucketName:       derefString(s.BucketName),
+		Region:           derefString(s.Region),
+		Profile:          derefString(s.Profile),
+		Endpoint:         derefString(s.EndpointOverride),
+		AccessKeyID:      derefString(s.AccessKeyID),
+		SecretAccessKey:  derefString(s.SecretAccessKey),
+		RetryMaxAttempts: derefInt(s.RetryMaxAttempts),
+		RetryMaxBackoff:  derefInt(s.RetryMaxBackoff),
+		MaxConnsPerHost:  derefInt(s.MaxConnsPerHost),
+		RequestTimeout:   derefInt(s.RequestTimeout),
+		Throughput:       derefInt(s.Throughput),
+	}
+}
+
+// SnapshotRestoreS3 is the S3 schema of the snapshot-restore commands. Only
+// "snapshot-restore start" reaches the bucket, and it needs the connection settings
+// only.
+type SnapshotRestoreS3 struct {
+	AwsS3Common `yaml:",inline"`
+}
+
+func defaultSnapshotRestoreS3() SnapshotRestoreS3 {
+	return SnapshotRestoreS3{AwsS3Common: defaultAwsS3Common()}
+}
+
+// ToModelSnapshotS3 maps the schema onto models.SnapshotS3, filling the local S3
+// client settings with their defaults.
+func (s *SnapshotRestoreS3) ToModelSnapshotS3() *models.SnapshotS3 {
+	if s == nil {
+		return nil
+	}
+
+	return &models.SnapshotS3{
+		BucketName:       derefString(s.BucketName),
+		Region:           derefString(s.Region),
+		Profile:          derefString(s.Profile),
+		Endpoint:         derefString(s.EndpointOverride),
+		AccessKeyID:      derefString(s.AccessKeyID),
+		SecretAccessKey:  derefString(s.SecretAccessKey),
+		RetryMaxAttempts: models.DefaultS3RetryMaxAttempts,
+		RetryMaxBackoff:  models.DefaultS3RetryMaxBackoff,
+		MaxConnsPerHost:  models.DefaultCloudMaxConnsPerHost,
+		RequestTimeout:   models.DefaultCloudRequestTimeout,
 	}
 }
 

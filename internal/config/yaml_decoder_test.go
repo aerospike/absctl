@@ -112,6 +112,7 @@ aws:
   s3:
     bucket-name: my-bucket
     region: eu-central-1
+    throughput: 10
 `
 
 	// validServerRestoreYAML describes the whole snapshot-restore command tree.
@@ -510,6 +511,7 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.True(t, cfg.Start.NoIndexes)
 				assert.Equal(t, string(infomodels.BackupPolicyBestEffort), cfg.Start.Policy)
 				assert.True(t, cfg.Start.Async)
+				assert.Equal(t, 10, cfg.S3Throughput)
 			},
 		},
 		{
@@ -524,6 +526,8 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Nil(t, cfg.Progress)
 
 				assert.Equal(t, "some/prefix", cfg.List.Path)
+				// Only start sends the throughput to the server.
+				assert.Zero(t, cfg.S3Throughput)
 			},
 		},
 		{
