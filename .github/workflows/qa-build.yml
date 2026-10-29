@@ -1,0 +1,242 @@
+name: QA Build (DEB/RPM + Docker)
+
+# Builds a QA (dev) build of the selected branch and uploads it to the JFrog "database" project
+# DEV repositories only:
+#   - DEB packages -> database-deb-dev-local
+#   - RPM packages -> database-rpm-dev-local
+#   - Docker image -> database-docker-dev-local
+#
+# Nothing is released: no release bundle is created or promoted, no GitHub Release is published,
+# and no moving image tag (latest, <major>) is pushed. To build a branch, run this workflow from the
+# Actions tab and select the branch in "Use workflow from".
+#
+# Version format (same scheme as aerospike-secret-agent): <last-tag-without-v>-<branch-slug>.<short-sha>,
+# e.g. 1.2.0-featurex.abc1234. The image is tagged <version>_<timestamp> (immutable) and with the
+# branch name.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# NOTE: every aerospike/shared-workflows `uses: ...@<sha>` below is pinned to v5.1.0.
+# gh-workflows-ref must match that sha; bump them together by hand.
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_version: ${{ steps.metadata.outputs.ARTIFACT_VERSION }}
+      go_version: ${{ steps.metadata.outputs.GO_VERSION }}
+      image_tags: ${{ steps.metadata.outputs.IMAGE_TAGS }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags are needed by `git describe` below.
+          fetch-depth: 0
+
+      - name: Get Metadata
+        id: metadata
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Read the version from go.mod directly: running `go mod edit` here could trigger a
+          # toolchain download if the runner's Go is older than go.mod requires.
+          GO_MINOR="go$(grep '^go ' go.mod | cut -d' ' -f2 | cut -d. -f1-2)"
+          GO_CANDIDATES="$(curl -fsSL 'https://go.dev/dl/?mode=json&include=all' | \
+            jq -r --arg ver "${GO_MINOR}" '.[] | select(.version | startswith($ver)) | .version' | \
+            sort -rV)"
+          if [[ -z "${GO_CANDIDATES}" ]]; then
+            echo "::error::Failed to resolve any Go version candidates for ${GO_MINOR}"
+            exit 1
+          fi
+
+          # The same Go version is used for the packages and as the Docker golang base image, so
+          # pick the newest patch that is already published on Docker Hub (go.dev lists new
+          # patches before the golang image is available).
+          GO_VERSION=""
+          while IFS= read -r candidate; do
+            candidate_version="${candidate#go}"
+            status="$(curl -s -o /dev/null -w '%{http_code}' \
+              "https://hub.docker.com/v2/repositories/library/golang/tags/${candidate_version}")"
+            if [[ "${status}" == "200" ]]; then
+              GO_VERSION="${candidate_version}"
+              break
+            fi
+            echo "golang:${candidate_version} is not published on Docker Hub yet (HTTP ${status}), trying an older patch..."
+          done <<< "${GO_CANDIDATES}"
+
+          if [[ -z "${GO_VERSION}" ]]; then
+            echo "::error::Failed to resolve a Go version with a published Docker Hub image"
+            exit 1
+          fi
+
+          LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+
+          # The branch is reduced to lowercase alphanumerics (valid in deb/rpm versions), and
+          # "debian" is shortened so the deploy step can't mistake it for the debian11/12/13
+          # distro marker in the package filename.
+          BRANCH_SLUG="$(printf '%s' "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+          BRANCH_SLUG="${BRANCH_SLUG//debian/deb}"
+          BRANCH_SLUG="${BRANCH_SLUG:0:30}"
+          ARTIFACT_VERSION="${LAST_TAG#v}-${BRANCH_SLUG:-branch}.${SHORT_SHA}"
+
+          [[ "${ARTIFACT_VERSION}" =~ ^[0-9] ]] || { echo "::error::version '${ARTIFACT_VERSION}' must start with a digit"; exit 1; }
+
+          # Branch name as a valid Docker tag: chars outside [A-Za-z0-9_.-] (e.g. '/') become '-';
+          # must not start with '.' or '-'. Moving release tags are never allowed here.
+          IMAGE_TAGS="$(printf '%s' "${REF_NAME}" | sed -e 's/[^A-Za-z0-9_.-]/-/g' -e 's/^[.-]*//' | cut -c1-128)"
+          if [[ -z "${IMAGE_TAGS}" || "${IMAGE_TAGS}" == "latest" ]]; then
+            echo "::error::branch '${REF_NAME}' does not map to a usable image tag ('${IMAGE_TAGS}')"
+            exit 1
+          fi
+
+          echo "Resolved GO_VERSION=${GO_VERSION}"
+          echo "Resolved ARTIFACT_VERSION=${ARTIFACT_VERSION}"
+          echo "Resolved IMAGE_TAGS=${IMAGE_TAGS}"
+          {
+            echo "GO_VERSION=${GO_VERSION}"
+            echo "ARTIFACT_VERSION=${ARTIFACT_VERSION}"
+            echo "IMAGE_TAGS=${IMAGE_TAGS}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### QA build"
+            echo "| Key | Value |"
+            echo "| --- | --- |"
+            echo "| Branch | \`${REF_NAME}\` |"
+            echo "| Commit | \`${SHORT_SHA}\` |"
+            echo "| Package version | \`${ARTIFACT_VERSION}\` |"
+            echo "| Image tags | \`${ARTIFACT_VERSION}_<timestamp>\`, \`${IMAGE_TAGS}\` |"
+            echo "| Go version | \`${GO_VERSION}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # DEB/RPM packages: build -> sign -> deploy to database-{deb,rpm}-dev-local
+  # ---------------------------------------------------------------------------
+
+  build-packages:
+    needs: prepare
+    permissions:
+      contents: read
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_artifacts-cicd.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
+    with:
+      gh-workflows-ref: 308f37e0cd5c7a6386a99ea7afc379d5a4ea9256
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-build-name: absctl-qa-packages
+      version: ${{ needs.prepare.outputs.artifact_version }}
+      gh-artifact-directory: dist
+      oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
+      oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+      build-type: snapshot
+      build-env: "VERSION=${{ needs.prepare.outputs.artifact_version }};GO_VERSION=${{ needs.prepare.outputs.go_version }}"
+      build-script: |
+        set -euo pipefail
+
+        sudo apt-get update
+        sudo apt-get install -y gettext-base
+
+        echo "Installing Go ${GO_VERSION}..."
+        go install "golang.org/dl/go${GO_VERSION}@latest"
+        export PATH="$(go env GOPATH)/bin:${PATH}"
+        go"${GO_VERSION}" download
+        export PATH="$(go"${GO_VERSION}" env GOROOT)/bin:${PATH}"
+        go version
+
+        # Pin nfpm to a known version and verify it against nfpm's published checksums.
+        NFPM_VERSION="2.47.0"
+        NFPM_DEB="nfpm_${NFPM_VERSION}_amd64.deb"
+        curl -sSLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/${NFPM_DEB}"
+        curl -sSLO "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
+        grep " ${NFPM_DEB}\$" checksums.txt | sha256sum -c -
+        sudo apt-get install -y "./${NFPM_DEB}"
+        rm -f "${NFPM_DEB}" checksums.txt
+
+        echo "Building packages..."
+        make packages BUILD_MODE=release VERSION="${VERSION}"
+
+        # Publish deb/rpm packages only: drop binaries and other build leftovers from dist/
+        # so nothing is uploaded to database-generic-dev-local.
+        find dist -type f ! -name '*.deb' ! -name '*.rpm' -print -delete
+        find dist -mindepth 1 -type d -empty -delete
+
+        # The deploy step picks the apt distribution from a distro token in the .deb filename
+        # (ubuntu22.04, debian12, ...). The binary is static (CGO_ENABLED=0), so the same .deb
+        # works everywhere: publish one renamed copy per supported Linux target (same list as
+        # pre-release.yml).
+        for deb in dist/*.deb; do
+          [ -e "$deb" ] || continue
+          base="${deb%.deb}"
+          for dist_tag in ubuntu22.04 ubuntu24.04 ubuntu26.04 debian11 debian12 debian13; do
+            cp -v "$deb" "${base}_${dist_tag}.deb"
+          done
+          rm -v "$deb"
+        done
+
+        # Same for RPM: the dist tag is parsed from the second-to-last dot-separated filename
+        # component (name-version-release.el9.x86_64.rpm), which nfpm does not emit.
+        for rpm in dist/*.rpm; do
+          [ -e "$rpm" ] || continue
+          noext="${rpm%.rpm}"
+          arch="${noext##*.}"
+          base="${noext%.*}"
+          for dist_tag in el8 el9 el10 amzn2023; do
+            cp -v "$rpm" "${base}.${dist_tag}.${arch}.rpm"
+          done
+          rm -v "$rpm"
+        done
+
+        echo "Packaged artifacts:"
+        ls -la dist
+    secrets:
+      gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
+      gpg-public-key: ${{ secrets.GPG_PUBLIC_KEY }}
+      gpg-key-pass: ${{ secrets.GPG_PASS }}
+
+  # ---------------------------------------------------------------------------
+  # Docker image: build, attest and push to database-docker-dev-local
+  # ---------------------------------------------------------------------------
+
+  build-docker-image:
+    needs: prepare
+    # The nested jobs of reusable_docker-build-deploy.yaml request packages: write and
+    # attestations: write, so they must be granted here as well.
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      attestations: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
+    with:
+      # The registry defaults to artifact.aerospike.io/<jf-project>-docker-dev-local.
+      jf-project: ${{ vars.JF_PROJECT }}
+      jf-build-name: absctl-qa-container
+      image-name: absctl
+      app-name: Aerospike Backup CLI
+      app-version: ${{ needs.prepare.outputs.artifact_version }}
+      # Tags pushed besides the always-generated <app-version>_<timestamp>: the branch name only.
+      versions-override: ${{ needs.prepare.outputs.image_tags }}
+      context: .
+      file: Dockerfile
+      oidc-audience: ${{ vars.JF_OIDC_AUDIENCE }}
+      oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER }}
+      build-args-json: >-
+        {"GO_VERSION":"${{ needs.prepare.outputs.go_version }}","REGISTRY":"docker.io","BUILD_MODE":"release","VERSION":"${{ needs.prepare.outputs.artifact_version }}"}
+      labels-json: >-
+        {"org.opencontainers.image.title":"Aerospike Backup CLI",
+        "org.opencontainers.image.description":"Command-line tool for backing up and restoring Aerospike data",
+        "org.opencontainers.image.documentation":"https://github.com/aerospike/absctl?tab=readme-ov-file#absctl",
+        "org.opencontainers.image.base.name":"docker.io/alpine:3.23",
+        "org.opencontainers.image.vendor":"Aerospike",
+        "org.opencontainers.image.licenses":"Apache-2.0"}
