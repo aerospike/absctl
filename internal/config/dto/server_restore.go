@@ -89,7 +89,6 @@ type ServerRestoreConfig struct {
 	RecordsPerSecond  *int     `yaml:"records-per-second"`
 	ExtraTTL          *int     `yaml:"extra-ttl"`
 	Policy            *string  `yaml:"policy"`
-	AllowUnhosted     *bool    `yaml:"allow-unhosted"`
 	MaxInflight       *int     `yaml:"max-inflight"`
 	RetryBaseInterval *int     `yaml:"retry-base-interval"`
 	RetryMultiplier   *float64 `yaml:"retry-multiplier"`
@@ -115,7 +114,6 @@ func defaultServerRestoreConfig() ServerRestoreConfig {
 		RecordsPerSecond:  new(models.DefaultServerRestoreRecordsPerSecond),
 		ExtraTTL:          new(models.DefaultServerRestoreExtraTTL),
 		Policy:            new(models.DefaultServerRestorePolicy),
-		AllowUnhosted:     new(models.DefaultServerRestoreAllowUnhosted),
 		MaxInflight:       new(models.DefaultServerRestoreMaxInflight),
 		RetryBaseInterval: new(models.DefaultServerRestoreRetryBaseInterval),
 		RetryMultiplier:   new(models.DefaultServerRestoreRetryMultiplier),
@@ -147,7 +145,6 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 		RecordsPerSecond:  derefInt(r.Restore.RecordsPerSecond),
 		ExtraTTL:          derefInt(r.Restore.ExtraTTL),
 		Policy:            derefString(r.Restore.Policy),
-		AllowUnhosted:     derefBool(r.Restore.AllowUnhosted),
 		MaxInflight:       derefOr(r.Restore.MaxInflight, models.DefaultServerRestoreMaxInflight),
 		RetryBaseInterval: derefOr(r.Restore.RetryBaseInterval, models.DefaultServerRestoreRetryBaseInterval),
 		RetryMultiplier:   derefOr(r.Restore.RetryMultiplier, models.DefaultServerRestoreRetryMultiplier),

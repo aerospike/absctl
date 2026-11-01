@@ -217,7 +217,6 @@ const (
 
 	DefaultServerRestoreJobID             = ""
 	DefaultServerRestorePolicy            = ""
-	DefaultServerRestoreAllowUnhosted     = false
 	DefaultServerRestoreParallelWrite     = 8
 	DefaultServerRestoreRecordsPerSecond  = 0
 	DefaultServerRestoreMaxInflight       = 200

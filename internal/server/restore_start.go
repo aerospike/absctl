@@ -152,7 +152,6 @@ func (s *Service) restoreRequest() (*infomodels.RequestRestore, error) {
 	// The server refuses the fuzzy only settings, whatever their values, with any other
 	// policy, so they are sent with the fuzzy policy only.
 	if req.Policy == infomodels.RestorePolicyFuzzy {
-		req.AllowUnhosted = new(start.AllowUnhosted)
 		req.MaxInflight = start.MaxInflight
 		req.RetryBaseIntervalMs = new(start.RetryBaseInterval)
 		req.RetryMultiplier = start.RetryMultiplier

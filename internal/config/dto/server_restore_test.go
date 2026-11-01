@@ -50,7 +50,6 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(restore.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(restore.NoUDFs))
 	assert.Equal(t, models.DefaultServerRestorePolicy, derefString(restore.Policy))
-	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, derefBool(restore.AllowUnhosted))
 	assert.Equal(t, models.DefaultServerRestoreParallelWrite, derefInt(restore.ParallelWrite))
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, derefInt(restore.RecordsPerSecond))
 	assert.Equal(t, models.DefaultServerRestoreMaxInflight, derefInt(restore.MaxInflight))
@@ -127,7 +126,6 @@ func TestServerRestoreToModels(t *testing.T) {
 			NoIndexes:         &enabled,
 			NoUDFs:            &enabled,
 			Policy:            &policy,
-			AllowUnhosted:     &enabled,
 			ParallelWrite:     &parallelWrite,
 			RecordsPerSecond:  &recordsPerSecond,
 			MaxInflight:       &maxInflight,
@@ -167,7 +165,6 @@ func TestServerRestoreToModels(t *testing.T) {
 		NoIndexes:         true,
 		NoUDFs:            true,
 		Policy:            policy,
-		AllowUnhosted:     true,
 		ParallelWrite:     parallelWrite,
 		RecordsPerSecond:  recordsPerSecond,
 		MaxInflight:       maxInflight,

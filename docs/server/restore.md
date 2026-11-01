@@ -99,7 +99,6 @@ Restore Flags:
                                   live namespace.
                                   If empty, the server default is used, which is strict.
                                   The flags below apply to the fuzzy policy only.
-      --allow-unhosted            Allow the restore even if the principal does not host the namespace.
       --max-inflight int          Maximum number of concurrent writes, up to 100000. (default 200)
       --retry-base-interval int   Base delay before a retry (in ms). 0 retries without a delay. (default 1000)
       --retry-multiplier float    Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
@@ -702,8 +701,6 @@ restore:
   # If empty, the server default is used, which is strict.
   # The flags below apply to the fuzzy policy only.
   policy: ""
-  # Allow the restore even if the principal does not host the namespace.
-  allow-unhosted: false
   # Maximum number of concurrent writes, up to 100000.
   max-inflight: 200
   # Base delay before a retry (in ms). 0 retries without a delay.

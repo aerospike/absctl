@@ -196,7 +196,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 				BackupIDs:         testRequestBackupID,
 				JobID:             testRequestJobID,
 				Policy:            string(infomodels.RestorePolicyFuzzy),
-				AllowUnhosted:     true,
 				ParallelWrite:     testRestoreParallelWrite,
 				RecordsPerSecond:  testRestoreRPS,
 				MaxInflight:       500,
@@ -217,7 +216,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 					RestoreDownloadThreads: testRestoreParallelRead,
 					RestoreRPS:             testRestoreRPS,
 					Policy:                 infomodels.RestorePolicyFuzzy,
-					AllowUnhosted:          new(true),
 					MaxInflight:            500,
 					RetryBaseIntervalMs:    new(2000),
 					RetryMultiplier:        1.5,
@@ -244,7 +242,6 @@ func TestServiceRestoreRequest(t *testing.T) {
 					JobID:               testRequestJobID,
 					BackupIDs:           testRequestBackupID,
 					Policy:              infomodels.RestorePolicyFuzzy,
-					AllowUnhosted:       new(false),
 					RetryBaseIntervalMs: new(0),
 					IgnoreRecordError:   new(false),
 				}

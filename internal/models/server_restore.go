@@ -59,8 +59,7 @@ type ServerRestore struct {
 
 	// The fields below apply to a fuzzy restore only.
 
-	AllowUnhosted bool
-	MaxInflight   int
+	MaxInflight int
 	// RetryBaseInterval is the base delay before a retry, in milliseconds.
 	RetryBaseInterval int
 	RetryMultiplier   float64
@@ -230,7 +229,6 @@ func (s *ServerRestore) validateColdRestore() error {
 		name string
 		set  bool
 	}{
-		{"allow-unhosted", changed(s.AllowUnhosted, DefaultServerRestoreAllowUnhosted)},
 		{"max-inflight", changed(s.MaxInflight, DefaultServerRestoreMaxInflight)},
 		{"retry-base-interval", changed(s.RetryBaseInterval, DefaultServerRestoreRetryBaseInterval)},
 		{"retry-multiplier", changed(s.RetryMultiplier, DefaultServerRestoreRetryMultiplier)},
