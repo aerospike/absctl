@@ -134,7 +134,6 @@ restore:
   no-indexes: true
   no-udfs: true
   policy: fuzzy
-  allow-unhosted: true
   parallel-write: 16
   parallel-read: 4
   records-per-second: 1000
@@ -709,7 +708,6 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				assert.True(t, cfg.Start.NoIndexes)
 				assert.True(t, cfg.Start.NoUDFs)
 				assert.Equal(t, string(infomodels.RestorePolicyFuzzy), cfg.Start.Policy)
-				assert.True(t, cfg.Start.AllowUnhosted)
 				assert.Equal(t, 16, cfg.Start.ParallelWrite)
 				assert.Equal(t, 4, cfg.Start.ParallelRead)
 				assert.Equal(t, 1000, cfg.Start.RecordsPerSecond)

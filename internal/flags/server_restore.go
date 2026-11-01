@@ -88,9 +88,6 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 			"live namespace.\n"+
 			"If empty, the server default is used, which is strict.\n"+
 			"The flags below apply to the fuzzy policy only.")
-	flagSet.BoolVar(&f.AllowUnhosted, "allow-unhosted",
-		models.DefaultServerRestoreAllowUnhosted,
-		"Allow the restore even if the principal does not host the namespace.")
 	flagSet.IntVar(&f.MaxInflight, "max-inflight",
 		models.DefaultServerRestoreMaxInflight,
 		"Maximum number of concurrent writes, up to 100000.")

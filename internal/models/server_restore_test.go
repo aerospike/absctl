@@ -30,8 +30,6 @@ const (
 	testServerBackupIDs = testServerJobID + "," + testServerSecondJobID
 	errMsgJobIDRequired = "job-id is required"
 	errMsgRequiresFuzzy = "requires policy fuzzy"
-	// errMsgAllowUnhostedRequiresFuzzy is reported for allow-unhosted without the fuzzy policy.
-	errMsgAllowUnhostedRequiresFuzzy = "allow-unhosted " + errMsgRequiresFuzzy
 	// errMsgRestorePolicy is the common part of the unknown restore policy errors.
 	errMsgRestorePolicy = `policy must be strict or fuzzy, got "`
 	// errMsgParallelRead is the common part of the parallel read range errors.
@@ -45,7 +43,6 @@ func validServerRestore() *ServerRestore {
 		Namespace:         testServerNamespace,
 		BackupIDs:         testServerJobID,
 		ParallelRead:      DefaultServerRestoreParallelRead,
-		AllowUnhosted:     DefaultServerRestoreAllowUnhosted,
 		ParallelWrite:     DefaultServerRestoreParallelWrite,
 		RecordsPerSecond:  DefaultServerRestoreRecordsPerSecond,
 		MaxInflight:       DefaultServerRestoreMaxInflight,
@@ -170,7 +167,6 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			name: "valid fuzzy restore at the limits",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.AllowUnhosted = true
 				restore.ParallelWrite = maxServerRestoreParallelWrite
 				restore.MaxInflight = maxServerRestoreMaxInflight
 				restore.RetryMultiplier = minServerRestoreRetryMultiplier
@@ -251,16 +247,6 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 				restore.FilterExp = testServerFilterExp
 				return restore
 			},
-		},
-		{
-			name: "allow unhosted with strict policy",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.Policy = string(infomodels.RestorePolicyStrict)
-				restore.AllowUnhosted = true
-				return restore
-			},
-			wantErrMsg: errMsgAllowUnhostedRequiresFuzzy,
 		},
 		{
 			name: "unknown policy",
@@ -390,15 +376,6 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 				return restore
 			},
 			wantErrMsg: "retry-max-attempts must be positive",
-		},
-		{
-			name: "allow unhosted without fuzzy policy",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.AllowUnhosted = true
-				return restore
-			},
-			wantErrMsg: errMsgAllowUnhostedRequiresFuzzy,
 		},
 		{
 			// The worker threads and the rate limit apply to both kinds of restore.

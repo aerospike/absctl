@@ -62,7 +62,6 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		NoIndexes:         true,
 		NoUDFs:            true,
 		Policy:            testPolicy,
-		AllowUnhosted:     true,
 		ParallelWrite:     16,
 		RecordsPerSecond:  1000,
 		MaxInflight:       500,
@@ -85,7 +84,6 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--filter-exp", testFilterExp,
 		"--no-udfs",
 		"--policy", testPolicy,
-		"--allow-unhosted",
 		"--max-inflight", testMaxInflight,
 		"--retry-base-interval", testRetryBaseInterval,
 		"--retry-multiplier", testRetryMultiplier,
@@ -156,7 +154,6 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerRestorePolicy, result.Policy)
-	assert.Equal(t, models.DefaultServerRestoreAllowUnhosted, result.AllowUnhosted)
 	assert.Equal(t, models.DefaultServerRestoreParallelWrite, result.ParallelWrite)
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, result.RecordsPerSecond)
 	assert.Equal(t, models.DefaultServerRestoreMaxInflight, result.MaxInflight)
