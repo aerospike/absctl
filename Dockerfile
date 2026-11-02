@@ -3,7 +3,8 @@
 ARG GO_VERSION=1.23.10
 ARG REGISTRY="docker.io"
 
-FROM --platform=$BUILDPLATFORM ${REGISTRY}/tonistiigi/xx AS xx
+# Build-time only (never shipped), so pin exactly; bump tag and digest together.
+FROM --platform=$BUILDPLATFORM ${REGISTRY}/tonistiigi/xx:1.10.0@sha256:40fe21f44bb8cddf1eb1226db190d0a984118f62ee02a91b77d99448d28264a6 AS xx
 FROM --platform=$BUILDPLATFORM ${REGISTRY}/golang:${GO_VERSION} AS builder
 
 ARG TARGETOS
@@ -33,13 +34,15 @@ RUN --mount=type=secret,id=GOPROXY <<-EOF
     xx-verify /app/absctl/dist/absctl_${TARGETOS}_${TARGETARCH}
 EOF
 
-FROM ${REGISTRY}/alpine:3.23
+# Pinned to the Alpine 3.24 release line: the `3.24` tag always resolves to the
+# newest 3.24.x patch release, so rebuilds pick up fixes without jumping to 3.25.
+FROM ${REGISTRY}/alpine:3.24
 
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN apk update && \
-    apk upgrade --no-cache
+# Pick up package fixes published since the base image was built.
+RUN apk upgrade --no-cache
 
 # adduser and addgroup are provided by busybox (no shadow package needed)
 RUN addgroup -g 65532 -S abtgroup && \

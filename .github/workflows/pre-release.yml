@@ -888,7 +888,7 @@ jobs:
         {"org.opencontainers.image.title":"Aerospike Backup CLI",
         "org.opencontainers.image.description":"Command-line tool for backing up and restoring Aerospike data",
         "org.opencontainers.image.documentation":"https://github.com/aerospike/absctl?tab=readme-ov-file#absctl",
-        "org.opencontainers.image.base.name":"docker.io/alpine:3.23",
+        "org.opencontainers.image.base.name":"docker.io/alpine:3.24",
         "org.opencontainers.image.vendor":"Aerospike",
         "org.opencontainers.image.licenses":"Apache-2.0"}
 
