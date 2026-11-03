@@ -77,7 +77,7 @@ func (s *ServerRestoreProgress) Validate() error {
 
 // ServerRestoreAbort contains flags that will be mapped to ServerRestoreAbort.
 // Unlike a backup job, a restore job is named by the namespace it restores into
-// as well as by its id, so both are required.
+// as well as by its id, so both are required. A
 type ServerRestoreAbort struct {
 	Namespace string
 	JobID     string
