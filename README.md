@@ -175,7 +175,7 @@ For the full flag reference, configuration file schema, and examples, see:
 - [Scan backup documentation](docs/scan/backup.md)
 - [Scan restore documentation](docs/scan/restore.md)
 
-## Server-Integrated Snapshot Backup and Restore
+## Server-Integrated Snapshot Backup and Restore (Unreleased)
 
 Server-integrated commands trigger backup and restore operations that run inside Aerospike Server. Data is written to and read from configured object storage. These commands are suited to namespace snapshot workflows coordinated through the cluster.
 
