@@ -15,6 +15,7 @@
 package server
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/aerospike/backup-go/pkg/asinfo"
@@ -88,8 +89,8 @@ func TestServiceOpenRestore(t *testing.T) {
 			wantLogs: []string{
 				logNamespaceOpened,
 				// The wait shows where the namespace stands while it does not open.
-				"ns-state=" + string(infomodels.NamespaceStateFailed),
-				"ns-state=" + string(infomodels.NamespaceStateOpening),
+				"state=" + stateClosed,
+				"state=" + stateOpening,
 			},
 		},
 		{
@@ -163,5 +164,35 @@ func TestServiceOpenRestore(t *testing.T) {
 				assert.NotContains(t, buf.String(), notWant)
 			}
 		})
+	}
+}
+
+// TestServiceOpenRestoreDebugLines pins down that at the debug level the open names the
+// state of the job under the same label in every line, the lines logged while the job is
+// missing from the status for a moment included, and adds the full state.
+func TestServiceOpenRestoreDebugLines(t *testing.T) {
+	t.Parallel()
+
+	const (
+		logLastStateClosed = "last-state=" + stateClosed
+		logDescription     = "description="
+		logServerNsState   = "ns-state=FAILED"
+	)
+
+	svc, buf := newTestService(t)
+	svc.logger = slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	closed := restoreAnswer{status: testFailedRestore(
+		testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))}
+	client := &fakeRestoreInfoClient{answers: []restoreAnswer{
+		closed,
+		{err: asinfo.ErrNotFound},
+		{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateNone))},
+	}}
+
+	require.NoError(t, svc.openRestore(t.Context(), client))
+
+	for _, want := range []string{"state=" + stateClosed, logLastStateClosed, logDescription, logServerNsState} {
+		assert.Contains(t, buf.String(), want)
 	}
 }

@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"time"
@@ -45,6 +46,10 @@ const (
 type progressSnapshot struct {
 	// attrs name the job and its state. They lead every line printed for the snapshot.
 	attrs []any
+	// debugAttrs returns the attributes that describe the state in full, as the server
+	// reports it. They end the line when the logger prints debug records, and are not
+	// built otherwise.
+	debugAttrs func() []any
 	// stage changes whenever the job moves on to another stage, which is always printed.
 	stage string
 	// ratio is the completion of the job, in [0, 1].
@@ -76,7 +81,7 @@ func newProgressPrinter(logger *slog.Logger, msg string) *progressPrinter {
 
 // Print logs the given snapshot if it carries new information, and reports whether it
 // did. now is passed in so that the decision is reproducible under test.
-func (p *progressPrinter) Print(snap *progressSnapshot, now time.Time) bool {
+func (p *progressPrinter) Print(ctx context.Context, snap *progressSnapshot, now time.Time) bool {
 	elapsed := elapsedSince(snap.startTime, now)
 
 	if !p.shouldPrint(snap.stage, snap.ratio, elapsed, now) {
@@ -92,7 +97,7 @@ func (p *progressPrinter) Print(snap *progressSnapshot, now time.Time) bool {
 		attrs = append(attrs, slog.String("remaining", remaining.Round(time.Second).String()))
 	}
 
-	p.logger.Info(p.msg, attrs...)
+	p.logger.InfoContext(ctx, p.msg, withDebugAttrs(ctx, p.logger, attrs, snap.debugAttrs)...)
 
 	p.stage = snap.stage
 	p.lastRatio = snap.ratio

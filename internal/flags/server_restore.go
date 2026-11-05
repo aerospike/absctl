@@ -19,6 +19,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// descJobIDFromStart tells where the id of a restore job comes from: it is generated when
+// the restore starts.
+const descJobIDFromStart = "\nThe id is logged by \"snapshot-restore start\" as job-id."
+
 // ServerRestore holds flags for the server restore start command.
 type ServerRestore struct {
 	models.ServerRestore
@@ -138,7 +142,7 @@ func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
 		"The namespace the restore writes into.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the restore job to follow.")
+		"Id of the restore job to follow."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Watch, "watch",
 		models.DefaultServerRestoreProgressWatch,
 		"Watch the progress of the restore.")
@@ -168,7 +172,7 @@ func (f *ServerRestoreAbort) NewFlagSet() *pflag.FlagSet {
 		"The namespace the restore is aborted for.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the restore job to abort.")
+		"Id of the restore job to abort."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the cluster accepts the abort, without\n"+
@@ -200,7 +204,7 @@ func (f *ServerRestoreOpen) NewFlagSet() *pflag.FlagSet {
 		"The namespace to release.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the failed or aborted cold restore job that holds the namespace.")
+		"Id of the failed or aborted cold restore job that holds the namespace."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the cluster accepts the request, without\n"+
@@ -233,7 +237,8 @@ func (f *ServerRestoreClearStorage) NewFlagSet() *pflag.FlagSet {
 		"The namespace to clear.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the cold restore job being prepared.")
+		"Id of the cold restore job that waits for the namespace storage to be cleared."+
+			descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the nodes accept the clear, without waiting\n"+

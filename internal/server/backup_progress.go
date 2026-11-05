@@ -140,7 +140,7 @@ func (s *Service) reportBackupProgress(
 		now := time.Now()
 		snap := backupSnapshot(status)
 
-		printer.Print(snap, now)
+		printer.Print(ctx, snap, now)
 
 		// BackupStateAborting is not terminal: the job is still winding down and keeps
 		// reporting until it reaches BackupStateAborted or leaves the cluster status.
@@ -185,7 +185,7 @@ func (s *Service) newBackupWatch(
 		},
 		missing: missing,
 		describe: func(status *infomodels.ResponseBackupState) string {
-			return status.State.Describe()
+			return backupStateLabel(status.State)
 		},
 	}
 }
@@ -285,7 +285,7 @@ func (s *Service) reportMissingBackup(
 		return s.printMetadataEntry(md)
 	case errors.Is(err, errclass.ErrNotFound):
 		return fmt.Errorf("%w: backup-id %s, last reported state %q",
-			errBackupStatusLost, jobID, lastState.Describe())
+			errBackupStatusLost, jobID, backupStateLabel(lastState))
 	default:
 		return err
 	}
@@ -365,7 +365,13 @@ func backupSnapshot(status *infomodels.ResponseBackupState) *progressSnapshot {
 	return &progressSnapshot{
 		attrs: []any{
 			slog.String("backup-id", status.JobID),
-			slog.String("state", status.State.Describe()),
+			slog.String("state", backupStateLabel(status.State)),
+		},
+		debugAttrs: func() []any {
+			return []any{
+				slog.String("description", backupStateDescription(status.State)),
+				slog.String("server-state", string(status.State)),
+			}
 		},
 		stage:      string(status.State),
 		ratio:      completionRatio(status.ProgressPct, status.State == infomodels.BackupStateComplete),

@@ -221,7 +221,7 @@ func (s *Service) runningRestore(
 		s.logger.Info(msgNoRunningRestore,
 			slog.String("namespace", namespace),
 			slog.String("job-id", jobID),
-			slog.String("state", string(status.State)))
+			slog.String("state", restoreStateLabel(status)))
 
 		if status.Kind == infomodels.RestoreKindCold && status.State != infomodels.RestoreStateComplete {
 			s.logOpenHint(namespace, jobID)

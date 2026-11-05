@@ -85,7 +85,10 @@ func TestServiceClearRestoreStorage(t *testing.T) {
 			answers:        []restoreAnswer{clearing, clearing, readyAnswer},
 			wantCalls:      3,
 			wantClearCalls: 1,
-			wantLogs:       []string{logClearing, logStorageCleared, logZeroedBytes, logFollowRestore},
+			// The wait names the state under the same label the other commands print.
+			wantLogs: []string{
+				logClearing, "state=" + stateClearing, logStorageCleared, logZeroedBytes, logFollowRestore,
+			},
 		},
 		{
 			// A node that backed out of the clear asks for it again.

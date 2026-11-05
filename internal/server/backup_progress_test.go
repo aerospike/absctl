@@ -638,7 +638,7 @@ func TestProgressPrinterPrint(t *testing.T) {
 			printer.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 			printer.msg = msgBackupProgress
 
-			require.True(t, printer.Print(backupSnapshot(tt.status), now))
+			require.True(t, printer.Print(t.Context(), backupSnapshot(tt.status), now))
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)

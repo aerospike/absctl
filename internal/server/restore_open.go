@@ -59,25 +59,29 @@ func (s *Service) openRestore(ctx context.Context, client backup.ServerBackupInf
 	// confirm the release, and is followed like any other job missing from the status.
 	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
 		missingRestore(namespace, jobID))
+	// A job missing from the status for a moment is named by the label its progress
+	// lines use.
+	w.describe = openStateLabel
 
-	// reported is the namespace state last logged, so that a wait that does not move on
-	// shows where it stands without a line per lookup.
-	var reported infomodels.NamespaceState
+	// reported is the state last logged, so that a wait that does not move on shows where
+	// it stands without a line per lookup.
+	var reported string
 
 	// A failed or aborted job keeps its state through the release, which only moves the
 	// namespace state on to OPENING and then NONE, so the namespace state alone says
 	// whether the release is done. The cluster refuses to open a job that still runs.
-	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+	w.handle = func(ctx context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		if namespaceOpened(status.NsState) {
 			return true, 0, nil
 		}
 
-		if status.NsState != reported {
-			s.logger.Info("opening namespace in progress",
-				slog.String("job-id", jobID),
-				slog.String("ns-state", string(status.NsState)))
+		if label := openStateLabel(status); label != reported {
+			attrs := []any{slog.String("job-id", jobID), slog.String("state", label)}
 
-			reported = status.NsState
+			s.logger.InfoContext(ctx, "opening namespace in progress", withDebugAttrs(ctx, s.logger, attrs,
+				func() []any { return restoreDebugAttrs(status, openStateDescription(status)) })...)
+
+			reported = label
 		}
 
 		return false, s.statePollInterval, nil

@@ -137,10 +137,8 @@ func (s *Service) newRestoreWatch(
 		lookup: func(ctx context.Context) (*infomodels.ResponseRestoreState, error) {
 			return restoreStatus(ctx, client, namespace, jobID)
 		},
-		missing: missing,
-		describe: func(status *infomodels.ResponseRestoreState) string {
-			return string(status.State)
-		},
+		missing:  missing,
+		describe: restoreStateLabel,
 	}
 }
 
@@ -199,11 +197,11 @@ func (s *Service) reportRestoreProgress(
 	w := s.newRestoreWatch(client, namespace, jobID, mode.unseenLookups(),
 		missingRestore(namespace, jobID))
 
-	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+	w.handle = func(ctx context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		now := time.Now()
 		snap := restoreSnapshot(status)
 
-		printer.Print(snap, now)
+		printer.Print(ctx, snap, now)
 
 		switch status.State {
 		case infomodels.RestoreStateComplete:
@@ -233,7 +231,11 @@ func (s *Service) reportRestoreProgress(
 				msg = msgClearStorageRequired
 			}
 
-			s.logger.Warn(msg, slog.String("namespace", namespace), slog.String("job-id", jobID))
+			s.logger.Warn(msg,
+				slog.String("namespace", namespace),
+				slog.String("job-id", jobID),
+				slog.String("command",
+					fmt.Sprintf("snapshot-restore clear-storage --namespace %s --job-id %s", namespace, jobID)))
 		}
 
 		clearReported = clearRequired
@@ -288,18 +290,13 @@ func restoreTerminalError(err error, namespace, jobID, errorReason string) error
 
 // restoreSnapshot describes the progress of a restore job.
 func restoreSnapshot(status *infomodels.ResponseRestoreState) *progressSnapshot {
+	// The label of an active cold restore comes from its namespace state, so the label
+	// moves on with every stage of the job.
+	label := restoreStateLabel(status)
+
 	attrs := []any{
 		slog.String("job-id", status.JobID),
-		slog.String("state", string(status.State)),
-	}
-
-	stage := string(status.State)
-
-	// Only a cold restore gates the namespace, and the gate tells the stages of a cold
-	// restore apart: the job is ACTIVE from its preparation to its end.
-	if status.Kind == infomodels.RestoreKindCold {
-		attrs = append(attrs, slog.String("ns-state", string(status.NsState)))
-		stage += "/" + string(status.NsState)
+		slog.String("state", label),
 	}
 
 	if status.HeldReason != "" {
@@ -319,8 +316,11 @@ func restoreSnapshot(status *infomodels.ResponseRestoreState) *progressSnapshot 
 	}
 
 	return &progressSnapshot{
-		attrs:      attrs,
-		stage:      stage,
+		attrs: attrs,
+		debugAttrs: func() []any {
+			return restoreDebugAttrs(status, restoreStateDescription(status))
+		},
+		stage:      label,
 		ratio:      completionRatio(status.ProgressPct, status.State == infomodels.RestoreStateComplete),
 		recsPerSec: status.RecsPerSec,
 		startTime:  status.StartTime,

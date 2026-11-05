@@ -31,6 +31,12 @@ import (
 // logClearHint is part of the warning about a storage that must be cleared.
 const logClearHint = "snapshot-restore clear-storage"
 
+// The state labels of a restore line, as the info level prints them.
+const (
+	logStateRestoring = "state=" + stateRestoring
+	logStateComplete  = "state=" + stateComplete
+)
+
 // TestServiceRestoreProgress covers the mode the progress command picks: a single report,
 // or a watch that lasts until the restore ends.
 func TestServiceRestoreProgress(t *testing.T) {
@@ -99,7 +105,7 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 				{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
 			},
 			wantCalls: 2,
-			wantLogs:  []string{"ns-state=RESTORING", "ns-state=NONE", "pct=100", msgRestoreComplete},
+			wantLogs:  []string{logStateRestoring, logStateComplete, "pct=100", msgRestoreComplete},
 		},
 		{
 			// The restore cannot start until the user clears the storage, so the
@@ -304,7 +310,12 @@ func TestServiceReportRestoreProgressWarnsOnceAboutClear(t *testing.T) {
 	}}
 
 	require.NoError(t, svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, followJob))
-	assert.Equal(t, 1, strings.Count(buf.String(), logClearHint))
+
+	// The warning is the only line of the watch at the warning level, and it names the
+	// command to run with the job.
+	assert.Equal(t, 1, strings.Count(buf.String(), "level=WARN"))
+	assert.Contains(t, buf.String(),
+		`command="snapshot-restore clear-storage --namespace `+testNamespace+` --job-id `+testJobID+`"`)
 }
 
 func TestRestoreSnapshot(t *testing.T) {
@@ -316,15 +327,16 @@ func TestRestoreSnapshot(t *testing.T) {
 		// attrJobID and attrState are the keys every restore line opens with.
 		attrJobID         = "job-id"
 		attrState         = "state"
-		attrNsState       = "ns-state"
 		attrHeldReason    = "held-reason"
 		attrBackupID      = "backup-id"
 		attrBackupEntry   = "backup-entry"
 		attrBackupEntries = "backup-entries"
+		// The keys of the full state, printed at the debug level only.
+		attrDescription = "description"
+		attrServerState = "server-state"
+		attrNsState     = "ns-state"
+		attrClear       = "clear"
 	)
-
-	stateStage := string(infomodels.RestoreStateActive)
-	coldStage := stateStage + "/" + string(infomodels.NamespaceStateRestoring)
 
 	tests := []struct {
 		name           string
@@ -333,6 +345,7 @@ func TestRestoreSnapshot(t *testing.T) {
 		wantRatio      float64
 		wantRecsPerSec uint64
 		wantAttrs      []string
+		wantDebugAttrs []string
 	}{
 		{
 			name: "fuzzy restore reports the progress and the rate of the cluster",
@@ -344,14 +357,16 @@ func TestRestoreSnapshot(t *testing.T) {
 				ProgressPct:   65.9,
 				RecsPerSec:    recsPerSec,
 			},
-			wantStage:      stateStage,
+			wantStage:      stateRestoring,
 			wantRatio:      0.659,
 			wantRecsPerSec: recsPerSec,
 			wantAttrs:      []string{attrJobID, attrState},
+			wantDebugAttrs: []string{attrDescription, attrServerState},
 		},
 		{
-			// The namespace state tells the stages of a cold restore apart.
-			name: "cold restore reports the namespace state",
+			// The namespace state tells the stages of a cold restore apart, and it is
+			// printed in full at the debug level.
+			name: "cold restore is labeled after the namespace state",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindCold,
@@ -361,10 +376,11 @@ func TestRestoreSnapshot(t *testing.T) {
 				ProgressPct:   61.2,
 				RecsPerSec:    recsPerSec,
 			},
-			wantStage:      coldStage,
+			wantStage:      stateRestoring,
 			wantRatio:      0.612,
 			wantRecsPerSec: recsPerSec,
-			wantAttrs:      []string{attrJobID, attrState, attrNsState},
+			wantAttrs:      []string{attrJobID, attrState},
+			wantDebugAttrs: []string{attrDescription, attrServerState, attrNsState, attrClear},
 		},
 		{
 			name: "cold restore held in preparation names the reason",
@@ -376,8 +392,9 @@ func TestRestoreSnapshot(t *testing.T) {
 				HeldReason:    heldReason,
 				BackupEntries: 1,
 			},
-			wantStage: stateStage + "/" + string(infomodels.NamespaceStatePreparing),
-			wantAttrs: []string{attrJobID, attrState, attrNsState, attrHeldReason},
+			wantStage:      "preparing",
+			wantAttrs:      []string{attrJobID, attrState, attrHeldReason},
+			wantDebugAttrs: []string{attrDescription, attrServerState, attrNsState, attrClear},
 		},
 		{
 			name: "restore of several backups names the current one",
@@ -388,8 +405,9 @@ func TestRestoreSnapshot(t *testing.T) {
 				BackupID:      testJobID,
 				BackupEntries: 2,
 			},
-			wantStage: stateStage,
-			wantAttrs: []string{attrJobID, attrState, attrBackupID, attrBackupEntry, attrBackupEntries},
+			wantStage:      stateRestoring,
+			wantAttrs:      []string{attrJobID, attrState, attrBackupID, attrBackupEntry, attrBackupEntries},
+			wantDebugAttrs: []string{attrDescription, attrServerState},
 		},
 	}
 
@@ -402,18 +420,26 @@ func TestRestoreSnapshot(t *testing.T) {
 			assert.Equal(t, tt.wantStage, snap.stage)
 			assert.InDelta(t, tt.wantRatio, snap.ratio, 1e-9)
 			assert.Equal(t, tt.wantRecsPerSec, snap.recsPerSec)
-
-			keys := make([]string, 0, len(snap.attrs))
-			for _, attr := range snap.attrs {
-				a, ok := attr.(slog.Attr)
-				require.True(t, ok)
-
-				keys = append(keys, a.Key)
-			}
-
-			assert.Equal(t, tt.wantAttrs, keys)
+			assert.Equal(t, tt.wantAttrs, attrKeys(t, snap.attrs))
+			assert.Equal(t, tt.wantDebugAttrs, attrKeys(t, snap.debugAttrs()))
 		})
 	}
+}
+
+// attrKeys returns the keys of the slog attributes attrs.
+func attrKeys(t *testing.T, attrs []any) []string {
+	t.Helper()
+
+	keys := make([]string, 0, len(attrs))
+
+	for _, attr := range attrs {
+		a, ok := attr.(slog.Attr)
+		require.True(t, ok)
+
+		keys = append(keys, a.Key)
+	}
+
+	return keys
 }
 
 // TestProgressPrinterPrintRestore pins down the restore progress line, which reports the
@@ -453,7 +479,7 @@ func TestProgressPrinterPrintRestore(t *testing.T) {
 				RecsPerSec:    300,
 				StartTime:     now.Add(-time.Hour),
 			},
-			wantLogs: []string{msgRestoreProgress, "ns-state=RESTORING", "pct=25", "rec/s=300", "remaining=3h0m0s"},
+			wantLogs: []string{msgRestoreProgress, logStateRestoring, "pct=25", "rec/s=300", "remaining=3h0m0s"},
 		},
 		{
 			// The job cannot finish until the nodes that left come back, which is the
@@ -481,7 +507,7 @@ func TestProgressPrinterPrintRestore(t *testing.T) {
 				BackupEntries: 1,
 				StartTime:     now.Add(-time.Hour),
 			},
-			wantLogs: []string{msgRestoreProgress, "state=COMPLETE", "pct=100"},
+			wantLogs: []string{msgRestoreProgress, logStateComplete, "pct=100"},
 		},
 	}
 
@@ -494,7 +520,7 @@ func TestProgressPrinterPrintRestore(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 			printer := newProgressPrinter(logger, msgRestoreProgress)
 
-			require.True(t, printer.Print(restoreSnapshot(tt.status), now))
+			require.True(t, printer.Print(t.Context(), restoreSnapshot(tt.status), now))
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)

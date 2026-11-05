@@ -145,8 +145,7 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 		if !done && state != reported {
 			attrs := []any{
 				slog.String("job-id", jobID),
-				slog.String("clear", string(status.Clear)),
-				slog.String("ns-state", string(status.NsState)),
+				slog.String("state", restoreStateLabel(status)),
 			}
 
 			// A node held at PREPARING waits for the operator, and only this says why.
@@ -154,7 +153,8 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 				attrs = append(attrs, slog.String("held-reason", status.HeldReason))
 			}
 
-			s.logger.Info("clearing storage in progress", attrs...)
+			s.logger.InfoContext(ctx, "clearing storage in progress", withDebugAttrs(ctx, s.logger, attrs,
+				func() []any { return restoreDebugAttrs(status, restoreStateDescription(status)) })...)
 
 			reported = state
 		}
@@ -222,8 +222,8 @@ func namespacePrepared(status *infomodels.ResponseRestoreState) bool {
 	return status.Clear == infomodels.ClearStateNone && preparedNamespaceStates[status.NsState]
 }
 
-// describeClearState names the clear and namespace states of a status, so that a wait
+// describeClearState names the state of a status and why a node is held, so that a wait
 // logs them only when they change.
 func describeClearState(status *infomodels.ResponseRestoreState) string {
-	return fmt.Sprintf("clear=%s ns-state=%s held-reason=%s", status.Clear, status.NsState, status.HeldReason)
+	return restoreStateLabel(status) + " " + status.HeldReason
 }

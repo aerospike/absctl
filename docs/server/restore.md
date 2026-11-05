@@ -213,6 +213,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace the restore writes into.
       --job-id string      Id of the restore job to follow.
+                           The id is logged by "snapshot-restore start" as job-id.
       --watch              Watch the progress of the restore.
 
 Secret Agent Flags:
@@ -302,6 +303,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace the restore is aborted for.
       --job-id string      Id of the restore job to abort.
+                           The id is logged by "snapshot-restore start" as job-id.
       --async              Return as soon as the cluster accepts the abort, without
                            waiting for the restore to stop.
 
@@ -390,6 +392,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace to release.
       --job-id string      Id of the failed or aborted cold restore job that holds the namespace.
+                           The id is logged by "snapshot-restore start" as job-id.
       --async              Return as soon as the cluster accepts the request, without
                            waiting for the namespace to be released.
 
@@ -478,7 +481,8 @@ Aerospike Client Flags:
 
 Restore Flags:
   -n, --namespace string   The namespace to clear.
-      --job-id string      Id of the cold restore job being prepared.
+      --job-id string      Id of the cold restore job that waits for the namespace storage to be cleared.
+                           The id is logged by "snapshot-restore start" as job-id.
       --async              Return as soon as the nodes accept the clear, without waiting
                            for the namespace to become ready for the restore.
 
@@ -641,6 +645,7 @@ progress:
   # The namespace the restore writes into.
   namespace: source-ns1
   # Id of the restore job to follow.
+  # The id is logged by "snapshot-restore start" as job-id.
   job-id: restore-job-1
   # Watch the progress of the restore.
   watch: false
@@ -648,6 +653,7 @@ abort:
   # The namespace the restore is aborted for.
   namespace: source-ns1
   # Id of the restore job to abort.
+  # The id is logged by "snapshot-restore start" as job-id.
   job-id: restore-job-1
   # Return as soon as the cluster accepts the abort, without
   # waiting for the restore to stop.
@@ -656,6 +662,7 @@ open:
   # The namespace to release.
   namespace: source-ns1
   # Id of the failed or aborted cold restore job that holds the namespace.
+  # The id is logged by "snapshot-restore start" as job-id.
   job-id: restore-job-1
   # Return as soon as the cluster accepts the request, without
   # waiting for the namespace to be released.
@@ -663,7 +670,8 @@ open:
 clear-storage:
   # The namespace to clear.
   namespace: source-ns1
-  # Id of the cold restore job being prepared.
+  # Id of the cold restore job that waits for the namespace storage to be cleared.
+  # The id is logged by "snapshot-restore start" as job-id.
   job-id: restore-job-1
   # Return as soon as the nodes accept the clear, without waiting
   # for the namespace to become ready for the restore.

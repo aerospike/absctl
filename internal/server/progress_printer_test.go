@@ -240,11 +240,11 @@ func TestProgressPrinterPrintSkipsRepeatedStatus(t *testing.T) {
 		StartTime:    now.Add(-time.Hour),
 	}
 
-	require.True(t, printer.Print(backupSnapshot(status), now))
+	require.True(t, printer.Print(t.Context(), backupSnapshot(status), now))
 
 	buf.Reset()
 
-	assert.False(t, printer.Print(backupSnapshot(status), now.Add(time.Second)))
+	assert.False(t, printer.Print(t.Context(), backupSnapshot(status), now.Add(time.Second)))
 	assert.Empty(t, buf.String())
 }
 
@@ -296,6 +296,61 @@ func TestJobDuration(t *testing.T) {
 
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestProgressPrinterDebugAttrs pins down that the full state is printed at the debug
+// level only, after the short label every level prints.
+func TestProgressPrinterDebugAttrs(t *testing.T) {
+	t.Parallel()
+
+	const (
+		logLabel       = "state=incremental-scan"
+		logDescription = "description="
+		logServerState = "server-state=INCR_SCAN_ACTIVE"
+	)
+
+	tests := []struct {
+		name        string
+		giveLevel   slog.Level
+		wantLogs    []string
+		notWantLogs []string
+	}{
+		{
+			name:        "info",
+			giveLevel:   slog.LevelInfo,
+			wantLogs:    []string{logLabel},
+			notWantLogs: []string{logDescription, logServerState},
+		},
+		{
+			name:      "debug",
+			giveLevel: slog.LevelDebug,
+			wantLogs:  []string{logLabel, logDescription, logServerState},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: tt.giveLevel}))
+			printer := newProgressPrinter(logger, msgBackupProgress)
+
+			require.True(t, printer.Print(t.Context(), backupSnapshot(&infomodels.ResponseBackupState{
+				JobID: testJobID,
+				State: infomodels.BackupStateIncrScanActive,
+			}), time.Now()))
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
 		})
 	}
 }
