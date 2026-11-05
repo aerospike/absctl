@@ -194,7 +194,6 @@ type ServerRestoreCommand int
 
 const (
 	ServerRestoreCommandStart ServerRestoreCommand = iota
-	ServerRestoreCommandPrepare
 	ServerRestoreCommandProgress
 	ServerRestoreCommandAbort
 	ServerRestoreCommandOpen
@@ -242,8 +241,6 @@ func dtoToServerRestoreServiceConfig(
 	switch command {
 	case ServerRestoreCommandStart:
 		cfg.Start = dtoRestore.ToModelServerRestore()
-	case ServerRestoreCommandPrepare:
-		cfg.Prepare = dtoRestore.ToModelServerRestorePrepare()
 	case ServerRestoreCommandProgress:
 		cfg.Progress = dtoRestore.ToModelServerRestoreProgress()
 	case ServerRestoreCommandAbort:

@@ -598,17 +598,26 @@ func TestProgressPrinterPrint(t *testing.T) {
 			notWantLogs: []string{"remaining="},
 		},
 		{
-			name: "reports the speed measured since the previous sample",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
+			// The merged percentage of a finished job can fall short of 100 when the
+			// rows of its nodes report no partitions.
+			name: "reports a complete backup at 100 percent",
+			status: &infomodels.ResponseBackupState{
+				JobID:       testJobID,
+				State:       infomodels.BackupStateComplete,
+				ProgressPct: 95,
+				StartTime:   now.Add(-time.Hour),
 			},
+			wantLogs:    []string{"pct=100"},
+			notWantLogs: []string{"remaining="},
+		},
+		{
+			name: "reports the record rate of the cluster",
 			status: &infomodels.ResponseBackupState{
 				JobID:        testJobID,
 				State:        infomodels.BackupStateBaseScanActive,
 				ProgressPct:  50,
 				RecsBackedUp: 3000,
+				RecsPerSec:   200,
 				StartTime:    now.Add(-time.Hour),
 			},
 			wantLogs: []string{"rec/s=200"},
@@ -630,6 +639,69 @@ func TestProgressPrinterPrint(t *testing.T) {
 			printer.msg = msgBackupProgress
 
 			require.True(t, printer.Print(backupSnapshot(tt.status), now))
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
+		})
+	}
+}
+
+func TestServiceLogBackupComplete(t *testing.T) {
+	t.Parallel()
+
+	const (
+		fallbackReason  = "change stream lost"
+		logConsistency  = "consistency="
+		logFallbackAttr = "fallback-reason="
+	)
+
+	tests := []struct {
+		name        string
+		status      *infomodels.ResponseBackupState
+		wantLogs    []string
+		notWantLogs []string
+	}{
+		{
+			name: "strict backup names its consistency",
+			status: &infomodels.ResponseBackupState{
+				JobID:               testJobID,
+				AchievedConsistency: infomodels.ConsistencyStrict,
+			},
+			wantLogs:    []string{msgBackupComplete, logConsistency + string(infomodels.ConsistencyStrict)},
+			notWantLogs: []string{logFallbackAttr},
+		},
+		{
+			name: "best-effort backup that fell back to fuzzy says why",
+			status: &infomodels.ResponseBackupState{
+				JobID:               testJobID,
+				AchievedConsistency: infomodels.ConsistencyFuzzy,
+				FallbackReason:      fallbackReason,
+			},
+			wantLogs: []string{
+				logConsistency + string(infomodels.ConsistencyFuzzy),
+				logFallbackAttr + `"` + fallbackReason + `"`,
+			},
+		},
+		{
+			name:        "backup with no consistency reported",
+			status:      &infomodels.ResponseBackupState{JobID: testJobID},
+			wantLogs:    []string{msgBackupComplete},
+			notWantLogs: []string{logConsistency, logFallbackAttr},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, buf := newTestService(t)
+
+			svc.logBackupComplete(tt.status)
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)

@@ -37,6 +37,7 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 		"--namespace", "test-ns",
 		"--modified-after", "2023-09-02_12:00:00",
 		"--modified-before", "2023-09-03_12:00:00",
+		"--no-config",
 	}
 
 	err := flagSet.Parse(args)
@@ -47,6 +48,7 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 	assert.Equal(t, "test-ns", result.Namespace)
 	assert.Equal(t, "2023-09-02_12:00:00", result.ModifiedAfter)
 	assert.Equal(t, "2023-09-03_12:00:00", result.ModifiedBefore)
+	assert.True(t, result.NoConfig)
 }
 
 func TestServerBackup_NewFlagSet_ShortFlags(t *testing.T) {
@@ -90,6 +92,7 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+	assert.Equal(t, models.DefaultServerBackupNoConfig, result.NoConfig)
 	assert.Equal(t, models.DefaultServerBackupPolicy, result.Policy)
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
 	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)

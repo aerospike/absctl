@@ -121,108 +121,30 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 	}
 }
 
-func TestProgressPrinterSample(t *testing.T) {
+func TestCompletionRatio(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
-
 	tests := []struct {
-		name       string
-		printer    *progressPrinter
-		state      infomodels.BackupState
-		recs       uint64
-		sampleTime time.Time
-		want       float64
+		name         string
+		give         float64
+		giveComplete bool
+		want         float64
 	}{
-		{
-			name:       "first sample only seeds the baseline",
-			printer:    &progressPrinter{},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       1000,
-			sampleTime: now,
-			want:       0,
-		},
-		{
-			name: "second sample takes the instant rate",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       200,
-		},
-		{
-			name: "later samples are smoothed",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       130,
-		},
-		{
-			name: "stage transition restarts the measurement",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateIncrScanActive,
-			recs:       50,
-			sampleTime: now,
-			want:       0,
-		},
-		{
-			// RecsBackedUp sums the base, incremental and change lines, so it is not
-			// monotonic. Unsigned arithmetic would wrap a drop into a huge rate.
-			name: "counter going backwards is read as no progress",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 3000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       1000,
-			sampleTime: now,
-			want:       70,
-		},
-		{
-			name: "repeated sample at the same instant is ignored",
-			printer: &progressPrinter{
-				stage:       string(infomodels.BackupStateBaseScanActive),
-				sampledAt:   now,
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       100,
-		},
+		{name: "zero", give: 0, want: 0},
+		{name: "half", give: 50, want: 0.5},
+		{name: "two decimals", give: 61.2, want: 0.612},
+		{name: "complete", give: 100, want: 1},
+		{name: "above complete is clamped", give: 100.5, want: 1},
+		{name: "negative is clamped", give: -1, want: 0},
+		{name: "complete job without a percentage", give: 0, giveComplete: true, want: 1},
+		{name: "complete job below 100", give: 95, giveComplete: true, want: 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			status := &infomodels.ResponseBackupState{
-				JobID:        testJobID,
-				State:        tt.state,
-				RecsBackedUp: tt.recs,
-			}
-
-			tt.printer.sample(backupSnapshot(status), tt.sampleTime)
-
-			assert.InDelta(t, tt.want, tt.printer.recsPerSec, 1e-9)
+			assert.InDelta(t, tt.want, completionRatio(tt.give, tt.giveComplete), 1e-9)
 		})
 	}
 }

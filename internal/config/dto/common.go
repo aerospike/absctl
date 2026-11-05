@@ -781,6 +781,18 @@ func derefFloat64(p *float64) float64 {
 	return *p
 }
 
+// cloneValue returns a pointer to a copy of *p, or nil when p is nil, so that the model
+// does not share the value with the DTO.
+func cloneValue[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+
+	v := *p
+
+	return &v
+}
+
 // derefOr returns *p, or def when p is nil. A key set to null in YAML clears the default
 // the DTO was filled with, so a field whose default is not the zero value needs it back.
 func derefOr[T any](p *T, def T) T {

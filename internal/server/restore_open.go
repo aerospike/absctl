@@ -23,8 +23,8 @@ import (
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
-// OpenRestore releases the namespace held by the configured aborted cold restore job,
-// and waits for the namespace to open to clients. With Async set it returns as soon as
+// OpenRestore releases the namespace held by the configured failed or aborted cold
+// restore job, and waits for the namespace to open to clients. With Async set it returns as soon as
 // the cluster accepts the request.
 func (s *Service) OpenRestore(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
@@ -60,16 +60,24 @@ func (s *Service) openRestore(ctx context.Context, client backup.ServerBackupInf
 	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
 		missingRestore(namespace, jobID))
 
+	// reported is the namespace state last logged, so that a wait that does not move on
+	// shows where it stands without a line per lookup.
+	var reported infomodels.NamespaceState
+
+	// A failed or aborted job keeps its state through the release, which only moves the
+	// namespace state on to OPENING and then NONE, so the namespace state alone says
+	// whether the release is done. The cluster refuses to open a job that still runs.
 	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		if namespaceOpened(status.NsState) {
 			return true, 0, nil
 		}
 
-		// ABORTED is the state of every job that can be released, so only FAILED says
-		// there is nothing left to wait for. A retained row of a node that was away can
-		// report FAILED too, which is why an open namespace is checked first.
-		if status.State == infomodels.RestoreStateFailed {
-			return true, 0, restoreTerminalError(errRestoreFailed, namespace, jobID, status.ErrorReason)
+		if status.NsState != reported {
+			s.logger.Info("opening namespace in progress",
+				slog.String("job-id", jobID),
+				slog.String("ns-state", string(status.NsState)))
+
+			reported = status.NsState
 		}
 
 		return false, s.statePollInterval, nil
@@ -86,11 +94,11 @@ func (s *Service) openRestore(ctx context.Context, client backup.ServerBackupInf
 
 // namespaceOpened reports whether the merged namespace state nsState says the namespace
 // is open to clients again. The merged state is NONE only when no node keeps the
-// namespace closed, and it is left empty or not hosted when no node hosts the namespace
-// at all.
+// namespace closed, and it is left empty or reported as a stub when no node reports more
+// than a stub row.
 func namespaceOpened(nsState infomodels.NamespaceState) bool {
 	switch nsState {
-	case infomodels.NamespaceStateNone, infomodels.NamespaceStateNotHosted, "":
+	case infomodels.NamespaceStateNone, infomodels.NamespaceStateStub, "":
 		return true
 	default:
 		return false

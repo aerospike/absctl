@@ -76,16 +76,21 @@ func TestServiceOpenRestore(t *testing.T) {
 			notWantLogs: []string{logNamespaceOpened},
 		},
 		{
-			// The job can no longer release the namespace, so there is nothing to wait
-			// for.
-			name: "fails when the job fails",
+			// A failed job keeps its state through the release, which only moves the
+			// namespace state on, so the open waits for the namespace.
+			name: "waits for the namespace of a failed job to open",
 			answers: []restoreAnswer{
-				opening,
 				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateOpening))},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateNone))},
 			},
-			wantErr:     errRestoreFailed,
-			wantCalls:   2,
-			notWantLogs: []string{logNamespaceOpened},
+			wantCalls: 3,
+			wantLogs: []string{
+				logNamespaceOpened,
+				// The wait shows where the namespace stands while it does not open.
+				"ns-state=" + string(infomodels.NamespaceStateFailed),
+				"ns-state=" + string(infomodels.NamespaceStateOpening),
+			},
 		},
 		{
 			// A node that was away keeps a FAILED row of the job, which says nothing
@@ -100,7 +105,7 @@ func TestServiceOpenRestore(t *testing.T) {
 		{
 			name: "accepts a namespace no node hosts",
 			answers: []restoreAnswer{
-				{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateNotHosted)},
+				{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateStub)},
 			},
 			wantCalls: 1,
 			wantLogs:  []string{logNamespaceOpened},

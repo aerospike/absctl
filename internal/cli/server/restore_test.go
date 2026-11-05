@@ -57,8 +57,9 @@ func TestNewRestoreCmdSubcommands(t *testing.T) {
 		giveUse   string
 		wantFlags []string
 	}{
-		{giveUse: UseStart, wantFlags: []string{flagNamespace, flagJobID, flagAsync, "backup-ids", "parallel-read"}},
-		{giveUse: UsePrepare, wantFlags: []string{flagNamespace, flagJobID}},
+		{giveUse: UseStart, wantFlags: []string{
+			flagNamespace, flagAsync, "backup-ids", "parallel-read", "hydrate-replica",
+		}},
 		{giveUse: UseProgress, wantFlags: []string{flagNamespace, flagJobID, "watch"}},
 		{giveUse: UseAbort, wantFlags: []string{flagNamespace, flagJobID}},
 		{giveUse: UseOpen, wantFlags: []string{flagNamespace, flagJobID, flagAsync}},
@@ -91,7 +92,6 @@ func TestNewRestoreCmdInitError(t *testing.T) {
 		giveUse    string
 		wantPrefix string
 	}{
-		{giveUse: UsePrepare},
 		{giveUse: UseProgress},
 		{giveUse: UseAbort, wantPrefix: "failed to initialize restore abort: "},
 		{giveUse: UseOpen, wantPrefix: "failed to initialize restore open: "},
@@ -117,4 +117,81 @@ func TestNewRestoreCmdInitError(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantPrefix)
 		})
 	}
+}
+
+// TestNewRestoreCmdPolicySettings pins down that a setting of one policy given on the
+// command line reaches the validation of "start" through the command flags, even at its
+// default value, and is refused with the other policy before the cluster is reached.
+func TestNewRestoreCmdPolicySettings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		giveArgs   []string
+		wantErrMsg string
+	}{
+		{
+			name:       "strict setting with the fuzzy policy",
+			giveArgs:   []string{"--policy", "fuzzy", "--hydrate-replica"},
+			wantErrMsg: "hydrate-replica requires policy strict",
+		},
+		{
+			name:       "fuzzy setting at its default without a policy",
+			giveArgs:   []string{"--max-inflight", "200"},
+			wantErrMsg: "max-inflight requires policy fuzzy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := newTestRestoreCmd()
+			cmd.SetArgs(append([]string{
+				UseStart,
+				"--" + flagNamespace, testNamespace,
+				"--backup-ids", "261025T120000-ab12",
+			}, tt.giveArgs...))
+
+			require.ErrorContains(t, cmd.ExecuteContext(t.Context()), tt.wantErrMsg)
+		})
+	}
+}
+
+// TestNewRestoreCmdNoPrepare makes sure the prepare subcommand is gone: a cold restore is
+// started by "start" alone.
+func TestNewRestoreCmdNoPrepare(t *testing.T) {
+	t.Parallel()
+
+	for _, sub := range newTestRestoreCmd().Commands() {
+		assert.NotEqual(t, "prepare", sub.Name())
+	}
+}
+
+// TestNewRestoreCmdStartNoJobID makes sure "start" takes no job id: it is generated when
+// the restore starts, as it is for a backup.
+func TestNewRestoreCmdStartNoJobID(t *testing.T) {
+	t.Parallel()
+
+	sub, _, err := newTestRestoreCmd().Find([]string{UseStart})
+	require.NoError(t, err)
+
+	assert.Nil(t, sub.Flags().Lookup(flagJobID))
+}
+
+// TestNewRestoreCmdStrayArgument makes sure a flag value given apart from a bool flag,
+// which the flag does not take, fails the command instead of being dropped: the flag
+// would otherwise be sent as true.
+func TestNewRestoreCmdStrayArgument(t *testing.T) {
+	t.Parallel()
+
+	cmd := newTestRestoreCmd()
+	cmd.SetArgs([]string{
+		UseStart,
+		"--" + flagNamespace, testNamespace,
+		"--backup-ids", "261025T120000-ab12",
+		"--hydrate-replica", "false",
+	})
+
+	require.ErrorContains(t, cmd.ExecuteContext(t.Context()), "unknown command \"false\"")
 }

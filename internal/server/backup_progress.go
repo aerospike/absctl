@@ -135,9 +135,8 @@ func (s *Service) reportBackupProgress(
 		})
 
 	w.handle = func(ctx context.Context, status *infomodels.ResponseBackupState) (bool, time.Duration, error) {
-		// The clock is read after the lookup so that the speed and the estimate are
-		// measured against the status just read: a lookup that took seconds would
-		// otherwise stretch the interval the sample is divided by.
+		// The clock is read after the lookup so that the estimate is measured against
+		// the status just read.
 		now := time.Now()
 		snap := backupSnapshot(status)
 
@@ -195,6 +194,14 @@ func (s *Service) newBackupWatch(
 // long the job took when the cluster reported both ends of it.
 func (s *Service) logBackupComplete(status *infomodels.ResponseBackupState) {
 	attrs := []any{slog.String("backup-id", status.JobID)}
+
+	if status.AchievedConsistency != "" {
+		attrs = append(attrs, slog.String("consistency", string(status.AchievedConsistency)))
+	}
+
+	if status.FallbackReason != "" {
+		attrs = append(attrs, slog.String("fallback-reason", status.FallbackReason))
+	}
 
 	if duration, ok := jobDuration(status.StartTime, status.FinishTime); ok {
 		attrs = append(attrs, slog.String("duration", duration.Round(time.Second).String()))
@@ -361,9 +368,8 @@ func backupSnapshot(status *infomodels.ResponseBackupState) *progressSnapshot {
 			slog.String("state", status.State.Describe()),
 		},
 		stage:      string(status.State),
-		ratio:      status.ProgressPct / percentScale,
-		records:    status.RecsBackedUp,
-		hasRecords: true,
+		ratio:      completionRatio(status.ProgressPct, status.State == infomodels.BackupStateComplete),
+		recsPerSec: status.RecsPerSec,
 		startTime:  status.StartTime,
 	}
 }

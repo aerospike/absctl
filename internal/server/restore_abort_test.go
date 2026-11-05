@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	logAbortingRestore = "aborting restore"
-	logRestoreAborted  = "restore was successfully aborted"
-	logRestoreTooLate  = "restore finished before it could be aborted"
+	logAbortingRestore      = "aborting restore"
+	logRestoreAborted       = "restore was successfully aborted"
+	logRestoreFailedOnAbort = "restore failed before the abort landed"
+	logRestoreTooLate       = "restore finished before it could be aborted"
 )
 
 // TestServiceAbortRestore covers the outcomes the restore abort reaches within a few
@@ -118,26 +119,48 @@ func TestServiceAbortRestore(t *testing.T) {
 			notWantLogs:    []string{logRestoreAborted, logOpenHint},
 		},
 		{
-			// The cluster keeps the state of a stopped restore job, so a job the status
-			// no longer reports was not confirmed as aborted, and must not be announced
-			// as such.
-			name:           "fails when the job is not reported after the abort",
-			answers:        []restoreAnswer{fuzzyActive},
+			// The cluster keeps the state of a stopped cold restore job, so a cold job the
+			// status no longer reports was not confirmed as aborted, and must not be
+			// announced as such.
+			name:           "fails when a cold job is not reported after the abort",
+			answers:        []restoreAnswer{coldActive},
 			wantErr:        errRestoreStatusLost,
 			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
 			notWantLogs:    []string{logRestoreAborted},
 		},
 		{
-			name: "fails when the job stops reporting while winding down",
+			name: "fails when a cold job stops reporting while winding down",
 			answers: append(
-				[]restoreAnswer{fuzzyActive, {status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
+				[]restoreAnswer{
+					coldActive,
+					{status: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStateRestoring)},
+				},
 				repeatRestoreNotFound(vanishedJobConfirmations)...,
 			),
 			wantErr:        errRestoreStatusLost,
 			wantCalls:      2 + vanishedJobConfirmations,
 			wantAbortCalls: 1,
 			notWantLogs:    []string{logRestoreAborted},
+		},
+		{
+			// The abort of a fuzzy restore removes the job, so its leaving the status
+			// confirms the abort.
+			name:           "confirms the abort of a fuzzy job the status no longer reports",
+			answers:        []restoreAnswer{fuzzyActive},
+			wantCalls:      1 + startedJobConfirmations,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
+		},
+		{
+			name: "confirms the abort of a fuzzy job that leaves the status while winding down",
+			answers: append(
+				[]restoreAnswer{fuzzyActive, {status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
+				repeatRestoreNotFound(vanishedJobConfirmations)...,
+			),
+			wantCalls:      2 + vanishedJobConfirmations,
+			wantAbortCalls: 1,
+			wantLogs:       []string{logRestoreAborted},
 		},
 		{
 			name: "waits for a job that is still winding down",
@@ -152,16 +175,17 @@ func TestServiceAbortRestore(t *testing.T) {
 		},
 		{
 			// A job that reports FAILED stopped working, so there is nothing left to
-			// wait for.
+			// wait for, but the cause of the failure is reported instead of an abort.
 			name: "stops waiting for a job that failed after the abort",
 			answers: []restoreAnswer{
 				coldActive,
 				{status: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStateRestoring)},
-				{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring)},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring))},
 			},
 			wantCalls:      3,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted, logOpenHint},
+			wantLogs:       []string{logRestoreFailedOnAbort, testErrorReason, logOpenHint},
+			notWantLogs:    []string{logRestoreAborted},
 		},
 		{
 			// A prepared cold restore is something to abort as well.
@@ -213,13 +237,16 @@ func TestServiceAbortRestore(t *testing.T) {
 			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
 		},
 		{
-			// A failed job still runs until it is aborted, which is what releases its
-			// namespace for the open.
-			name:           "aborts a job that failed",
-			answers:        []restoreAnswer{{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring)}, coldAborted},
-			wantCalls:      2,
-			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted, logOpenHint},
+			// The server refuses to abort a failed job: its namespace is released with
+			// the open command instead.
+			name: "does not abort a job that failed",
+			answers: []restoreAnswer{
+				{status: testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed)},
+			},
+			wantCalls:      1,
+			wantAbortCalls: 0,
+			wantLogs:       []string{msgNoRunningRestore, logOpenHint},
+			notWantLogs:    []string{logAbortingRestore, logRestoreAborted},
 		},
 		{
 			// An answer that carries no status is as good as no answer.
