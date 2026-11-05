@@ -29,17 +29,18 @@ const (
 	// msgRestoreComplete announces a finished restore.
 	msgRestoreComplete = "restore complete"
 
-	// msgOpenHint and msgAbortOpenHint tell how to release the namespace a cold restore
-	// that did not complete keeps closed to clients. A failed job is still running until
-	// it is aborted, and only an aborted one can be released.
+	// msgOpenHint tells how to release the namespace a cold restore that failed or was
+	// aborted keeps closed to clients.
 	msgOpenHint = "the namespace stays closed to clients until it is released " +
 		"with \"snapshot-restore open\""
-	msgAbortOpenHint = "the namespace stays closed to clients: abort the restore with " +
-		"\"snapshot-restore abort\", then release the namespace with \"snapshot-restore open\""
 
-	// partitionCount is the number of partitions of a namespace, which the restore
-	// coverage counters are measured against.
-	partitionCount = 4096
+	// msgClearStorageRequired tells how to get past a cold restore that waits for the
+	// storage of the namespace to be cleared on some nodes. msgClearThenFollow is how a
+	// command that does not stay with the job adds how to follow the restore after.
+	msgClearStorageRequired = "the namespace storage must be cleared on some nodes before the restore " +
+		"can start: run \"snapshot-restore clear-storage\""
+	msgClearThenFollow = msgClearStorageRequired +
+		", then follow the restore with \"snapshot-restore progress --watch\""
 
 	// msgRestoreProgress is the message every progress line of a restore is logged
 	// under.
@@ -63,6 +64,10 @@ var (
 	// errRestoreStatusLost is returned when the cluster stopped reporting a restore job
 	// that was being watched.
 	errRestoreStatusLost = errors.New("cluster stopped reporting restore status")
+
+	// errClearStorageRequired is returned by a start that stops following a cold
+	// restore which cannot start before the namespace storage is cleared on some nodes.
+	errClearStorageRequired = errors.New("restore waits for the namespace storage to be cleared")
 )
 
 // RestoreProgress reports the progress of the configured restore job, once or, with
@@ -74,12 +79,12 @@ func (s *Service) RestoreProgress(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	return s.restoreProgress(ctx, client, client.activeNodes)
+	return s.restoreProgress(ctx, client)
 }
 
 // restoreProgress reports the progress of the configured restore job in the mode the
-// configuration asks for. layoutNodes is passed on to reportRestoreProgress.
-func (s *Service) restoreProgress(ctx context.Context, client restoreStatusGetter, layoutNodes func() int) error {
+// configuration asks for.
+func (s *Service) restoreProgress(ctx context.Context, client restoreStatusGetter) error {
 	progress := s.restoreCfg.Progress
 
 	mode := reportOnce
@@ -87,7 +92,7 @@ func (s *Service) restoreProgress(ctx context.Context, client restoreStatusGette
 		mode = followJob
 	}
 
-	return s.reportRestoreProgress(ctx, client, layoutNodes, progress.Namespace, progress.JobID, mode)
+	return s.reportRestoreProgress(ctx, client, progress.Namespace, progress.JobID, mode)
 }
 
 // restoreStatusGetter is the part of the info client that reads the status of a restore.
@@ -132,20 +137,25 @@ func (s *Service) newRestoreWatch(
 		lookup: func(ctx context.Context) (*infomodels.ResponseRestoreState, error) {
 			return restoreStatus(ctx, client, namespace, jobID)
 		},
-		missing: missing,
-		describe: func(status *infomodels.ResponseRestoreState) string {
-			return string(status.State)
-		},
+		missing:  missing,
+		describe: restoreStateLabel,
 	}
 }
 
 // missingRestore returns the missing function of a watch of the restore job jobID of
-// namespace. The cluster keeps the state of a finished restore job, so a job missing
-// from the status has not finished, and ends the watch with restoreMissingError.
+// namespace. The cluster keeps the state of a finished cold restore job, so such a job
+// missing from the status has not finished, and ends the watch with restoreMissingError.
+// The abort of a fuzzy restore removes the job instead, so a fuzzy job last seen
+// aborting that leaves the status was aborted.
 func missingRestore(
 	namespace, jobID string,
 ) func(context.Context, *infomodels.ResponseRestoreState, bool) error {
-	return func(_ context.Context, _ *infomodels.ResponseRestoreState, seen bool) error {
+	return func(_ context.Context, last *infomodels.ResponseRestoreState, seen bool) error {
+		if seen && last != nil && last.Kind == infomodels.RestoreKindFuzzy &&
+			last.State == infomodels.RestoreStateAborting {
+			return restoreTerminalError(errRestoreAborted, namespace, jobID, last.ErrorReason)
+		}
+
 		return restoreMissingError(namespace, jobID, seen)
 	}
 }
@@ -162,33 +172,36 @@ func restoreMissingError(namespace, jobID string, seen bool) error {
 
 // reportRestoreProgress polls the cluster for the status of the restore job jobID of
 // namespace and logs it until the restore reaches a terminal state, or once in
-// reportOnce mode. layoutNodes returns the number of nodes in the cluster, which the
-// progress of a cold restore is measured against.
+// reportOnce mode.
+//
+// A cold restore does not start while a node waits for its storage to be cleared. That
+// is reported with a hint on how to clear it, and in a mode that stops on it, see
+// stopsOnClear, it also ends the watch with errClearStorageRequired. A job that is
+// already stopping is followed to its end instead, as clearing cannot help it.
 //
 // A job is missing from the status the same way as a backup job is, see
-// reportBackupProgress, except that the cluster keeps the state of a finished restore
-// job, so a job that stops reporting has not completed.
+// reportBackupProgress, except that the cluster keeps the state of a finished cold
+// restore job, so a job that stops reporting has not completed, see missingRestore.
 func (s *Service) reportRestoreProgress(
 	ctx context.Context,
 	client restoreStatusGetter,
-	layoutNodes func() int,
 	namespace, jobID string,
 	mode progressMode,
 ) error {
 	printer := newProgressPrinter(s.logger, msgRestoreProgress)
 
+	// clearReported keeps the hint from repeating on every poll while the same clear is
+	// pending.
+	var clearReported bool
+
 	w := s.newRestoreWatch(client, namespace, jobID, mode.unseenLookups(),
 		missingRestore(namespace, jobID))
 
-	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
+	w.handle = func(ctx context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		now := time.Now()
-		// The nodes of the layout that left the cluster are not active, and still own
-		// a share of the restore. A node that joined after the layout was frozen owns
-		// none, but the merged status cannot tell how many did, so it is counted too:
-		// the estimate then stays below 100% until the job completes.
-		snap := restoreSnapshot(status, layoutNodes()+int(status.MissingLayoutNodes))
+		snap := restoreSnapshot(status)
 
-		printer.Print(snap, now)
+		printer.Print(ctx, snap, now)
 
 		switch status.State {
 		case infomodels.RestoreStateComplete:
@@ -197,9 +210,7 @@ func (s *Service) reportRestoreProgress(
 			return true, 0, nil
 		case infomodels.RestoreStateFailed:
 			if status.Kind == infomodels.RestoreKindCold {
-				s.logger.Warn(msgAbortOpenHint,
-					slog.String("namespace", namespace),
-					slog.String("job-id", jobID))
+				s.logOpenHint(namespace, jobID)
 			}
 
 			return true, 0, restoreTerminalError(errRestoreFailed, namespace, jobID, status.ErrorReason)
@@ -209,6 +220,36 @@ func (s *Service) reportRestoreProgress(
 			}
 
 			return true, 0, restoreTerminalError(errRestoreAborted, namespace, jobID, status.ErrorReason)
+		}
+
+		clearRequired := status.Clear == infomodels.ClearStateRequired &&
+			status.State == infomodels.RestoreStateActive
+		if clearRequired && !clearReported {
+			msg := msgClearThenFollow
+			if mode == followJob {
+				// The watch goes on reporting the restore once the storage is cleared.
+				msg = msgClearStorageRequired
+			}
+
+			s.logger.Warn(msg,
+				slog.String("namespace", namespace),
+				slog.String("job-id", jobID),
+				slog.String("command",
+					fmt.Sprintf("snapshot-restore clear-storage --namespace %s --job-id %s", namespace, jobID)))
+		}
+
+		clearReported = clearRequired
+
+		if clearRequired && mode.stopsOnClear() {
+			return true, 0, fmt.Errorf("%w: namespace %s, job-id %s",
+				errClearStorageRequired, namespace, jobID)
+		}
+
+		// A cold restore held before its hydration waits for the operator, which takes
+		// seconds at least, and its progress stays at zero, which the progress pacing
+		// would answer with the shortest interval.
+		if clearRequired || waitsForPreparation(status) {
+			return mode == reportOnce, s.statePollInterval, nil
 		}
 
 		return mode == reportOnce, nextPoll(snap, now), nil
@@ -229,7 +270,8 @@ func (s *Service) logRestoreComplete(status *infomodels.ResponseRestoreState) {
 	s.logger.Info(msgRestoreComplete, attrs...)
 }
 
-// logOpenHint tells how to release the namespace an aborted cold restore keeps closed.
+// logOpenHint tells how to release the namespace a failed or aborted cold restore keeps
+// closed.
 func (s *Service) logOpenHint(namespace, jobID string) {
 	s.logger.Warn(msgOpenHint,
 		slog.String("namespace", namespace),
@@ -246,21 +288,24 @@ func restoreTerminalError(err error, namespace, jobID, errorReason string) error
 	return fmt.Errorf("%w: namespace %s, job-id %s, reason %q", err, namespace, jobID, errorReason)
 }
 
-// restoreSnapshot describes the progress of a restore job. layoutNodes is the number of
-// nodes the cold restore is spread over, see restoreRatio.
-func restoreSnapshot(status *infomodels.ResponseRestoreState, layoutNodes int) *progressSnapshot {
+// restoreSnapshot describes the progress of a restore job.
+func restoreSnapshot(status *infomodels.ResponseRestoreState) *progressSnapshot {
+	// The label of an active cold restore comes from its namespace state, so the label
+	// moves on with every stage of the job.
+	label := restoreStateLabel(status)
+
 	attrs := []any{
 		slog.String("job-id", status.JobID),
-		slog.String("state", string(status.State)),
+		slog.String("state", label),
 	}
 
-	stage := string(status.State)
+	if status.HeldReason != "" {
+		attrs = append(attrs, slog.String("held-reason", status.HeldReason))
+	}
 
-	// Only a cold restore gates the namespace, and the gate tells the stages of a cold
-	// restore apart: the job is ACTIVE from its preparation to its end.
-	if status.Kind == infomodels.RestoreKindCold {
-		attrs = append(attrs, slog.String("ns-state", string(status.NsState)))
-		stage += "/" + string(status.NsState)
+	// The job cannot finish until the layout nodes that left come back, or it is aborted.
+	if status.MissingLayoutNodes > 0 {
+		attrs = append(attrs, slog.Uint64("missing-layout-nodes", uint64(status.MissingLayoutNodes)))
 	}
 
 	if status.BackupEntries > 1 {
@@ -272,48 +317,19 @@ func restoreSnapshot(status *infomodels.ResponseRestoreState, layoutNodes int) *
 
 	return &progressSnapshot{
 		attrs: attrs,
-		stage: stage,
-		ratio: restoreRatio(status, layoutNodes),
-		// The cold restore counts no records, only the fuzzy one writes them one by one.
-		records:    status.Applied,
-		hasRecords: status.Kind == infomodels.RestoreKindFuzzy,
+		debugAttrs: func() []any {
+			return restoreDebugAttrs(status, restoreStateDescription(status))
+		},
+		stage:      label,
+		ratio:      completionRatio(status.ProgressPct, status.State == infomodels.RestoreStateComplete),
+		recsPerSec: status.RecsPerSec,
 		startTime:  status.StartTime,
 	}
 }
 
-// restoreRatio estimates the completion of a restore job, as the server reports no
-// percentage for it. Both kinds of restore apply the backups of the request one by one,
-// so the completed backups count in full and the current one by its own share:
-//   - a fuzzy restore applies them oldest first and reports the partitions it covered in
-//     the current one;
-//   - a cold restore applies them newest first and reports only how many of the
-//     layoutNodes nodes finished their share, so its estimate moves in steps.
-//
-// The figures are merged across the nodes, and a node that is behind holds back the
-// backup the merged status reports, so the estimate errs on the low side.
-func restoreRatio(status *infomodels.ResponseRestoreState, layoutNodes int) float64 {
-	if status.State == infomodels.RestoreStateComplete {
-		return 1
-	}
-
-	entries := float64(max(status.BackupEntries, 1))
-	entry := float64(status.BackupEntry)
-
-	var ratio float64
-
-	switch status.Kind {
-	case infomodels.RestoreKindFuzzy:
-		covered := min(float64(status.Covered)/partitionCount, 1)
-		ratio = (entry + covered) / entries
-	case infomodels.RestoreKindCold:
-		// Nothing is written before the restore starts.
-		if !status.IsStarted() || layoutNodes <= 0 {
-			return 0
-		}
-
-		done := min(float64(status.NDoneNodes)/float64(layoutNodes), 1)
-		ratio = (entries - 1 - entry + done) / entries
-	}
-
-	return min(max(ratio, 0), 1)
+// waitsForPreparation reports whether a cold restore is still preparing its namespace,
+// before any partition is hydrated.
+func waitsForPreparation(status *infomodels.ResponseRestoreState) bool {
+	return status.Kind == infomodels.RestoreKindCold && status.State == infomodels.RestoreStateActive &&
+		(status.NsState == infomodels.NamespaceStatePreparing || status.NsState == infomodels.NamespaceStateReady)
 }

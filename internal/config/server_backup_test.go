@@ -29,11 +29,15 @@ const (
 	testServerListPath  = "/backups"
 )
 
+// testServerRegion is the region the server is sent with the bucket.
+const testServerRegion = "us-east-1"
+
 // validServerObjectStorage returns the S3 section a server-integrated command
 // needs to pass validation in both backup and restore mode.
 func validServerObjectStorage() *models.AwsS3 {
 	return &models.AwsS3{
 		BucketName:          testBucket,
+		Region:              testServerRegion,
 		RestorePollDuration: 1,
 		ChunkSize:           5,
 		RetryReadBackoff:    100,
@@ -228,6 +232,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Region = ""
 				return cfg
 			},
 			isBackup:   true,

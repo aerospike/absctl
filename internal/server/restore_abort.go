@@ -27,13 +27,14 @@ import (
 const msgNoRunningRestore = "no running restore found, nothing to abort"
 
 // terminalRestoreStates are the states of a restore job that has already ended, and that
-// an abort has nothing left to do for. A FAILED job is not one of them: the server keeps
-// it running until the principal aborts it, and an abort is how it is stopped.
+// an abort has nothing left to do for. The server refuses to abort a FAILED job: a failed
+// cold restore is released with "snapshot-restore open" instead.
 //
 // RestoreStateUnknown is deliberately not one of them either, for the same reason as in
 // terminalBackupStates.
 var terminalRestoreStates = map[infomodels.RestoreState]bool{
 	infomodels.RestoreStateComplete: true,
+	infomodels.RestoreStateFailed:   true,
 	infomodels.RestoreStateAborted:  true,
 }
 
@@ -80,7 +81,7 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 		return nil
 	}
 
-	outcome, err := s.waitForRestoreAbort(ctx, client, namespace, jobID)
+	outcome, last, err := s.waitForRestoreAbort(ctx, client, namespace, jobID, status.Kind)
 	if err != nil {
 		return err
 	}
@@ -94,7 +95,15 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 		return nil
 	}
 
-	s.logger.Info("restore was successfully aborted")
+	// A job some node failed before the abort landed stopped all the same, which is what
+	// the abort asks for, but the cause of the failure must not be lost.
+	if last != nil && last.State == infomodels.RestoreStateFailed {
+		s.logger.Warn("restore failed before the abort landed",
+			slog.String("job-id", jobID),
+			slog.String("error-reason", last.ErrorReason))
+	} else {
+		s.logger.Info("restore was successfully aborted")
+	}
 
 	if status.Kind == infomodels.RestoreKindCold {
 		s.logOpenHint(namespace, jobID)
@@ -103,43 +112,57 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 	return nil
 }
 
-// waitForRestoreAbort follows the restore job that was asked to stop until it does, and
-// reports how it stopped. The job is followed the same way "restore start" follows the
-// job it started, see jobWatch.
+// waitForRestoreAbort follows the restore job of kind that was asked to stop until it
+// does, and reports how it stopped along with the last status read, nil when the job
+// left the status. The job is followed the same way "restore start" follows the job it
+// started, see jobWatch.
 //
-// Unlike a backup job, a restore job missing from the status is not a stopped one: the
-// cluster keeps the state of a stopped restore job, so only its state confirms the abort,
-// and a job the status no longer reports ends the wait with an error.
+// The cluster keeps the state of a stopped cold restore job, which holds the namespace
+// until it is released, so only its state confirms the abort, and a cold job the status
+// no longer reports ends the wait with an error. The abort of a fuzzy restore removes
+// the job, so a fuzzy job that leaves the status has stopped, as a backup job does.
 func (s *Service) waitForRestoreAbort(
 	ctx context.Context,
 	client restoreStatusGetter,
 	namespace, jobID string,
-) (abortOutcome, error) {
-	var outcome abortOutcome
+	kind infomodels.RestoreKind,
+) (abortOutcome, *infomodels.ResponseRestoreState, error) {
+	var (
+		outcome abortOutcome
+		last    *infomodels.ResponseRestoreState
+	)
 
 	// The pre-abort check has seen the job running, so a job this wait never finds is one
 	// the cluster stopped reporting.
 	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
 		func(context.Context, *infomodels.ResponseRestoreState, bool) error {
+			if kind == infomodels.RestoreKindFuzzy {
+				outcome = abortStopped
+				last = nil
+
+				return nil
+			}
+
 			return restoreMissingError(namespace, jobID, true)
 		})
 
 	w.handle = func(_ context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		outcome = restoreAbortOutcome(status.State)
+		last = status
 
 		return outcome != abortPending, s.statePollInterval, nil
 	}
 
 	if err := w.run(ctx); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	return outcome, nil
+	return outcome, last, nil
 }
 
 // restoreAbortOutcome says what the state of a restore job that was asked to stop means
-// for the abort. A job that reports FAILED stopped working, and there is nothing left to
-// wait for: the principal turns the failure into the abort that was requested anyway.
+// for the abort. A job that reports FAILED failed on some node before the abort landed,
+// and stopped all the same: there is nothing left to wait for.
 func restoreAbortOutcome(state infomodels.RestoreState) abortOutcome {
 	switch state {
 	case infomodels.RestoreStateAborted, infomodels.RestoreStateFailed:
@@ -198,7 +221,11 @@ func (s *Service) runningRestore(
 		s.logger.Info(msgNoRunningRestore,
 			slog.String("namespace", namespace),
 			slog.String("job-id", jobID),
-			slog.String("state", string(status.State)))
+			slog.String("state", restoreStateLabel(status)))
+
+		if status.Kind == infomodels.RestoreKindCold && status.State != infomodels.RestoreStateComplete {
+			s.logOpenHint(namespace, jobID)
+		}
 
 		return nil, nil
 	}

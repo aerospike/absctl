@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"time"
@@ -33,9 +34,6 @@ const (
 	// maxPollInterval bounds the back off on very long jobs. It stays below
 	// heartbeatInterval so that every heartbeat is backed by a fresh sample.
 	maxPollInterval = 30 * time.Second
-	// speedSmoothing is the weight of the latest sample in the exponentially weighted
-	// moving average of the job speed.
-	speedSmoothing = 0.3
 	// percentScale converts a server reported percentage into a [0, 1] ratio.
 	percentScale = 100
 	// pctPrecision rounds the reported percentage to two decimals, the same precision
@@ -48,15 +46,16 @@ const (
 type progressSnapshot struct {
 	// attrs name the job and its state. They lead every line printed for the snapshot.
 	attrs []any
-	// stage changes whenever the job moves on to a stage in which its counters mean
-	// something else, which restarts the speed measurement.
+	// debugAttrs returns the attributes that describe the state in full, as the server
+	// reports it. They end the line when the logger prints debug records, and are not
+	// built otherwise.
+	debugAttrs func() []any
+	// stage changes whenever the job moves on to another stage, which is always printed.
 	stage string
 	// ratio is the completion of the job, in [0, 1].
 	ratio float64
-	// records is the counter the speed is measured with, when hasRecords is set. A job
-	// that counts no records in its current stage reports no speed.
-	records    uint64
-	hasRecords bool
+	// recsPerSec is the record rate the cluster reports for the job.
+	recsPerSec uint64
 	// startTime is zero when the cluster reported no usable start time.
 	startTime time.Time
 }
@@ -73,11 +72,6 @@ type progressPrinter struct {
 	stage       string
 	lastRatio   float64
 	lastPrinted time.Time
-
-	// sampledAt, sampledRecs and recsPerSec hold the speed measurement.
-	sampledAt   time.Time
-	sampledRecs uint64
-	recsPerSec  float64
 }
 
 // newProgressPrinter returns a printer that has not emitted anything yet.
@@ -87,27 +81,23 @@ func newProgressPrinter(logger *slog.Logger, msg string) *progressPrinter {
 
 // Print logs the given snapshot if it carries new information, and reports whether it
 // did. now is passed in so that the decision is reproducible under test.
-func (p *progressPrinter) Print(snap *progressSnapshot, now time.Time) bool {
+func (p *progressPrinter) Print(ctx context.Context, snap *progressSnapshot, now time.Time) bool {
 	elapsed := elapsedSince(snap.startTime, now)
-
-	p.sample(snap, now)
 
 	if !p.shouldPrint(snap.stage, snap.ratio, elapsed, now) {
 		return false
 	}
 
 	attrs := append(make([]any, 0, len(snap.attrs)+3), snap.attrs...)
-	attrs = append(attrs, slog.Float64("pct", math.Round(snap.ratio*percentScale*pctPrecision)/pctPrecision))
-
-	if snap.hasRecords {
-		attrs = append(attrs, slog.Uint64("rec/s", uint64(math.Round(p.recsPerSec))))
-	}
+	attrs = append(attrs,
+		slog.Float64("pct", math.Round(snap.ratio*percentScale*pctPrecision)/pctPrecision),
+		slog.Uint64("rec/s", snap.recsPerSec))
 
 	if remaining := estimates.RemainingTime(elapsed, snap.ratio); remaining > 0 {
 		attrs = append(attrs, slog.String("remaining", remaining.Round(time.Second).String()))
 	}
 
-	p.logger.Info(p.msg, attrs...)
+	p.logger.InfoContext(ctx, p.msg, withDebugAttrs(ctx, p.logger, attrs, snap.debugAttrs)...)
 
 	p.stage = snap.stage
 	p.lastRatio = snap.ratio
@@ -133,40 +123,16 @@ func (p *progressPrinter) shouldPrint(stage string, ratio float64, elapsed time.
 	return ratio-p.lastRatio >= estimates.ProgressThreshold(elapsed, ratio)
 }
 
-// sample updates the exponentially weighted moving average of the job speed. The
-// record counters mean different things in different stages, so the measurement starts
-// over whenever the job moves on to the next stage.
-func (p *progressPrinter) sample(snap *progressSnapshot, now time.Time) {
-	if p.sampledAt.IsZero() || snap.stage != p.stage {
-		p.sampledAt = now
-		p.sampledRecs = snap.records
-		p.recsPerSec = 0
-
-		return
+// completionRatio converts a percentage reported by the cluster into a completion ratio
+// in [0, 1]. A complete job is pinned to 1: the percentage is merged across the nodes
+// weighted by the partitions each of them handles, and the retained rows of a finished
+// job may report none.
+func completionRatio(pct float64, complete bool) float64 {
+	if complete {
+		return 1
 	}
 
-	seconds := now.Sub(p.sampledAt).Seconds()
-	if seconds <= 0 {
-		return
-	}
-
-	// The counter can go backwards: the backup one sums the base, incremental and
-	// change lines instead of counting distinct records, and a node dropping out of the
-	// merged status takes its share with it. Subtracting unsigned counters would wrap
-	// around, so a drop is read as no progress at all.
-	var instant float64
-	if snap.records > p.sampledRecs {
-		instant = float64(snap.records-p.sampledRecs) / seconds
-	}
-
-	if p.recsPerSec == 0 {
-		p.recsPerSec = instant
-	} else {
-		p.recsPerSec = speedSmoothing*instant + (1-speedSmoothing)*p.recsPerSec
-	}
-
-	p.sampledAt = now
-	p.sampledRecs = snap.records
+	return min(max(pct/percentScale, 0), 1)
 }
 
 // nextPoll returns how long to wait before requesting the next status. It is derived

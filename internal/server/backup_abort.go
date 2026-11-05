@@ -193,7 +193,7 @@ func (s *Service) backupIsRunning(
 	if terminalBackupStates[status.State] {
 		s.logger.Info(msgNoRunningBackup,
 			slog.String("backup-id", jobID),
-			slog.String("state", status.State.Describe()))
+			slog.String("state", backupStateLabel(status.State)))
 
 		return false, nil
 	}

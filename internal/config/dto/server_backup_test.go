@@ -48,6 +48,7 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, derefString(backup.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
+	assert.Equal(t, models.DefaultServerBackupNoConfig, derefBool(backup.NoConfig))
 	assert.Equal(t, models.DefaultServerBackupPolicy, derefString(backup.Policy))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
@@ -78,8 +79,10 @@ func TestServerBackupToModels(t *testing.T) {
 	namespace := "ns1"
 	modifiedAfter := "2026-01-01_00:00:00"
 	modifiedBefore := "2026-02-01_00:00:00"
+	// The flags differ from each other, so a field mapped from its neighbor is caught.
 	noIndexes := true
-	noUDFs := true
+	noUDFs := false
+	noConfig := true
 	async := true
 	path := "some/prefix"
 	backupPath := "backups/daily"
@@ -103,6 +106,7 @@ func TestServerBackupToModels(t *testing.T) {
 			FilterExp:      &filterExp,
 			NoIndexes:      &noIndexes,
 			NoUDFs:         &noUDFs,
+			NoConfig:       &noConfig,
 			Policy:         &policy,
 			Async:          &async,
 
@@ -127,7 +131,8 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.Equal(t, backupPath, start.Path)
 	assert.Equal(t, filterExp, start.FilterExp)
 	assert.True(t, start.NoIndexes)
-	assert.True(t, start.NoUDFs)
+	assert.False(t, start.NoUDFs)
+	assert.True(t, start.NoConfig)
 	assert.True(t, start.Async)
 	assert.Equal(t, policy, start.Policy)
 	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)

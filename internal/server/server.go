@@ -70,8 +70,7 @@ type Service struct {
 	// cluster status.
 	vanishedPollInterval time.Duration
 	// statePollInterval paces the lookups made while a command waits for the state its
-	// request leads to: an aborted job to stop, or a namespace to be prepared, cleared or
-	// opened.
+	// request leads to: an aborted job to stop, or a namespace to be cleared or opened.
 	statePollInterval time.Duration
 	// metadataS3Client opens the storage client backup manifests are read with.
 	metadataS3Client func(ctx context.Context, cfg *models.AwsS3) (s3API, error)
@@ -142,19 +141,6 @@ type infoClient struct {
 // Close shuts down the Aerospike connections behind the info client.
 func (c *infoClient) Close() {
 	c.asClient.Close()
-}
-
-// activeNodes returns the number of active nodes in the cluster.
-func (c *infoClient) activeNodes() int {
-	var n int
-
-	for _, node := range c.asClient.GetNodes() {
-		if node.IsActive() {
-			n++
-		}
-	}
-
-	return n
 }
 
 // newInfoClient opens the info client every command that talks to the cluster works
@@ -242,4 +228,20 @@ func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecke
 	}
 
 	return nil
+}
+
+// startError reports a failed start of a job of kind. A start whose answer was lost may
+// still have been accepted, and the generated jobID is then the only way to find the job,
+// so it is named, along with followCmd, the command that tells, when one is given. An
+// empty jobID means the request was never sent.
+func startError(kind, jobID, followCmd string, err error) error {
+	switch {
+	case jobID == "":
+		return fmt.Errorf("failed to start %s: %w", kind, err)
+	case followCmd == "":
+		return fmt.Errorf("failed to start %s, job-id %s may have been accepted: %w", kind, jobID, err)
+	default:
+		return fmt.Errorf("failed to start %s, job-id %s may have been accepted, check it with %q: %w",
+			kind, jobID, followCmd, err)
+	}
 }

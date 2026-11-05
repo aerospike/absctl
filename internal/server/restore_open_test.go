@@ -15,6 +15,7 @@
 package server
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/aerospike/backup-go/pkg/asinfo"
@@ -76,16 +77,21 @@ func TestServiceOpenRestore(t *testing.T) {
 			notWantLogs: []string{logNamespaceOpened},
 		},
 		{
-			// The job can no longer release the namespace, so there is nothing to wait
-			// for.
-			name: "fails when the job fails",
+			// A failed job keeps its state through the release, which only moves the
+			// namespace state on, so the open waits for the namespace.
+			name: "waits for the namespace of a failed job to open",
 			answers: []restoreAnswer{
-				opening,
 				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateOpening))},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateNone))},
 			},
-			wantErr:     errRestoreFailed,
-			wantCalls:   2,
-			notWantLogs: []string{logNamespaceOpened},
+			wantCalls: 3,
+			wantLogs: []string{
+				logNamespaceOpened,
+				// The wait shows where the namespace stands while it does not open.
+				"state=" + stateClosed,
+				"state=" + stateOpening,
+			},
 		},
 		{
 			// A node that was away keeps a FAILED row of the job, which says nothing
@@ -100,7 +106,7 @@ func TestServiceOpenRestore(t *testing.T) {
 		{
 			name: "accepts a namespace no node hosts",
 			answers: []restoreAnswer{
-				{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateNotHosted)},
+				{status: testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateStub)},
 			},
 			wantCalls: 1,
 			wantLogs:  []string{logNamespaceOpened},
@@ -158,5 +164,35 @@ func TestServiceOpenRestore(t *testing.T) {
 				assert.NotContains(t, buf.String(), notWant)
 			}
 		})
+	}
+}
+
+// TestServiceOpenRestoreDebugLines pins down that at the debug level the open names the
+// state of the job under the same label in every line, the lines logged while the job is
+// missing from the status for a moment included, and adds the full state.
+func TestServiceOpenRestoreDebugLines(t *testing.T) {
+	t.Parallel()
+
+	const (
+		logLastStateClosed = "last-state=" + stateClosed
+		logDescription     = "description="
+		logServerNsState   = "ns-state=FAILED"
+	)
+
+	svc, buf := newTestService(t)
+	svc.logger = slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	closed := restoreAnswer{status: testFailedRestore(
+		testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))}
+	client := &fakeRestoreInfoClient{answers: []restoreAnswer{
+		closed,
+		{err: asinfo.ErrNotFound},
+		{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateNone))},
+	}}
+
+	require.NoError(t, svc.openRestore(t.Context(), client))
+
+	for _, want := range []string{"state=" + stateClosed, logLastStateClosed, logDescription, logServerNsState} {
+		assert.Contains(t, buf.String(), want)
 	}
 }

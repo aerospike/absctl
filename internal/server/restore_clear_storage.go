@@ -25,8 +25,15 @@ import (
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
-// msgStorageCleared announces a namespace that is ready for the restore.
-const msgStorageCleared = "storage was successfully cleared"
+const (
+	// msgStorageCleared announces a namespace that got past its preparation on every node.
+	msgStorageCleared = "storage was successfully cleared"
+
+	// msgFollowRestore tells how to follow the restore the cluster starts on its own once
+	// the namespace is ready on every node.
+	msgFollowRestore = "the cluster starts the restore once the namespace is ready on every node: " +
+		"follow it with \"snapshot-restore progress --watch\""
+)
 
 var (
 	// errRestoreNotPreparing is returned when the restore job whose namespace is being
@@ -36,20 +43,34 @@ var (
 	// errPrepareFailed is returned when the preparation of the namespace failed while
 	// its storage was being cleared.
 	errPrepareFailed = errors.New("namespace preparation failed")
+
+	// errClearNotCold is returned when the job named for the clear is a fuzzy restore,
+	// which writes into the live namespace and has no storage to clear.
+	errClearNotCold = errors.New("clear-storage applies to a strict (cold) restore only")
 )
 
-// endedRestoreStates are the states in which a restore job no longer prepares its
-// namespace, which neither the preparation nor a clear of the storage can get past.
-var endedRestoreStates = map[infomodels.RestoreState]bool{
-	infomodels.RestoreStateComplete: true,
+// stoppedRestoreStates are the states of a restore job that stops without completing,
+// which a clear of the storage cannot get past.
+var stoppedRestoreStates = map[infomodels.RestoreState]bool{
 	infomodels.RestoreStateFailed:   true,
 	infomodels.RestoreStateAborting: true,
 	infomodels.RestoreStateAborted:  true,
 }
 
+// preparedNamespaceStates are the merged namespace states of a cold restore that got past
+// its preparation on every node. The cluster starts the restore as soon as every node is
+// READY, so a clear that is followed by a quick restore is never seen READY.
+var preparedNamespaceStates = map[infomodels.NamespaceState]bool{
+	infomodels.NamespaceStateReady:     true,
+	infomodels.NamespaceStateRestoring: true,
+	infomodels.NamespaceStateOpening:   true,
+	infomodels.NamespaceStateNone:      true,
+}
+
 // ClearRestoreStorage clears the storage of the namespace of the configured cold restore
 // job on every node that needs it, and waits for the namespace to become ready for the
-// restore. With Async set it returns as soon as the nodes accept the clear.
+// restore, which the cluster then starts on its own. With Async set it returns as soon as
+// the nodes accept the clear.
 func (s *Service) ClearRestoreStorage(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
 	if err != nil {
@@ -65,6 +86,14 @@ func (s *Service) ClearRestoreStorage(ctx context.Context) error {
 // is requested once more: the request is only sent to the nodes that ask for it.
 func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerBackupInfo) error {
 	namespace, jobID := s.restoreCfg.ClearStorage.Namespace, s.restoreCfg.ClearStorage.JobID
+
+	// The cluster accepts a clear for a fuzzy restore without sending it anywhere, as no
+	// node of such a job asks for one, so the job is refused before the request. A job the
+	// status cannot tell about is left to the request, whose answer says what is wrong.
+	if status, err := restoreStatus(ctx, client, namespace, jobID); err == nil &&
+		status.Kind == infomodels.RestoreKindFuzzy {
+		return fmt.Errorf("%w: namespace %s, job-id %s", errClearNotCold, namespace, jobID)
+	}
 
 	// The error the cluster answers with already names the failed request, so it is
 	// returned as it is.
@@ -110,14 +139,22 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 
 		last = status
 
-		done := namespaceReady(status)
+		done := namespacePrepared(status)
 
 		state := describeClearState(status)
 		if !done && state != reported {
-			s.logger.Info("clearing storage in progress",
+			attrs := []any{
 				slog.String("job-id", jobID),
-				slog.String("clear", string(status.Clear)),
-				slog.String("ns-state", string(status.NsState)))
+				slog.String("state", restoreStateLabel(status)),
+			}
+
+			// A node held at PREPARING waits for the operator, and only this says why.
+			if status.HeldReason != "" {
+				attrs = append(attrs, slog.String("held-reason", status.HeldReason))
+			}
+
+			s.logger.InfoContext(ctx, "clearing storage in progress", withDebugAttrs(ctx, s.logger, attrs,
+				func() []any { return restoreDebugAttrs(status, restoreStateDescription(status)) })...)
 
 			reported = state
 		}
@@ -134,7 +171,7 @@ func (s *Service) clearRestoreStorage(ctx context.Context, client backup.ServerB
 	return nil
 }
 
-// logClearDone announces a namespace that is ready for the restore, along with what the
+// logClearDone announces a namespace that got past its preparation, along with what the
 // clear did when a node reported one.
 func (s *Service) logClearDone(namespace, jobID string, status *infomodels.ResponseRestoreState) {
 	attrs := []any{
@@ -150,13 +187,20 @@ func (s *Service) logClearDone(namespace, jobID string, status *infomodels.Respo
 	}
 
 	s.logger.Info(msgStorageCleared, attrs...)
+
+	if status.State != infomodels.RestoreStateComplete {
+		s.logger.Info(msgFollowRestore, slog.String("namespace", namespace), slog.String("job-id", jobID))
+	}
 }
 
-// preparationError reports a restore job that can no longer get its namespace ready for
-// the restore: the job stopped, or the preparation of the namespace failed.
+// preparationError reports a restore job whose namespace a clear cannot get ready for the
+// restore: a fuzzy restore, which has none to prepare, a job that stopped, or a failed
+// preparation.
 func preparationError(status *infomodels.ResponseRestoreState, namespace, jobID string) error {
 	switch {
-	case endedRestoreStates[status.State]:
+	case status.Kind == infomodels.RestoreKindFuzzy:
+		return fmt.Errorf("%w: namespace %s, job-id %s", errClearNotCold, namespace, jobID)
+	case stoppedRestoreStates[status.State]:
 		return restoreTerminalError(
 			fmt.Errorf("%w, state %s", errRestoreNotPreparing, status.State),
 			namespace, jobID, status.ErrorReason)
@@ -167,15 +211,19 @@ func preparationError(status *infomodels.ResponseRestoreState, namespace, jobID 
 	}
 }
 
-// namespaceReady reports whether the merged status says the namespace is ready for the
-// restore on every node: none of them needs or runs a clear, and all of them report
-// READY.
-func namespaceReady(status *infomodels.ResponseRestoreState) bool {
-	return status.Clear == infomodels.ClearStateNone && status.NsState == infomodels.NamespaceStateReady
+// namespacePrepared reports whether the merged status says the namespace got past its
+// preparation on every node: none of them needs or runs a clear, and none of them is
+// still PREPARING. A job that already completed got past it too.
+func namespacePrepared(status *infomodels.ResponseRestoreState) bool {
+	if status.State == infomodels.RestoreStateComplete {
+		return true
+	}
+
+	return status.Clear == infomodels.ClearStateNone && preparedNamespaceStates[status.NsState]
 }
 
-// describeClearState names the clear and namespace states of a status, so that a wait
+// describeClearState names the state of a status and why a node is held, so that a wait
 // logs them only when they change.
 func describeClearState(status *infomodels.ResponseRestoreState) string {
-	return fmt.Sprintf("clear=%s ns-state=%s", status.Clear, status.NsState)
+	return restoreStateLabel(status) + " " + status.HeldReason
 }
