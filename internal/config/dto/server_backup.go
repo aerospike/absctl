@@ -80,6 +80,7 @@ type ServerBackupConfig struct {
 	FilterExp      *string  `yaml:"filter-exp"`
 	NoIndexes      *bool    `yaml:"no-indexes"`
 	NoUDFs         *bool    `yaml:"no-udfs"`
+	NoConfig       *bool    `yaml:"no-config"`
 	Policy         *string  `yaml:"policy"`
 	Async          *bool    `yaml:"async"`
 
@@ -99,6 +100,7 @@ func defaultServerBackupConfig() ServerBackupConfig {
 		FilterExp:        new(models.DefaultServerFilterExp),
 		NoIndexes:        new(models.DefaultCommonNoIndexes),
 		NoUDFs:           new(models.DefaultCommonNoUDFs),
+		NoConfig:         new(models.DefaultServerBackupNoConfig),
 		Policy:           new(models.DefaultServerBackupPolicy),
 		Async:            new(models.DefaultServerBackupAsync),
 		RecordsPerSecond: new(models.DefaultServerBackupRecordsPerSecond),
@@ -123,6 +125,7 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		FilterExp:      derefString(b.Backup.FilterExp),
 		NoIndexes:      derefBool(b.Backup.NoIndexes),
 		NoUDFs:         derefBool(b.Backup.NoUDFs),
+		NoConfig:       derefBool(b.Backup.NoConfig),
 		Policy:         derefString(b.Backup.Policy),
 		Async:          derefBool(b.Backup.Async),
 

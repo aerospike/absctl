@@ -131,6 +131,12 @@ type jobWatch[S any] struct {
 	gapInterval time.Duration
 	// unseenLookups is how many lookups a job that has never been reported is given.
 	unseenLookups int
+	// initial is a status of the job read before the watch, such as by a check made
+	// before the request the watch follows. It is optional. When set, the job counts as
+	// reported from the start, so a job the watch never finds is taken as gone rather
+	// than as never reported. It is not given to handle, which sees only the statuses
+	// the watch reads.
+	initial *S
 
 	// lookup reads the status of the job. A job the cluster does not report comes back
 	// as an error that wraps asinfo.ErrNotFound; any other error ends the watch as it is.
@@ -165,6 +171,10 @@ func (w *jobWatch[S]) run(ctx context.Context) error {
 		// misses counts the lookups in a row that did not find the job.
 		misses int
 	)
+
+	if w.initial != nil {
+		last, seen = *w.initial, true
+	}
 
 	for {
 		status, err := w.lookup(ctx)
