@@ -52,8 +52,8 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupPolicy, derefString(backup.Policy))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
-	assert.Equal(t, models.DefaultServerBackupParallelRead, derefInt(backup.ParallelRead))
-	assert.Equal(t, models.DefaultServerBackupParallelWrite, derefInt(backup.ParallelWrite))
+	assert.Equal(t, models.DefaultServerBackupParallelReaders, derefInt(backup.ParallelReaders))
+	assert.Equal(t, models.DefaultServerBackupParallelUploadThreads, derefInt(backup.ParallelUploadThreads))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -91,8 +91,8 @@ func TestServerBackupToModels(t *testing.T) {
 	sampleSize := 500
 	watch := true
 	recordsPerSecond := 5000
-	parallelRead := 8
-	parallelWrite := 4
+	parallelReaders := 8
+	parallelUploadThreads := 4
 	policy := "best-effort"
 
 	backup := &ServerBackup{
@@ -110,9 +110,9 @@ func TestServerBackupToModels(t *testing.T) {
 			Policy:         &policy,
 			Async:          &async,
 
-			RecordsPerSecond: &recordsPerSecond,
-			ParallelRead:     &parallelRead,
-			ParallelWrite:    &parallelWrite,
+			RecordsPerSecond:      &recordsPerSecond,
+			ParallelReaders:       &parallelReaders,
+			ParallelUploadThreads: &parallelUploadThreads,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
@@ -136,8 +136,8 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.True(t, start.Async)
 	assert.Equal(t, policy, start.Policy)
 	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
-	assert.Equal(t, parallelRead, start.ParallelRead)
-	assert.Equal(t, parallelWrite, start.ParallelWrite)
+	assert.Equal(t, parallelReaders, start.ParallelReaders)
+	assert.Equal(t, parallelUploadThreads, start.ParallelUploadThreads)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)

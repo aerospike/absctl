@@ -63,7 +63,7 @@ type restoreStarter interface {
 func (s *Service) startRestore(ctx context.Context, client restoreStarter) error {
 	start := s.restoreCfg.Start
 
-	if err := s.checkClusterStable(ctx, client, start.Namespace); err != nil {
+	if err := s.checkClusterStable(ctx, client, start.Namespace, false); err != nil {
 		return err
 	}
 
@@ -159,8 +159,8 @@ func (s *Service) restoreRequest() (*infomodels.RequestRestore, error) {
 		NoUDFs:                 new(start.NoUDFs),
 		BackupIDs:              start.BackupIDs,
 		IncrementalPath:        start.IncrementalPrefix(),
-		RestoreWorkerThreads:   start.ParallelWrite,
-		RestoreDownloadThreads: start.ParallelRead,
+		RestoreWorkerThreads:   start.ParallelWriters,
+		RestoreDownloadThreads: start.ParallelDownloadThreads,
 		RestoreRPS:             start.RecordsPerSecond,
 		ExtraTTL:               start.ExtraTTL,
 		Policy:                 start.RestorePolicy(),

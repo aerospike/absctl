@@ -78,45 +78,59 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Restore Flags:
-  -n, --namespace string          The namespace to restore.
-      --backup-ids string         Comma separated list of the ids of the backups to restore from, up to 32:
-                                  the full backup first, then its incremental backups.
-      --path string               Key prefix in the bucket the backup was written under.
-      --incremental-path string   Key prefix in the bucket the incremental backups, every backup id
-                                  after the first one, were written under. If empty, --path is used.
-                                  Requires more than one backup id.
-  -s, --set-list string           Only restore the given sets from the backup.
-                                  Default: restore all sets.
-      --filter-exp string         Base64 encoded filter expression. Only matching records are restored,
-                                  deletes are always applied.
-  -I, --no-indexes                Don't restore any secondary indexes.
-      --no-udfs                   Don't restore any UDFs.
-      --async                     Return as soon as the cluster accepts the restore, without
-                                  following its progress. Use the progress command to follow
-                                  the restore later.
-      --parallel-read int         Number of threads per node that download the backup files, from 1 to 128. (default 8)
-  -w, --parallel-write int        Number of threads per node that write the records, from 1 to 128. (default 8)
-  -L, --records-per-second int    Limit the records per second each node writes. If 0, no limit is applied.
-      --extra-ttl int             Seconds to add to the expiry of every restored record that expires,
-                                  from 0 to 315360000 (10 years). Records that never expire are unchanged.
-      --policy string             Restore policy: strict or fuzzy. strict, the cold restore, closes the
-                                  namespace to clients, empties it and hydrates its partitions from
-                                  strict backups only. fuzzy writes the records into the live namespace,
-                                  from a single fuzzy backup, or from one or more strict backups.
-                                  The value is case-insensitive. If empty, the server default is used,
-                                  which is strict.
-                                  The flags below apply to one policy only: --hydrate-replica to strict,
-                                  the others to fuzzy. A flag that is not set is not sent, and the server
-                                  applies its default, which is the default shown.
-      --hydrate-replica           Restore all replicas. If false, only the master is restored and
-                                  the other replicas are filled by migrations. (default true)
-      --max-inflight int          Maximum number of concurrent writes, up to 100000. (default 200)
-      --retry-base-interval int   Base delay before a retry (in ms). 0 retries without a delay. (default 1000)
-      --retry-multiplier float    Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
-      --retry-max-attempts int    Number of retries per record after its first failed write.
-                                  0 disables retries. (default 5)
-      --ignore-record-error       Continue the restore on errors of individual records.
-      --apply-metadata-last       Create secondary indexes and UDFs after the records instead of before.
+  -n, --namespace string                The namespace to restore.
+      --backup-ids string               Comma separated list of the ids of the backups to restore from, up to 32:
+                                        the full backup first, then its incremental backups.
+      --path string                     Key prefix in the bucket the backup was written under.
+      --incremental-path string         Key prefix in the bucket the incremental backups, every backup id
+                                        after the first one, were written under. If empty, --path is used.
+                                        Requires more than one backup id.
+  -s, --set-list string                 Only restore the given sets from the backup.
+                                        Default: restore all sets.
+      --filter-exp string               Base64 encoded filter expression. Only matching records are restored,
+                                        deletes are always applied.
+  -I, --no-indexes                      Don't restore any secondary indexes.
+      --no-udfs                         Don't restore any UDFs.
+      --async                           Return as soon as the cluster accepts the restore, without
+                                        following its progress. Use the progress command to follow
+                                        the restore later.
+      --parallel-download-threads int   Number of threads per node that download the backup files, from 1 to 128.
+                                        The threads fetch and verify the backup segments, partition by partition,
+                                        to hide the latency of the object storage. Raise it when the download is
+                                        the bottleneck. Each thread holds a downloaded segment, so more threads
+                                        need more memory on each node. The server uses no more threads than
+                                        there are partitions left to restore. Download threads and writers
+                                        together must fit within the max-restore-threads server config.
+                                        If 0, the server default is used, which is 8.
+  -w, --parallel-writers int            Number of threads per node that write the records, from 1 to 128.
+                                        The threads decode the downloaded segments. With the strict policy they
+                                        write the records straight into the namespace storage. With the fuzzy
+                                        policy they submit the records as write transactions, with at most
+                                        --max-inflight writes in flight. Raise it when decoding and writing the
+                                        records is the bottleneck. Download threads and writers together must
+                                        fit within the max-restore-threads server config.
+                                        If 0, the server default is used, which is 8.
+  -L, --records-per-second int          Limit the records per second each node writes. If 0, no limit is applied.
+      --extra-ttl int                   Seconds to add to the expiry of every restored record that expires,
+                                        from 0 to 315360000 (10 years). Records that never expire are unchanged.
+      --policy string                   Restore policy: strict or fuzzy. strict, the cold restore, closes the
+                                        namespace to clients, empties it and hydrates its partitions from
+                                        strict backups only. fuzzy writes the records into the live namespace,
+                                        from a single fuzzy backup, or from one or more strict backups.
+                                        The value is case-insensitive. If empty, the server default is used,
+                                        which is strict.
+                                        The flags below apply to one policy only: --hydrate-replica to strict,
+                                        the others to fuzzy. A flag that is not set is not sent, and the server
+                                        applies its default, which is the default shown.
+      --hydrate-replica                 Restore all replicas. If false, only the master is restored and
+                                        the other replicas are filled by migrations. (default true)
+      --max-inflight int                Maximum number of concurrent writes, up to 100000. (default 200)
+      --retry-base-interval int         Base delay before a retry (in ms). 0 retries without a delay. (default 1000)
+      --retry-multiplier float          Backoff multiplier of the retry delay. Must be at least 1.0. (default 1)
+      --retry-max-attempts int          Number of retries per record after its first failed write.
+                                        0 disables retries. (default 5)
+      --ignore-record-error             Continue the restore on errors of individual records.
+      --apply-metadata-last             Create secondary indexes and UDFs after the records instead of before.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -618,9 +632,23 @@ restore:
   # the restore later.
   async: false
   # Number of threads per node that download the backup files, from 1 to 128.
-  parallel-read: 8
+  # The threads fetch and verify the backup segments, partition by partition,
+  # to hide the latency of the object storage. Raise it when the download is
+  # the bottleneck. Each thread holds a downloaded segment, so more threads
+  # need more memory on each node. The server uses no more threads than
+  # there are partitions left to restore. Download threads and writers
+  # together must fit within the max-restore-threads server config.
+  # If 0, the server default is used, which is 8.
+  parallel-download-threads: 0
   # Number of threads per node that write the records, from 1 to 128.
-  parallel-write: 8
+  # The threads decode the downloaded segments. With the strict policy they
+  # write the records straight into the namespace storage. With the fuzzy
+  # policy they submit the records as write transactions, with at most
+  # max-inflight writes in flight. Raise it when decoding and writing the
+  # records is the bottleneck. Download threads and writers together must
+  # fit within the max-restore-threads server config.
+  # If 0, the server default is used, which is 8.
+  parallel-writers: 0
   # Limit the records per second each node writes. If 0, no limit is applied.
   records-per-second: 0
   # Seconds to add to the expiry of every restored record that expires,

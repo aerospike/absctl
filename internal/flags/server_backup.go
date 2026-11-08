@@ -96,17 +96,27 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
 		models.DefaultServerBackupRecordsPerSecond,
 		"Limit the records per second of each scan on each node.\n"+
-			"A non-zero value must be at least 5 x --parallel-read, or 20 when\n"+
-			"--parallel-read is 0 and the server uses its default of 4 threads.\n"+
+			"A non-zero value must be at least 5 x --parallel-readers, or 20 when\n"+
+			"--parallel-readers is 0 and the server uses its default of 4 threads.\n"+
 			"If 0, the server default is used, which is no limit.")
-	flagSet.IntVar(&f.ParallelRead, "parallel-read",
-		models.DefaultServerBackupParallelRead,
-		"Number of scan threads per node, from 1 to 128.\n"+
-			"If 0, the server default is used.")
-	flagSet.IntVar(&f.ParallelWrite, "parallel-write",
-		models.DefaultServerBackupParallelWrite,
-		"Number of upload threads per node, from 1 to 128.\n"+
-			"If 0, the server default is used.")
+	flagSet.IntVar(&f.ParallelReaders, "parallel-readers",
+		models.DefaultServerBackupParallelReaders,
+		"Number of scan threads per node, from 1 to 128. The threads read the\n"+
+			"master partitions of the namespace and pack the records into segments\n"+
+			"for upload. Raise it when the scan is limited by CPU or device reads.\n"+
+			"It does not help when the upload is the bottleneck: the scan pauses\n"+
+			"while the upload queue is full. More threads need more memory on each\n"+
+			"node for segment buffers, which is not counted against namespace memory.\n"+
+			"Scan and upload threads together must fit within the max-backup-threads\n"+
+			"server config. If 0, the server default is used, which is 4.")
+	flagSet.IntVar(&f.ParallelUploadThreads, "parallel-upload-threads",
+		models.DefaultServerBackupParallelUploadThreads,
+		"Number of upload threads per node, from 1 to 128. The threads take the\n"+
+			"segments the scan threads fill and upload them to the object storage.\n"+
+			"Raise it when the upload is the bottleneck. Upload threads add no\n"+
+			"segment buffers. Scan and upload threads together must fit within the\n"+
+			"max-backup-threads server config.\n"+
+			"If 0, the server default is used, which is 8.")
 
 	return flagSet
 }
