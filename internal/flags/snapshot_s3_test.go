@@ -16,6 +16,7 @@ package flags
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -232,6 +233,39 @@ func TestSnapshotS3_NewFlagSet_Parse(t *testing.T) {
 
 			want := tt.want()
 			assert.Equal(t, &want, s3.GetSnapshotS3())
+		})
+	}
+}
+
+// TestSnapshotS3_StartRequirements pins down that the help of a start command tells what
+// the server requires of the S3 settings it is sent, and that of the others does not.
+func TestSnapshotS3_StartRequirements(t *testing.T) {
+	t.Parallel()
+
+	const (
+		descRequired = "Required."
+		descScheme   = "http:// or https://"
+	)
+
+	tests := []struct {
+		name string
+		mode SnapshotS3Mode
+		want bool
+	}{
+		{name: "backup start", mode: SnapshotS3ModeBackupStart, want: true},
+		{name: "restore start", mode: SnapshotS3ModeRestoreStart, want: true},
+		{name: "reader", mode: SnapshotS3ModeReader},
+		{name: "progress", mode: SnapshotS3ModeProgress},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			fs := NewSnapshotS3(tt.mode).NewFlagSet()
+
+			assert.Equal(t, tt.want, strings.Contains(fs.Lookup(flagS3Region).Usage, descRequired))
+			assert.Equal(t, tt.want, strings.Contains(fs.Lookup(flagS3Endpoint).Usage, descScheme))
 		})
 	}
 }

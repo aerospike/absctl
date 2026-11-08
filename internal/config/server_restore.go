@@ -22,7 +22,6 @@ import (
 // ServerRestoreServiceConfig holds the configuration for the server-integrated Start service.
 type ServerRestoreServiceConfig struct {
 	Start        *models.ServerRestore
-	Prepare      *models.ServerRestorePrepare
 	Progress     *models.ServerRestoreProgress
 	Abort        *models.ServerRestoreAbort
 	Open         *models.ServerRestoreOpen
@@ -35,7 +34,6 @@ type ServerRestoreServiceConfig struct {
 // command sets only its own one, so the others are left out by name.
 type ServerRestoreCommands struct {
 	Start        *models.ServerRestore
-	Prepare      *models.ServerRestorePrepare
 	Progress     *models.ServerRestoreProgress
 	Abort        *models.ServerRestoreAbort
 	Open         *models.ServerRestoreOpen
@@ -53,7 +51,6 @@ func NewServerRestoreServiceConfig(
 ) *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start:        commands.Start,
-		Prepare:      commands.Prepare,
 		Progress:     commands.Progress,
 		Abort:        commands.Abort,
 		Open:         commands.Open,
@@ -69,10 +66,6 @@ func NewServerRestoreServiceConfig(
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
 func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 	if err := s.Start.Validate(); err != nil {
-		return err
-	}
-
-	if err := s.Prepare.Validate(); err != nil {
 		return err
 	}
 
@@ -96,6 +89,11 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 	// are served by the cluster alone.
 	if s.Start != nil {
 		if _, err := s.ObjectStorageType(); err != nil {
+			return err
+		}
+
+		// The cluster reads the backup itself, with the S3 settings it is sent.
+		if err := models.ValidateServerS3(s.AwsS3); err != nil {
 			return err
 		}
 	}

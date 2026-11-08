@@ -56,7 +56,7 @@ func TestServiceBackupRequest(t *testing.T) {
 				Namespace: testRequestNamespace,
 			},
 			want: func() *infomodels.RequestBackup {
-				return &infomodels.RequestBackup{RequestCommon: testRequestCommon()}
+				return &infomodels.RequestBackup{RequestCommon: testRequestCommon(), NoConfig: new(false)}
 			},
 		},
 		{
@@ -70,6 +70,7 @@ func TestServiceBackupRequest(t *testing.T) {
 				FilterExp:     testRequestFilterExp,
 				NoIndexes:     true,
 				NoUDFs:        true,
+				NoConfig:      true,
 				Policy:        string(infomodels.BackupPolicyBestEffort),
 
 				RecordsPerSecond: testBackupRPS,
@@ -87,6 +88,7 @@ func TestServiceBackupRequest(t *testing.T) {
 
 				return &infomodels.RequestBackup{
 					RequestCommon: common,
+					NoConfig:      new(true),
 					BinList:       testRequestBinList,
 					ModifiedAfter: strconv.FormatInt(modifiedAfter.Unix(), 10),
 					Policy:        infomodels.BackupPolicyBestEffort,
@@ -99,6 +101,21 @@ func TestServiceBackupRequest(t *testing.T) {
 			},
 		},
 		{
+			// The policy is accepted in any case, and the server takes it in lower case.
+			name: "policy in mixed case",
+			give: &models.ServerBackup{
+				Namespace: testRequestNamespace,
+				Policy:    "Best-Effort",
+			},
+			want: func() *infomodels.RequestBackup {
+				return &infomodels.RequestBackup{
+					RequestCommon: testRequestCommon(),
+					NoConfig:      new(false),
+					Policy:        infomodels.BackupPolicyBestEffort,
+				}
+			},
+		},
+		{
 			name: "strict policy",
 			give: &models.ServerBackup{
 				Namespace: testRequestNamespace,
@@ -107,6 +124,7 @@ func TestServiceBackupRequest(t *testing.T) {
 			want: func() *infomodels.RequestBackup {
 				return &infomodels.RequestBackup{
 					RequestCommon: testRequestCommon(),
+					NoConfig:      new(false),
 					Policy:        infomodels.BackupPolicyStrict,
 				}
 			},
@@ -120,6 +138,7 @@ func TestServiceBackupRequest(t *testing.T) {
 			want: func() *infomodels.RequestBackup {
 				return &infomodels.RequestBackup{
 					RequestCommon: testRequestCommon(),
+					NoConfig:      new(false),
 					Policy:        infomodels.BackupPolicyFuzzy,
 				}
 			},

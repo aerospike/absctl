@@ -17,6 +17,7 @@ package server
 import (
 	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +28,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const logAbortOpenHint = "snapshot-restore abort"
+// The parts of the commands the hints tell the user to run: the command the
+// subcommand follows, the flag that names the namespace, the flags that name
+// testNamespace and the restore job testJobID of it, and the end that stands for the
+// connection flags.
+const (
+	cmdRestore       = "absctl snapshot-restore "
+	cmdNamespace     = " --namespace "
+	cmdTestNamespace = cmdNamespace + testNamespace
+	cmdTestJob       = cmdTestNamespace + " " + flagJobID + " " + testJobID
+	cmdMore          = " ..."
+)
+
+// logClearHint is part of the warning about a storage that must be cleared, and
+// logClearWait the part a watch adds to say it waits for the clear.
+const (
+	logClearHint = "'" + cmdRestore + restoreCmdClearStorage + cmdNamespace
+	logClearWait = "waiting for the clear"
+)
+
+// The commands the hints of a restore job of testNamespace and testJobID tell the user
+// to run, quoted as the hints print them.
+const (
+	logClearCmd  = "'" + cmdRestore + restoreCmdClearStorage + cmdTestJob + cmdMore + "'"
+	logFollowCmd = "'" + cmdRestore + restoreCmdProgress + cmdTestJob + " " + flagWatch + cmdMore + "'"
+	// The open names the job, which it needs to follow the release.
+	logOpenCmd = "'" + cmdRestore + restoreCmdOpen + cmdTestJob + cmdMore + "'"
+)
+
+// The state labels of a restore line, as the info level prints them.
+const (
+	logStateRestoring = "state=" + stateRestoring
+	logStateComplete  = "state=" + stateComplete
+)
 
 // TestServiceRestoreProgress covers the mode the progress command picks: a single report,
 // or a watch that lasts until the restore ends.
@@ -36,7 +69,7 @@ func TestServiceRestoreProgress(t *testing.T) {
 
 	answers := []restoreAnswer{
 		{status: testFuzzyStatus(infomodels.RestoreStateActive)},
-		{status: testFinishedRestore(testFuzzyStatus(infomodels.RestoreStateComplete))},
+		{status: testCompleteRestore(testFuzzyStatus(infomodels.RestoreStateComplete))},
 	}
 
 	tests := []struct {
@@ -60,7 +93,7 @@ func TestServiceRestoreProgress(t *testing.T) {
 			}
 			client := &fakeRestoreInfoClient{answers: answers}
 
-			require.NoError(t, svc.restoreProgress(t.Context(), client, testLayout))
+			require.NoError(t, svc.restoreProgress(t.Context(), client))
 			assert.Equal(t, tt.wantCalls, client.calls)
 		})
 	}
@@ -70,7 +103,19 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 	t.Parallel()
 
 	fuzzyActive := restoreAnswer{status: testFuzzyStatus(infomodels.RestoreStateActive)}
-	fuzzyComplete := restoreAnswer{status: testFinishedRestore(testFuzzyStatus(infomodels.RestoreStateComplete))}
+	fuzzyComplete := restoreAnswer{status: testCompleteRestore(testFuzzyStatus(infomodels.RestoreStateComplete))}
+	coldClearRequired := restoreAnswer{status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing)}
+	coldRestoring := restoreAnswer{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)}
+	coldComplete := restoreAnswer{
+		status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone)),
+	}
+
+	// coldRestoringHalf has hydrated half of the namespace testBackupDuration after the
+	// job started, long enough for an estimate of the time left from the job start.
+	restoringHalf := testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+	restoringHalf.ProgressPct = 50
+	coldRestoringHalf := restoreAnswer{status: restoringHalf}
+	logRemaining := "remaining="
 
 	tests := []struct {
 		name        string
@@ -81,6 +126,22 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 		wantLogs    []string
 		notWantLogs []string
 	}{
+		{
+			name:      "projects the time left of a cold restore from the job start",
+			mode:      reportOnce,
+			answers:   []restoreAnswer{coldRestoringHalf},
+			wantCalls: 1,
+			wantLogs:  []string{logRemaining},
+		},
+		{
+			// The wait for the clear is not hydration, so the time left is projected
+			// from the hydration start, too recent for an estimate yet.
+			name:        "projects the time left of a cold restore from the hydration start after a wait",
+			mode:        followJob,
+			answers:     []restoreAnswer{coldClearRequired, coldRestoringHalf, coldComplete},
+			wantCalls:   3,
+			notWantLogs: []string{logRemaining},
+		},
 		{
 			name:      "follows a fuzzy restore to completion",
 			mode:      followJob,
@@ -93,10 +154,48 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			mode: followJob,
 			answers: []restoreAnswer{
 				{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)},
-				{status: testFinishedRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
+				{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
 			},
 			wantCalls: 2,
-			wantLogs:  []string{"ns-state=RESTORING", "ns-state=NONE", msgRestoreComplete},
+			wantLogs:  []string{logStateRestoring, logStateComplete, "pct=100", msgRestoreComplete},
+		},
+		{
+			name: "keeps watching a cold restore that waits for a clear",
+			mode: followJob,
+			answers: []restoreAnswer{
+				coldClearRequired,
+				coldRestoring,
+				coldComplete,
+			},
+			wantCalls: 3,
+			wantLogs:  []string{logClearHint, logClearWait, msgRestoreComplete},
+			// The watch itself goes on following the restore, so it is not advised.
+			notWantLogs: []string{logFollowRestore},
+		},
+		{
+			// The restore cannot start until the user clears the storage, so the
+			// command that started it says how and waits for the clear done in another
+			// session, then follows the restore.
+			name: "waits for a clear of a just-started cold restore and follows it",
+			mode: followStartedJob,
+			answers: []restoreAnswer{
+				coldClearRequired,
+				coldClearRequired,
+				coldRestoring,
+				coldComplete,
+			},
+			wantCalls:   4,
+			wantLogs:    []string{logClearHint, logClearWait, logStateRestoring, msgRestoreComplete},
+			notWantLogs: []string{logFollowRestore},
+		},
+		{
+			// A single report does not stay with the job, so it tells how to follow it.
+			name:        "reports once a cold restore that waits for a clear",
+			mode:        reportOnce,
+			answers:     []restoreAnswer{coldClearRequired},
+			wantCalls:   1,
+			wantLogs:    []string{logClearCmd, logFollowCmd},
+			notWantLogs: []string{logClearWait},
 		},
 		{
 			name:      "reports once without waiting for the end",
@@ -145,6 +244,24 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			wantCalls: 1 + vanishedJobConfirmations,
 		},
 		{
+			// A fuzzy job keeps its state when it is aborted, as a cold one does, so its
+			// leaving the status is not an abort.
+			name:      "reports an aborting fuzzy job that leaves the status as lost",
+			mode:      followJob,
+			answers:   []restoreAnswer{{status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
+			wantErr:   errRestoreStatusLost,
+			wantCalls: 1 + vanishedJobConfirmations,
+		},
+		{
+			name: "reports an aborting cold job that leaves the status as lost",
+			mode: followJob,
+			answers: []restoreAnswer{
+				{status: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStateRestoring)},
+			},
+			wantErr:   errRestoreStatusLost,
+			wantCalls: 1 + vanishedJobConfirmations,
+		},
+		{
 			name:      "rides out a job missing from a single status",
 			mode:      followJob,
 			answers:   []restoreAnswer{fuzzyActive, {err: asinfo.ErrNotFound}, fuzzyComplete},
@@ -157,28 +274,26 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			answers:     []restoreAnswer{{status: testFailedRestore(testFuzzyStatus(infomodels.RestoreStateFailed))}},
 			wantErr:     errRestoreFailed,
 			wantCalls:   1,
-			notWantLogs: []string{logAbortOpenHint, logOpenHint},
+			notWantLogs: []string{logOpenHint},
 		},
 		{
-			// A failed cold restore keeps the namespace closed until it is aborted and
-			// opened.
+			// A failed cold restore keeps the namespace closed until it is opened.
 			name: "reports a failed cold restore and tells how to release the namespace",
 			mode: followJob,
 			answers: []restoreAnswer{{status: testFailedRestore(
 				testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring))}},
 			wantErr:   errRestoreFailed,
 			wantCalls: 1,
-			wantLogs:  []string{logAbortOpenHint},
+			wantLogs:  []string{logOpenCmd},
 		},
 		{
 			name: "reports an aborted cold restore and tells how to open the namespace",
 			mode: followJob,
 			answers: []restoreAnswer{{status: testFinishedRestore(
 				testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateRestoring))}},
-			wantErr:     errRestoreAborted,
-			wantCalls:   1,
-			wantLogs:    []string{logOpenHint},
-			notWantLogs: []string{logAbortOpenHint},
+			wantErr:   errRestoreAborted,
+			wantCalls: 1,
+			wantLogs:  []string{logOpenCmd},
 		},
 		{
 			name:        "reports an aborted fuzzy restore",
@@ -204,7 +319,7 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			svc, buf := newTestService(t)
 			client := &fakeRestoreInfoClient{answers: tt.answers}
 
-			err := svc.reportRestoreProgress(t.Context(), client, testLayout, testNamespace, testJobID, tt.mode)
+			err := svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, tt.mode)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -235,140 +350,61 @@ func TestServiceReportRestoreProgressNamesTheFailure(t *testing.T) {
 		{status: testFailedRestore(testFuzzyStatus(infomodels.RestoreStateFailed))},
 	}}
 
-	err := svc.reportRestoreProgress(t.Context(), client, testLayout, testNamespace, testJobID, followJob)
+	err := svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, followJob)
 
 	require.ErrorIs(t, err, errRestoreFailed)
 	require.ErrorContains(t, err, testErrorReason)
 	require.ErrorContains(t, err, testJobID)
 }
 
-func TestRestoreRatio(t *testing.T) {
+// TestServiceReportRestoreProgressWarnsOnceAboutClear makes sure a watch that keeps
+// seeing the same pending clear does not repeat the warning on every poll, whether it
+// follows a job named on the command line or the one the start has just requested.
+func TestServiceReportRestoreProgressWarnsOnceAboutClear(t *testing.T) {
 	t.Parallel()
 
+	clearRequired := restoreAnswer{
+		status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing),
+	}
+
 	tests := []struct {
-		name        string
-		status      *infomodels.ResponseRestoreState
-		layoutNodes int
-		want        float64
+		name string
+		mode progressMode
 	}{
-		{
-			name: "complete job is done whatever its counters say",
-			status: &infomodels.ResponseRestoreState{
-				Kind:  infomodels.RestoreKindCold,
-				State: infomodels.RestoreStateComplete,
-			},
-			want: 1,
-		},
-		{
-			name: "fuzzy restore of a single backup counts covered partitions",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindFuzzy,
-				State:         infomodels.RestoreStateActive,
-				BackupEntries: 1,
-				Covered:       partitionCount / 4,
-			},
-			want: 0.25,
-		},
-		{
-			// The first backup is applied in full, the second one is half covered.
-			name: "fuzzy restore counts the backups applied before the current one",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindFuzzy,
-				State:         infomodels.RestoreStateActive,
-				BackupEntry:   1,
-				BackupEntries: 2,
-				Covered:       partitionCount / 2,
-			},
-			want: 0.75,
-		},
-		{
-			// A cluster wide coverage counter can overshoot the partition count.
-			name: "fuzzy coverage is capped at the partition count",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindFuzzy,
-				State:         infomodels.RestoreStateActive,
-				BackupEntries: 1,
-				Covered:       2 * partitionCount,
-			},
-			want: 1,
-		},
-		{
-			name: "fuzzy restore with no entries reported",
-			status: &infomodels.ResponseRestoreState{
-				Kind:    infomodels.RestoreKindFuzzy,
-				State:   infomodels.RestoreStateActive,
-				Covered: partitionCount / 2,
-			},
-			want: 0.5,
-		},
-		{
-			name: "prepared cold restore has not started",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindCold,
-				State:         infomodels.RestoreStateActive,
-				NsState:       infomodels.NamespaceStateReady,
-				BackupEntries: 1,
-				NDoneNodes:    1,
-			},
-			layoutNodes: testLayoutNodes,
-			want:        0,
-		},
-		{
-			name: "cold restore counts the nodes that finished",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindCold,
-				State:         infomodels.RestoreStateActive,
-				NsState:       infomodels.NamespaceStateRestoring,
-				BackupEntries: 1,
-				NDoneNodes:    1,
-			},
-			layoutNodes: 4,
-			want:        0.25,
-		},
-		{
-			// The newest backup is applied first, so the current entry counts down.
-			name: "cold restore counts the backups applied before the current one",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindCold,
-				State:         infomodels.RestoreStateActive,
-				NsState:       infomodels.NamespaceStateRestoring,
-				BackupEntry:   0,
-				BackupEntries: 2,
-				NDoneNodes:    2,
-			},
-			layoutNodes: 4,
-			want:        0.75,
-		},
-		{
-			name: "cold restore without layout nodes",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindCold,
-				State:         infomodels.RestoreStateActive,
-				NsState:       infomodels.NamespaceStateRestoring,
-				BackupEntries: 1,
-				NDoneNodes:    1,
-			},
-			want: 0,
-		},
-		{
-			name: "done nodes are capped at the layout",
-			status: &infomodels.ResponseRestoreState{
-				Kind:          infomodels.RestoreKindCold,
-				State:         infomodels.RestoreStateActive,
-				NsState:       infomodels.NamespaceStateRestoring,
-				BackupEntries: 1,
-				NDoneNodes:    testLayoutNodes + 1,
-			},
-			layoutNodes: testLayoutNodes,
-			want:        1,
-		},
+		{name: "follow a job named on the command line", mode: followJob},
+		{name: "follow a just-started job", mode: followStartedJob},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.InDelta(t, tt.want, restoreRatio(tt.status, tt.layoutNodes), 1e-9)
+			svc, buf := newTestService(t)
+			client := &fakeRestoreInfoClient{answers: []restoreAnswer{
+				clearRequired,
+				clearRequired,
+				{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
+			}}
+
+			require.NoError(t, svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, tt.mode))
+
+			// The warning is the only line of the watch at the warning level, and it names
+			// the command to run with the job, in a message the user can copy it from.
+			require.Equal(t, 1, strings.Count(buf.String(), "level=WARN"))
+
+			var warning string
+
+			for line := range strings.Lines(buf.String()) {
+				if strings.Contains(line, "level=WARN") {
+					warning = line
+				}
+			}
+
+			assert.Contains(t, warning, logClearCmd)
+			// The job is named in the command only, not repeated as attributes.
+			assert.NotContains(t, warning, "command=")
+			assert.NotContains(t, warning, "namespace=")
+			assert.NotContains(t, warning, "job-id=")
 		})
 	}
 }
@@ -377,53 +413,79 @@ func TestRestoreSnapshot(t *testing.T) {
 	t.Parallel()
 
 	const (
-		applied = 1000
+		recsPerSec = 1000
+		heldReason = "truncate-state-live"
 		// attrJobID and attrState are the keys every restore line opens with.
 		attrJobID         = "job-id"
 		attrState         = "state"
-		attrNsState       = "ns-state"
+		attrHeldReason    = "held-reason"
 		attrBackupID      = "backup-id"
 		attrBackupEntry   = "backup-entry"
 		attrBackupEntries = "backup-entries"
+		// The keys of the full state, printed at the debug level only.
+		attrDescription = "description"
+		attrServerState = "server-state"
+		attrNsState     = "ns-state"
+		attrClear       = "clear"
 	)
-
-	stateStage := string(infomodels.RestoreStateActive)
-	coldStage := stateStage + "/" + string(infomodels.NamespaceStateRestoring)
 
 	tests := []struct {
 		name           string
 		status         *infomodels.ResponseRestoreState
 		wantStage      string
-		wantHasRecords bool
-		wantRecords    uint64
+		wantRatio      float64
+		wantRecsPerSec uint64
 		wantAttrs      []string
+		wantDebugAttrs []string
 	}{
 		{
-			name: "fuzzy restore reports the applied records",
+			name: "fuzzy restore reports the progress and the rate of the cluster",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindFuzzy,
 				State:         infomodels.RestoreStateActive,
 				BackupEntries: 1,
-				Applied:       applied,
+				ProgressPct:   65.9,
+				RecsPerSec:    recsPerSec,
 			},
-			wantStage:      stateStage,
-			wantHasRecords: true,
-			wantRecords:    applied,
+			wantStage:      stateRestoring,
+			wantRatio:      0.659,
+			wantRecsPerSec: recsPerSec,
 			wantAttrs:      []string{attrJobID, attrState},
+			wantDebugAttrs: []string{attrDescription, attrServerState},
 		},
 		{
-			// The namespace state tells the stages of a cold restore apart.
-			name: "cold restore reports the namespace state and no speed",
+			// The namespace state tells the stages of a cold restore apart, and it is
+			// printed in full at the debug level.
+			name: "cold restore is labeled after the namespace state",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindCold,
 				State:         infomodels.RestoreStateActive,
 				NsState:       infomodels.NamespaceStateRestoring,
 				BackupEntries: 1,
+				ProgressPct:   61.2,
+				RecsPerSec:    recsPerSec,
 			},
-			wantStage: coldStage,
-			wantAttrs: []string{attrJobID, attrState, attrNsState},
+			wantStage:      stateRestoring,
+			wantRatio:      0.612,
+			wantRecsPerSec: recsPerSec,
+			wantAttrs:      []string{attrJobID, attrState},
+			wantDebugAttrs: []string{attrDescription, attrServerState, attrNsState, attrClear},
+		},
+		{
+			name: "cold restore held in preparation names the reason",
+			status: &infomodels.ResponseRestoreState{
+				JobID:         testJobID,
+				Kind:          infomodels.RestoreKindCold,
+				State:         infomodels.RestoreStateActive,
+				NsState:       infomodels.NamespaceStatePreparing,
+				HeldReason:    heldReason,
+				BackupEntries: 1,
+			},
+			wantStage:      "preparing",
+			wantAttrs:      []string{attrJobID, attrState, attrHeldReason},
+			wantDebugAttrs: []string{attrDescription, attrServerState, attrNsState, attrClear},
 		},
 		{
 			name: "restore of several backups names the current one",
@@ -434,9 +496,9 @@ func TestRestoreSnapshot(t *testing.T) {
 				BackupID:      testJobID,
 				BackupEntries: 2,
 			},
-			wantStage:      stateStage,
-			wantHasRecords: true,
+			wantStage:      stateRestoring,
 			wantAttrs:      []string{attrJobID, attrState, attrBackupID, attrBackupEntry, attrBackupEntries},
+			wantDebugAttrs: []string{attrDescription, attrServerState},
 		},
 	}
 
@@ -444,62 +506,99 @@ func TestRestoreSnapshot(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			snap := restoreSnapshot(tt.status, testLayoutNodes)
+			snap := restoreSnapshot(tt.status)
 
 			assert.Equal(t, tt.wantStage, snap.stage)
-			assert.Equal(t, tt.wantHasRecords, snap.hasRecords)
-			assert.Equal(t, tt.wantRecords, snap.records)
-
-			keys := make([]string, 0, len(snap.attrs))
-			for _, attr := range snap.attrs {
-				a, ok := attr.(slog.Attr)
-				require.True(t, ok)
-
-				keys = append(keys, a.Key)
-			}
-
-			assert.Equal(t, tt.wantAttrs, keys)
+			assert.InDelta(t, tt.wantRatio, snap.ratio, 1e-9)
+			assert.Equal(t, tt.wantRecsPerSec, snap.recsPerSec)
+			assert.Equal(t, tt.wantAttrs, attrKeys(t, snap.attrs))
+			assert.Equal(t, tt.wantDebugAttrs, attrKeys(t, snap.debugAttrs()))
 		})
 	}
 }
 
-// TestProgressPrinterPrintRestore pins down the restore progress line: a cold restore
-// counts no records, so it reports no speed.
+// attrKeys returns the keys of the slog attributes attrs.
+func attrKeys(t *testing.T, attrs []any) []string {
+	t.Helper()
+
+	keys := make([]string, 0, len(attrs))
+
+	for _, attr := range attrs {
+		a, ok := attr.(slog.Attr)
+		require.True(t, ok)
+
+		keys = append(keys, a.Key)
+	}
+
+	return keys
+}
+
+// TestProgressPrinterPrintRestore pins down the restore progress line, which reports the
+// progress and the record rate the cluster reports for both kinds of restore.
 func TestProgressPrinterPrintRestore(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
 
 	tests := []struct {
-		name        string
-		status      *infomodels.ResponseRestoreState
-		wantLogs    []string
-		notWantLogs []string
+		name     string
+		status   *infomodels.ResponseRestoreState
+		wantLogs []string
 	}{
 		{
-			name: "fuzzy restore reports the speed",
+			name: "fuzzy restore prints the progress, the rate and the time left",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindFuzzy,
 				State:         infomodels.RestoreStateActive,
 				BackupEntries: 1,
-				Covered:       partitionCount / 2,
+				ProgressPct:   50,
+				RecsPerSec:    200,
 				StartTime:     now.Add(-time.Hour),
 			},
-			wantLogs: []string{msgRestoreProgress, "job-id=" + testJobID, "pct=50", "rec/s=0", "remaining=1h0m0s"},
+			wantLogs: []string{msgRestoreProgress, "job-id=" + testJobID, "pct=50", "rec/s=200", "remaining=1h0m0s"},
 		},
 		{
-			name: "cold restore reports no speed",
+			name: "cold restore",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindCold,
 				State:         infomodels.RestoreStateActive,
 				NsState:       infomodels.NamespaceStateRestoring,
 				BackupEntries: 1,
+				ProgressPct:   25,
+				RecsPerSec:    300,
 				StartTime:     now.Add(-time.Hour),
 			},
-			wantLogs:    []string{msgRestoreProgress, "ns-state=RESTORING", "pct=0"},
-			notWantLogs: []string{"rec/s="},
+			wantLogs: []string{msgRestoreProgress, logStateRestoring, "pct=25", "rec/s=300", "remaining=3h0m0s"},
+		},
+		{
+			// The job cannot finish until the nodes that left come back, which is the
+			// only reason the operator gets for a stalled restore.
+			name: "cold restore missing layout nodes",
+			status: &infomodels.ResponseRestoreState{
+				JobID:              testJobID,
+				Kind:               infomodels.RestoreKindCold,
+				State:              infomodels.RestoreStateActive,
+				NsState:            infomodels.NamespaceStateRestoring,
+				BackupEntries:      1,
+				MissingLayoutNodes: 2,
+				ProgressPct:        25,
+				StartTime:          now.Add(-time.Hour),
+			},
+			wantLogs: []string{"missing-layout-nodes=2"},
+		},
+		{
+			name: "complete cold restore without a merged percentage",
+			status: &infomodels.ResponseRestoreState{
+				JobID:         testJobID,
+				Kind:          infomodels.RestoreKindCold,
+				State:         infomodels.RestoreStateComplete,
+				NsState:       infomodels.NamespaceStateNone,
+				BackupEntries: 1,
+				StartTime:     now.Add(-time.Hour),
+			},
+			wantLogs: []string{msgRestoreProgress, logStateComplete, "pct=100"},
 		},
 	}
 
@@ -512,15 +611,252 @@ func TestProgressPrinterPrintRestore(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 			printer := newProgressPrinter(logger, msgRestoreProgress)
 
-			require.True(t, printer.Print(restoreSnapshot(tt.status, testLayoutNodes), now))
+			require.True(t, printer.Print(t.Context(), restoreSnapshot(tt.status), now))
 
 			for _, want := range tt.wantLogs {
 				assert.Contains(t, buf.String(), want)
 			}
+		})
+	}
+}
 
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
+func TestWaitsForPreparation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		give *infomodels.ResponseRestoreState
+		want bool
+	}{
+		{
+			name: "cold restore preparing",
+			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStatePreparing),
+			want: true,
+		},
+		{
+			name: "cold restore prepared",
+			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateReady),
+			want: true,
+		},
+		{
+			// The gate is not up yet on some node.
+			name: "cold restore starting",
+			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateNone),
+			want: true,
+		},
+		{
+			// Every node reports a stub row, which the merged state skips.
+			name: "cold restore with no namespace state",
+			give: testColdStatus(infomodels.RestoreStateActive, ""),
+			want: true,
+		},
+		{
+			name: "cold restore hydrating",
+			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring),
+		},
+		{
+			name: "cold restore stopping while preparing",
+			give: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStatePreparing),
+		},
+		{
+			name: "fuzzy restore has no preparation",
+			give: testFuzzyStatus(infomodels.RestoreStateActive),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, waitsForPreparation(tt.give))
+		})
+	}
+}
+
+func TestHydrationClockTrack(t *testing.T) {
+	t.Parallel()
+
+	var (
+		now           = time.Now()
+		preparing     = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStatePreparing)
+		restoring     = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+		restoringHalf = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+	)
+
+	restoringHalf.ProgressPct = 50
+
+	// The statuses are seen one second apart, the first at now plus one second.
+	tests := []struct {
+		name string
+		give []*infomodels.ResponseRestoreState
+		// wantFromStep is the 1-based step the last status is projected from, zero for
+		// the job start.
+		wantFromStep   int
+		wantStartRatio float64
+	}{
+		{
+			// A watch that began during the hydration cannot tell how long the
+			// preparation took.
+			name: "hydrating from the first status",
+			give: []*infomodels.ResponseRestoreState{restoring, restoring},
+		},
+		{
+			name: "still preparing",
+			give: []*infomodels.ResponseRestoreState{preparing, preparing},
+		},
+		{
+			name:         "hydrating after a wait",
+			give:         []*infomodels.ResponseRestoreState{preparing, preparing, restoring, restoring},
+			wantFromStep: 3,
+		},
+		{
+			// A hydration seen only once it got some way keeps what it did before out
+			// of the projection.
+			name:           "hydrating after a wait from a later point",
+			give:           []*infomodels.ResponseRestoreState{preparing, restoringHalf, restoring},
+			wantFromStep:   2,
+			wantStartRatio: 0.5,
+		},
+		{
+			name: "fuzzy restore keeps the job start",
+			give: []*infomodels.ResponseRestoreState{
+				testFuzzyStatus(infomodels.RestoreStateActive),
+				testFuzzyStatus(infomodels.RestoreStateActive),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				clock hydrationClock
+				snap  *progressSnapshot
+			)
+
+			for i, status := range tt.give {
+				snap = restoreSnapshot(status)
+				clock.track(status, snap, now.Add(time.Duration(i+1)*time.Second))
 			}
+
+			want := tt.give[len(tt.give)-1].StartTime
+			if tt.wantFromStep > 0 {
+				want = now.Add(time.Duration(tt.wantFromStep) * time.Second)
+			}
+
+			assert.Equal(t, want, snap.startTime)
+			assert.InDelta(t, tt.wantStartRatio, snap.startRatio, 1e-9)
+		})
+	}
+}
+
+func TestHydrationClockWaits(t *testing.T) {
+	t.Parallel()
+
+	var (
+		preparing = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStatePreparing)
+		restoring = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+		none      = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateNone)
+	)
+
+	tests := []struct {
+		name string
+		// give are the statuses seen in order; want is for the last one.
+		give []*infomodels.ResponseRestoreState
+		want bool
+	}{
+		{
+			name: "gate not up yet",
+			give: []*infomodels.ResponseRestoreState{none},
+			want: true,
+		},
+		{
+			name: "namespace preparing",
+			give: []*infomodels.ResponseRestoreState{none, preparing},
+			want: true,
+		},
+		{
+			name: "hydrating",
+			give: []*infomodels.ResponseRestoreState{preparing, restoring},
+		},
+		{
+			// The namespace is released for a moment before the job is COMPLETE.
+			name: "released after the hydration",
+			give: []*infomodels.ResponseRestoreState{restoring, none},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var clock hydrationClock
+
+			now := time.Now()
+			for _, status := range tt.give {
+				clock.track(status, restoreSnapshot(status), now)
+			}
+
+			assert.Equal(t, tt.want, clock.waits(tt.give[len(tt.give)-1]))
+		})
+	}
+}
+
+func TestRestoreCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		giveSubcommand string
+		giveExtra      []string
+		want           string
+	}{
+		{
+			name:           "names the namespace only",
+			giveSubcommand: restoreCmdOpen,
+			want:           cmdRestore + restoreCmdOpen + cmdTestNamespace + cmdMore,
+		},
+		{
+			name:           "puts the extra flags after the namespace",
+			giveSubcommand: restoreCmdProgress,
+			giveExtra:      []string{flagJobID, testJobID, flagWatch},
+			want:           cmdRestore + restoreCmdProgress + cmdTestJob + " " + flagWatch + cmdMore,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, restoreCommand(tt.giveSubcommand, testNamespace, tt.giveExtra...))
+		})
+	}
+}
+
+// TestServiceLogOpenHint pins down that the open hint names the job when it is known, so
+// that the copied command follows the release, and the namespace alone otherwise.
+func TestServiceLogOpenHint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		giveJobID string
+		want      string
+	}{
+		{name: "with the job id", giveJobID: testJobID, want: logOpenCmd},
+		{name: "without the job id", want: "'" + cmdRestore + restoreCmdOpen + cmdTestNamespace + cmdMore + "'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, buf := newTestService(t)
+
+			svc.logOpenHint(testNamespace, tt.giveJobID)
+
+			assert.Contains(t, buf.String(), tt.want)
 		})
 	}
 }
