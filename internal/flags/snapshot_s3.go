@@ -74,7 +74,7 @@ func (f *SnapshotS3) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Region, flagS3Region,
 		models.DefaultS3Region,
-		"The S3 region that the bucket(s) exist in.")
+		"The S3 region that the bucket(s) exist in."+f.startOnly(" Required."))
 
 	flagSet.StringVar(&f.Profile, flagS3Profile,
 		models.DefaultS3Profile,
@@ -90,7 +90,8 @@ func (f *SnapshotS3) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.Endpoint, flagS3Endpoint,
 		models.DefaultS3Endpoint,
-		"An alternate URL endpoint to send S3 API calls to.")
+		"An alternate URL endpoint to send S3 API calls to."+
+			f.startOnly("\nAn http:// or https:// URL with a host, the scheme in lower case."))
 
 	switch f.mode {
 	case SnapshotS3ModeBackupStart:
@@ -104,6 +105,16 @@ func (f *SnapshotS3) NewFlagSet() *pflag.FlagSet {
 	}
 
 	return flagSet
+}
+
+// startOnly returns desc for the modes that start a job, whose S3 settings are sent to the
+// server and checked against its rules, and nothing for the other modes.
+func (f *SnapshotS3) startOnly(desc string) string {
+	if f.mode == SnapshotS3ModeBackupStart || f.mode == SnapshotS3ModeRestoreStart {
+		return desc
+	}
+
+	return ""
 }
 
 // addClientFlags adds the settings of the local S3 client to flagSet.

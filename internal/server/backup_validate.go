@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
 
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
@@ -47,7 +46,7 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.checkBackupExists(ctx, metaClient, s.backupCfg.AwsS3.BucketName, prefix,
+	if _, err := s.checkBackupExists(ctx, metaClient, s.backupCfg.AwsS3.BucketName, prefix,
 		s.backupCfg.Validation.JobID); err != nil {
 		return err
 	}
@@ -62,8 +61,9 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 	streamer, err := streamers.NewS3(
 		client,
 		s.backupCfg.AwsS3.BucketName,
-		path.Join(prefix, s.backupCfg.Validation.JobID),
+		s.backupCfg.Validation.JobID,
 		streamers.WithLogger(s.logger),
+		streamers.WithPath(prefix),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create s3 streamer: %w", err)

@@ -102,20 +102,11 @@ func restoreStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common comm
 	}
 }
 
-func restorePrepareHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+func restoreProgressHelpSections(progressFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
 	return []HelpSection{
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
-		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
-		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
-	}
-}
-
-func restoreProgressHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
-	return []HelpSection{
-		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
-		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
-		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{progressFS}},
 		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
@@ -209,7 +200,6 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 
 	startFS := rf.start.NewFlagSet()
 	objectStoreFS := rf.s3Start.NewFlagSet()
-	prepareFS := rf.prepare.NewFlagSet()
 	progressFS := rf.progress.NewFlagSet()
 	abortFS := rf.abort.NewFlagSet()
 	openFS := rf.open.NewFlagSet()
@@ -222,13 +212,6 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestoreStart,
 			Usage:    flags.SectionTextUsageRestoreStart,
 			Sections: restoreStartHelpSections(startFS, objectStoreFS, common),
-		},
-		{
-			Name:     UsePrepare,
-			Short:    ShortRestorePrepare,
-			Long:     LongRestorePrepare,
-			Usage:    flags.SectionTextUsageRestorePrepare,
-			Sections: restorePrepareHelpSections(prepareFS, common),
 		},
 		{
 			Name:     UseProgress,

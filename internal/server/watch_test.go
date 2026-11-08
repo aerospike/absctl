@@ -120,7 +120,9 @@ func TestJobWatchRun(t *testing.T) {
 		name          string
 		unseenLookups int
 		// vanished is left nil for the default confirmations.
-		vanished    func(last string, misses int) bool
+		vanished func(last string, misses int) bool
+		// initial is left nil for a watch that has read nothing before it starts.
+		initial     *string
 		answers     []watchAnswer
 		missingErr  error
 		wantErr     error
@@ -189,6 +191,26 @@ func TestJobWatchRun(t *testing.T) {
 			wantCalls: 2*vanishedJobConfirmations + 1,
 		},
 		{
+			// A status read before the watch makes the job a reported one, so it is
+			// waited for as one, and missing hears it was seen, last in that status.
+			name:          "takes a job read before the watch as reported",
+			unseenLookups: startedJobConfirmations,
+			initial:       new(testWatchRunning),
+			wantCalls:     vanishedJobConfirmations,
+			wantMissing:   true,
+			wantSeen:      true,
+			wantLast:      testWatchRunning,
+		},
+		{
+			// The status read before the watch is not given to the handler, so a job
+			// done before the watch is only done once the watch reads it so.
+			name:          "does not hand the status read before the watch to the handler",
+			unseenLookups: 1,
+			initial:       new(testWatchDone),
+			answers:       []watchAnswer{running, done},
+			wantCalls:     2,
+		},
+		{
 			name:          "passes on what missing decides",
 			unseenLookups: 1,
 			answers:       []watchAnswer{running, notFound},
@@ -225,6 +247,7 @@ func TestJobWatchRun(t *testing.T) {
 			r := &watchRecorder{answers: tt.answers, missingErr: tt.missingErr}
 			w := newTestWatch(r, tt.unseenLookups)
 			w.vanished = tt.vanished
+			w.initial = tt.initial
 
 			err := w.run(t.Context())
 
