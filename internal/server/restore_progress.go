@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/aerospike/backup-go/pkg/asinfo"
@@ -30,17 +31,18 @@ const (
 	msgRestoreComplete = "restore complete"
 
 	// msgOpenHint tells how to release the namespace a cold restore that failed or was
-	// aborted keeps closed to clients.
-	msgOpenHint = "the namespace stays closed to clients until it is released " +
-		"with \"snapshot-restore open\""
+	// aborted keeps closed to clients. It takes the command to run, see restoreCommand.
+	msgOpenHint = "the namespace stays closed to clients until it is released with '%s'"
 
 	// msgClearStorageRequired tells how to get past a cold restore that waits for the
-	// storage of the namespace to be cleared on some nodes. msgClearThenFollow is how a
-	// command that does not stay with the job adds how to follow the restore after.
+	// storage of the namespace to be cleared on some nodes, and takes the command to run.
+	// msgClearThenWait is how a watch adds that it waits for the clear and goes on with
+	// the restore, and msgClearThenFollow is how a command that does not stay with the
+	// job adds how to follow the restore after, with the command to run for that.
 	msgClearStorageRequired = "the namespace storage must be cleared on some nodes before the restore " +
-		"can start: run \"snapshot-restore clear-storage\""
-	msgClearThenFollow = msgClearStorageRequired +
-		", then follow the restore with \"snapshot-restore progress --watch\""
+		"can start: run '%s'"
+	msgClearThenWait   = msgClearStorageRequired + "; waiting for the clear, the restore is followed once it starts"
+	msgClearThenFollow = msgClearStorageRequired + ", then follow the restore with '%s'"
 
 	// msgRestoreProgress is the message every progress line of a restore is logged
 	// under.
@@ -64,10 +66,6 @@ var (
 	// errRestoreStatusLost is returned when the cluster stopped reporting a restore job
 	// that was being watched.
 	errRestoreStatusLost = errors.New("cluster stopped reporting restore status")
-
-	// errClearStorageRequired is returned by a start that stops following a cold
-	// restore which cannot start before the namespace storage is cleared on some nodes.
-	errClearStorageRequired = errors.New("restore waits for the namespace storage to be cleared")
 )
 
 // RestoreProgress reports the progress of the configured restore job, once or, with
@@ -175,9 +173,9 @@ func restoreMissingError(namespace, jobID string, seen bool) error {
 // reportOnce mode.
 //
 // A cold restore does not start while a node waits for its storage to be cleared. That
-// is reported with a hint on how to clear it, and in a mode that stops on it, see
-// stopsOnClear, it also ends the watch with errClearStorageRequired. A job that is
-// already stopping is followed to its end instead, as clearing cannot help it.
+// is reported once with a hint on how to clear it, and a watch keeps polling until the
+// clear is done in another session, then goes on reporting the restore. A job that is
+// already stopping is not reported as waiting for a clear, as clearing cannot help it.
 //
 // A job is missing from the status the same way as a backup job is, see
 // reportBackupProgress, except that the cluster keeps the state of a finished cold
@@ -225,25 +223,21 @@ func (s *Service) reportRestoreProgress(
 		clearRequired := status.Clear == infomodels.ClearStateRequired &&
 			status.State == infomodels.RestoreStateActive
 		if clearRequired && !clearReported {
-			msg := msgClearThenFollow
-			if mode == followJob {
+			clearCmd := restoreCommand(restoreCmdClearStorage, namespace, jobID)
+
+			msg := fmt.Sprintf(msgClearThenFollow, clearCmd,
+				restoreCommand(restoreCmdProgress, namespace, jobID, "--watch"))
+			if mode != reportOnce {
 				// The watch goes on reporting the restore once the storage is cleared.
-				msg = msgClearStorageRequired
+				msg = fmt.Sprintf(msgClearThenWait, clearCmd)
 			}
 
-			s.logger.Warn(msg,
-				slog.String("namespace", namespace),
-				slog.String("job-id", jobID),
-				slog.String("command",
-					fmt.Sprintf("snapshot-restore clear-storage --namespace %s --job-id %s", namespace, jobID)))
+			// The message names the job in the command it gives, so it carries no
+			// attributes that would repeat it.
+			s.logger.Warn(msg)
 		}
 
 		clearReported = clearRequired
-
-		if clearRequired && mode.stopsOnClear() {
-			return true, 0, fmt.Errorf("%w: namespace %s, job-id %s",
-				errClearStorageRequired, namespace, jobID)
-		}
 
 		// A cold restore held before its hydration waits for the operator, which takes
 		// seconds at least, and its progress stays at zero, which the progress pacing
@@ -273,9 +267,29 @@ func (s *Service) logRestoreComplete(status *infomodels.ResponseRestoreState) {
 // logOpenHint tells how to release the namespace a failed or aborted cold restore keeps
 // closed.
 func (s *Service) logOpenHint(namespace, jobID string) {
-	s.logger.Warn(msgOpenHint,
-		slog.String("namespace", namespace),
-		slog.String("job-id", jobID))
+	// The message names the job in the command it gives, so it carries no attributes
+	// that would repeat it.
+	s.logger.Warn(fmt.Sprintf(msgOpenHint, restoreCommand(restoreCmdOpen, namespace, jobID)))
+}
+
+// The snapshot-restore subcommands a hint tells the user to run.
+const (
+	restoreCmdProgress     = "progress"
+	restoreCmdOpen         = "open"
+	restoreCmdClearStorage = "clear-storage"
+)
+
+// restoreCommand returns the command line of the snapshot-restore subcommand that acts
+// on the restore job jobID of namespace, with the extra flags after the ones that name
+// the job. The line ends with "..." for the connection and auth flags, which the hint
+// cannot know.
+func restoreCommand(subcommand, namespace, jobID string, extra ...string) string {
+	cmd := fmt.Sprintf("absctl snapshot-restore %s --namespace %s --job-id %s", subcommand, namespace, jobID)
+	if len(extra) > 0 {
+		cmd += " " + strings.Join(extra, " ")
+	}
+
+	return cmd + " ..."
 }
 
 // restoreTerminalError names the restore job that ended in a terminal state, along with

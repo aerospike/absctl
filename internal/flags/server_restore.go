@@ -21,7 +21,7 @@ import (
 
 // descJobIDFromStart tells where the id of a restore job comes from: it is generated when
 // the restore starts.
-const descJobIDFromStart = "\nThe id is logged by \"snapshot-restore start\" as job-id."
+const descJobIDFromStart = "\nThe id is logged by 'absctl snapshot-restore start' as job-id."
 
 // ServerRestore holds flags for the server restore start command.
 type ServerRestore struct {

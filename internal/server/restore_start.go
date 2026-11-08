@@ -38,7 +38,9 @@ var errBackupConsistency = errors.New("backup consistency does not fit the resto
 // A cold restore is started by this single request: the cluster closes the namespace,
 // prepares it on every node and starts the restore once every node is ready. A node
 // whose storage is not empty waits for it to be cleared, in which case the command says
-// how to clear it and fails with errClearStorageRequired.
+// how to clear it and keeps waiting: once the storage is cleared, for example with
+// 'absctl snapshot-restore clear-storage' run from another session, the restore starts on its
+// own and the command goes on reporting its progress.
 func (s *Service) StartRestore(ctx context.Context) error {
 	client, err := s.newInfoClient(ctx)
 	if err != nil {
@@ -85,7 +87,7 @@ func (s *Service) startRestore(ctx context.Context, client restoreStarter) error
 	jobID, err := client.StartRestore(ctx, rReq)
 	if err != nil {
 		return startError("restore", jobID,
-			fmt.Sprintf("snapshot-restore progress --namespace %s --job-id %s", start.Namespace, jobID), err)
+			restoreCommand(restoreCmdProgress, start.Namespace, jobID), err)
 	}
 
 	s.logger.Info("server integrated restore started",

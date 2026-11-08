@@ -28,11 +28,6 @@ import (
 const (
 	// msgStorageCleared announces a namespace that got past its preparation on every node.
 	msgStorageCleared = "storage was successfully cleared"
-
-	// msgFollowRestore tells how to follow the restore the cluster starts on its own once
-	// the namespace is ready on every node.
-	msgFollowRestore = "the cluster starts the restore once the namespace is ready on every node: " +
-		"follow it with \"snapshot-restore progress --watch\""
 )
 
 var (
@@ -187,10 +182,6 @@ func (s *Service) logClearDone(namespace, jobID string, status *infomodels.Respo
 	}
 
 	s.logger.Info(msgStorageCleared, attrs...)
-
-	if status.State != infomodels.RestoreStateComplete {
-		s.logger.Info(msgFollowRestore, slog.String("namespace", namespace), slog.String("job-id", jobID))
-	}
 }
 
 // preparationError reports a restore job whose namespace a clear cannot get ready for the

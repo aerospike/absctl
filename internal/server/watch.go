@@ -85,13 +85,6 @@ func (m progressMode) unseenLookups() int {
 	return 1
 }
 
-// stopsOnClear reports whether the watch in mode ends at a cold restore that waits for its
-// storage to be cleared. Only the command that started the job stops there, since the
-// restore cannot move on without the user; a command that follows a job keeps waiting.
-func (m progressMode) stopsOnClear() bool {
-	return m == followStartedJob
-}
-
 // waitFor sleeps for d and returns the context error if the watch is canceled first.
 func waitFor(ctx context.Context, d time.Duration) error {
 	select {

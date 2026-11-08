@@ -66,10 +66,13 @@ const (
 		"stops the reporting only; use the abort command to stop the restore.\n" +
 		"A strict (cold) restore closes the namespace to clients and starts\n" +
 		"once it is empty on every node. If the storage of the namespace has\n" +
-		"to be cleared on some nodes first, the command says so and fails:\n" +
-		"run the clear-storage command, then follow the restore with the\n" +
-		"progress command. With --async the command returns as soon as the\n" +
-		"cluster accepts the restore."
+		"to be cleared on some nodes first, the command says so and waits:\n" +
+		"run the clear-storage command from another session, and the restore\n" +
+		"starts and is followed once the storage is cleared. The command waits\n" +
+		"for the clear with no time limit; interrupting it stops the waiting\n" +
+		"only, and the restore starts once the storage is cleared anyway.\n" +
+		"With --async the command returns as soon as the cluster accepts the\n" +
+		"restore and does not wait for the clear."
 	LongRestoreProgress = "Show the progress of a server-integrated restore job.\n" +
 		"With --watch the progress is followed until the restore completes."
 	LongBackupAbort = "Abort a server-integrated backup on the Aerospike cluster and wait\n" +

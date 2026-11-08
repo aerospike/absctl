@@ -14,10 +14,13 @@ follow its progress until it completes. Interrupting the command
 stops the reporting only; use the abort command to stop the restore.
 A strict (cold) restore closes the namespace to clients and starts
 once it is empty on every node. If the storage of the namespace has
-to be cleared on some nodes first, the command says so and fails:
-run the clear-storage command, then follow the restore with the
-progress command. With --async the command returns as soon as the
-cluster accepts the restore.
+to be cleared on some nodes first, the command says so and waits:
+run the clear-storage command from another session, and the restore
+starts and is followed once the storage is cleared. The command waits
+for the clear with no time limit; interrupting it stops the waiting
+only, and the restore starts once the storage is cleared anyway.
+With --async the command returns as soon as the cluster accepts the
+restore and does not wait for the clear.
 
 ### Supported flags
 ```bash
@@ -213,7 +216,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace the restore writes into.
       --job-id string      Id of the restore job to follow.
-                           The id is logged by "snapshot-restore start" as job-id.
+                           The id is logged by 'absctl snapshot-restore start' as job-id.
       --watch              Watch the progress of the restore.
 
 Secret Agent Flags:
@@ -303,7 +306,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace the restore is aborted for.
       --job-id string      Id of the restore job to abort.
-                           The id is logged by "snapshot-restore start" as job-id.
+                           The id is logged by 'absctl snapshot-restore start' as job-id.
       --async              Return as soon as the cluster accepts the abort, without
                            waiting for the restore to stop.
 
@@ -392,7 +395,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace to release.
       --job-id string      Id of the failed or aborted cold restore job that holds the namespace.
-                           The id is logged by "snapshot-restore start" as job-id.
+                           The id is logged by 'absctl snapshot-restore start' as job-id.
       --async              Return as soon as the cluster accepts the request, without
                            waiting for the namespace to be released.
 
@@ -482,7 +485,7 @@ Aerospike Client Flags:
 Restore Flags:
   -n, --namespace string   The namespace to clear.
       --job-id string      Id of the cold restore job that waits for the namespace storage to be cleared.
-                           The id is logged by "snapshot-restore start" as job-id.
+                           The id is logged by 'absctl snapshot-restore start' as job-id.
       --async              Return as soon as the nodes accept the clear, without waiting
                            for the namespace to become ready for the restore.
 
@@ -645,7 +648,7 @@ progress:
   # The namespace the restore writes into.
   namespace: source-ns1
   # Id of the restore job to follow.
-  # The id is logged by "snapshot-restore start" as job-id.
+  # The id is logged by 'absctl snapshot-restore start' as job-id.
   job-id: restore-job-1
   # Watch the progress of the restore.
   watch: false
@@ -653,7 +656,7 @@ abort:
   # The namespace the restore is aborted for.
   namespace: source-ns1
   # Id of the restore job to abort.
-  # The id is logged by "snapshot-restore start" as job-id.
+  # The id is logged by 'absctl snapshot-restore start' as job-id.
   job-id: restore-job-1
   # Return as soon as the cluster accepts the abort, without
   # waiting for the restore to stop.
@@ -662,7 +665,7 @@ open:
   # The namespace to release.
   namespace: source-ns1
   # Id of the failed or aborted cold restore job that holds the namespace.
-  # The id is logged by "snapshot-restore start" as job-id.
+  # The id is logged by 'absctl snapshot-restore start' as job-id.
   job-id: restore-job-1
   # Return as soon as the cluster accepts the request, without
   # waiting for the namespace to be released.
@@ -671,7 +674,7 @@ clear-storage:
   # The namespace to clear.
   namespace: source-ns1
   # Id of the cold restore job that waits for the namespace storage to be cleared.
-  # The id is logged by "snapshot-restore start" as job-id.
+  # The id is logged by 'absctl snapshot-restore start' as job-id.
   job-id: restore-job-1
   # Return as soon as the nodes accept the clear, without waiting
   # for the namespace to become ready for the restore.

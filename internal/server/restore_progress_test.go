@@ -28,8 +28,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// logClearHint is part of the warning about a storage that must be cleared.
-const logClearHint = "snapshot-restore clear-storage"
+// The parts of the commands the hints tell the user to run: the command the
+// subcommand follows, the flag that opens the ones naming the job, the flags that name
+// the restore job of testNamespace and testJobID, the flag that keeps the progress
+// watched, and the end that stands for the connection flags.
+const (
+	cmdRestore   = "absctl snapshot-restore "
+	cmdNamespace = " --namespace "
+	cmdTestJob   = cmdNamespace + testNamespace + " --job-id " + testJobID
+	cmdWatch     = "--watch"
+	cmdMore      = " ..."
+)
+
+// logClearHint is part of the warning about a storage that must be cleared, and
+// logClearWait the part a watch adds to say it waits for the clear.
+const (
+	logClearHint = "'" + cmdRestore + restoreCmdClearStorage + cmdNamespace
+	logClearWait = "waiting for the clear"
+)
+
+// The commands the hints of a restore job of testNamespace and testJobID tell the user
+// to run, quoted as the hints print them.
+const (
+	logClearCmd  = "'" + cmdRestore + restoreCmdClearStorage + cmdTestJob + cmdMore + "'"
+	logFollowCmd = "'" + cmdRestore + restoreCmdProgress + cmdTestJob + " " + cmdWatch + cmdMore + "'"
+	logOpenCmd   = "'" + cmdRestore + restoreCmdOpen + cmdTestJob + cmdMore + "'"
+)
 
 // The state labels of a restore line, as the info level prints them.
 const (
@@ -80,6 +104,10 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 	fuzzyActive := restoreAnswer{status: testFuzzyStatus(infomodels.RestoreStateActive)}
 	fuzzyComplete := restoreAnswer{status: testCompleteRestore(testFuzzyStatus(infomodels.RestoreStateComplete))}
 	coldClearRequired := restoreAnswer{status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing)}
+	coldRestoring := restoreAnswer{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)}
+	coldComplete := restoreAnswer{
+		status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone)),
+	}
 
 	tests := []struct {
 		name        string
@@ -108,28 +136,42 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			wantLogs:  []string{logStateRestoring, logStateComplete, "pct=100", msgRestoreComplete},
 		},
 		{
-			// The restore cannot start until the user clears the storage, so the
-			// command that started it says how and fails.
-			name:        "stops at a cold restore that waits for a clear",
-			mode:        followStartedJob,
-			answers:     []restoreAnswer{coldClearRequired, fuzzyComplete},
-			wantErr:     errClearStorageRequired,
-			wantCalls:   1,
-			wantLogs:    []string{logClearHint, logFollowRestore},
-			notWantLogs: []string{msgRestoreComplete},
-		},
-		{
 			name: "keeps watching a cold restore that waits for a clear",
 			mode: followJob,
 			answers: []restoreAnswer{
 				coldClearRequired,
-				{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)},
-				{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
+				coldRestoring,
+				coldComplete,
 			},
 			wantCalls: 3,
-			wantLogs:  []string{logClearHint, msgRestoreComplete},
+			wantLogs:  []string{logClearHint, logClearWait, msgRestoreComplete},
 			// The watch itself goes on following the restore, so it is not advised.
 			notWantLogs: []string{logFollowRestore},
+		},
+		{
+			// The restore cannot start until the user clears the storage, so the
+			// command that started it says how and waits for the clear done in another
+			// session, then follows the restore.
+			name: "waits for a clear of a just-started cold restore and follows it",
+			mode: followStartedJob,
+			answers: []restoreAnswer{
+				coldClearRequired,
+				coldClearRequired,
+				coldRestoring,
+				coldComplete,
+			},
+			wantCalls:   4,
+			wantLogs:    []string{logClearHint, logClearWait, logStateRestoring, msgRestoreComplete},
+			notWantLogs: []string{logFollowRestore},
+		},
+		{
+			// A single report does not stay with the job, so it tells how to follow it.
+			name:        "reports once a cold restore that waits for a clear",
+			mode:        reportOnce,
+			answers:     []restoreAnswer{coldClearRequired},
+			wantCalls:   1,
+			wantLogs:    []string{logClearCmd, logFollowCmd},
+			notWantLogs: []string{logClearWait},
 		},
 		{
 			name:      "reports once without waiting for the end",
@@ -220,7 +262,7 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 				testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateRestoring))}},
 			wantErr:   errRestoreFailed,
 			wantCalls: 1,
-			wantLogs:  []string{logOpenHint},
+			wantLogs:  []string{logOpenCmd},
 		},
 		{
 			name: "reports an aborted cold restore and tells how to open the namespace",
@@ -229,7 +271,7 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 				testColdStatus(infomodels.RestoreStateAborted, infomodels.NamespaceStateRestoring))}},
 			wantErr:   errRestoreAborted,
 			wantCalls: 1,
-			wantLogs:  []string{logOpenHint},
+			wantLogs:  []string{logOpenCmd},
 		},
 		{
 			name:        "reports an aborted fuzzy restore",
@@ -294,7 +336,8 @@ func TestServiceReportRestoreProgressNamesTheFailure(t *testing.T) {
 }
 
 // TestServiceReportRestoreProgressWarnsOnceAboutClear makes sure a watch that keeps
-// seeing the same pending clear does not repeat the warning on every poll.
+// seeing the same pending clear does not repeat the warning on every poll, whether it
+// follows a job named on the command line or the one the start has just requested.
 func TestServiceReportRestoreProgressWarnsOnceAboutClear(t *testing.T) {
 	t.Parallel()
 
@@ -302,20 +345,46 @@ func TestServiceReportRestoreProgressWarnsOnceAboutClear(t *testing.T) {
 		status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing),
 	}
 
-	svc, buf := newTestService(t)
-	client := &fakeRestoreInfoClient{answers: []restoreAnswer{
-		clearRequired,
-		clearRequired,
-		{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
-	}}
+	tests := []struct {
+		name string
+		mode progressMode
+	}{
+		{name: "follow a job named on the command line", mode: followJob},
+		{name: "follow a just-started job", mode: followStartedJob},
+	}
 
-	require.NoError(t, svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, followJob))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// The warning is the only line of the watch at the warning level, and it names the
-	// command to run with the job.
-	assert.Equal(t, 1, strings.Count(buf.String(), "level=WARN"))
-	assert.Contains(t, buf.String(),
-		`command="snapshot-restore clear-storage --namespace `+testNamespace+` --job-id `+testJobID+`"`)
+			svc, buf := newTestService(t)
+			client := &fakeRestoreInfoClient{answers: []restoreAnswer{
+				clearRequired,
+				clearRequired,
+				{status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone))},
+			}}
+
+			require.NoError(t, svc.reportRestoreProgress(t.Context(), client, testNamespace, testJobID, tt.mode))
+
+			// The warning is the only line of the watch at the warning level, and it names
+			// the command to run with the job, in a message the user can copy it from.
+			require.Equal(t, 1, strings.Count(buf.String(), "level=WARN"))
+
+			var warning string
+
+			for line := range strings.Lines(buf.String()) {
+				if strings.Contains(line, "level=WARN") {
+					warning = line
+				}
+			}
+
+			assert.Contains(t, warning, logClearCmd)
+			// The job is named in the command only, not repeated as attributes.
+			assert.NotContains(t, warning, "command=")
+			assert.NotContains(t, warning, "namespace=")
+			assert.NotContains(t, warning, "job-id=")
+		})
+	}
 }
 
 func TestRestoreSnapshot(t *testing.T) {
@@ -566,6 +635,37 @@ func TestWaitsForPreparation(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.want, waitsForPreparation(tt.give))
+		})
+	}
+}
+
+func TestRestoreCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		giveSubcommand string
+		giveExtra      []string
+		want           string
+	}{
+		{
+			name:           "names the job",
+			giveSubcommand: restoreCmdClearStorage,
+			want:           cmdRestore + restoreCmdClearStorage + cmdTestJob + cmdMore,
+		},
+		{
+			name:           "puts the extra flags after the job",
+			giveSubcommand: restoreCmdProgress,
+			giveExtra:      []string{cmdWatch},
+			want:           cmdRestore + restoreCmdProgress + cmdTestJob + " " + cmdWatch + cmdMore,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, restoreCommand(tt.giveSubcommand, testNamespace, testJobID, tt.giveExtra...))
 		})
 	}
 }

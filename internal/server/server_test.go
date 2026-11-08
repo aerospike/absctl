@@ -612,7 +612,7 @@ func TestStartError(t *testing.T) {
 	t.Parallel()
 
 	const (
-		followCmd         = "snapshot-restore progress --namespace ns --job-id " + testJobID
+		followCmd         = "absctl snapshot-restore progress --namespace " + testNamespace + " --job-id " + testJobID + " ..."
 		errMsgMayBeActive = "may have been accepted"
 	)
 
@@ -632,7 +632,7 @@ func TestStartError(t *testing.T) {
 			name:          "outcome unknown with a command to follow the job",
 			giveJobID:     testJobID,
 			giveFollowCmd: followCmd,
-			wantMsg:       "job-id " + testJobID + " " + errMsgMayBeActive + ", check it with \"" + followCmd + "\"",
+			wantMsg:       "job-id " + testJobID + " " + errMsgMayBeActive + ", check it with '" + followCmd + "'",
 			// A start that may have been accepted is not reported as one never sent.
 			notWantMsg: "failed to start restore: ",
 		},

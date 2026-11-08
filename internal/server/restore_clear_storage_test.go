@@ -34,8 +34,9 @@ const (
 
 	testZeroedBytes = 1024
 
-	// logFollowRestore is part of the hint on how to follow the restore after the clear.
-	logFollowRestore = "progress --watch"
+	// logFollowRestore is part of the hint on how to follow the restore, which a command
+	// that does not stay with the job gives.
+	logFollowRestore = "--watch ...'"
 )
 
 // testClearStatus reports a cold restore job that is being prepared, at the given clear
@@ -87,8 +88,10 @@ func TestServiceClearRestoreStorage(t *testing.T) {
 			wantClearCalls: 1,
 			// The wait names the state under the same label the other commands print.
 			wantLogs: []string{
-				logClearing, "state=" + stateClearing, logStorageCleared, logZeroedBytes, logFollowRestore,
+				logClearing, "state=" + stateClearing, logStorageCleared, logZeroedBytes,
 			},
+			// The start that waits for the clear already follows the restore.
+			notWantLogs: []string{logFollowRestore},
 		},
 		{
 			// A node that backed out of the clear asks for it again.
@@ -119,11 +122,11 @@ func TestServiceClearRestoreStorage(t *testing.T) {
 			},
 			wantCalls:      2,
 			wantClearCalls: 1,
-			wantLogs:       []string{logStorageCleared, logFollowRestore},
+			wantLogs:       []string{logStorageCleared},
+			notWantLogs:    []string{logFollowRestore},
 		},
 		{
-			// A restore that completed between two polls got past its preparation too,
-			// and there is nothing left to follow.
+			// A restore that completed between two polls got past its preparation too.
 			name: "stops once the restore has completed",
 			answers: []restoreAnswer{
 				clearing,

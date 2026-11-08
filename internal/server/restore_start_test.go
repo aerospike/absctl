@@ -47,6 +47,10 @@ func TestServiceStartRestore(t *testing.T) {
 	coldClearRequired := restoreAnswer{
 		status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing),
 	}
+	coldRestoring := restoreAnswer{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)}
+	coldComplete := restoreAnswer{
+		status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone)),
+	}
 
 	// stoppingClearRequired is a cold restore some node already stopped, while another
 	// node still asks for its storage to be cleared.
@@ -84,14 +88,18 @@ func TestServiceStartRestore(t *testing.T) {
 		},
 		{
 			// The cold restore cannot start before the storage is cleared, which is left
-			// to the user, so the command fails for scripts to notice.
-			name:            "returns when a cold restore waits for a clear",
-			answers:         []restoreAnswer{coldClearRequired, fuzzyComplete},
-			wantErr:         errClearStorageRequired,
+			// to the user, so the command says how, waits for the clear and then follows
+			// the restore to its end.
+			name: "waits for a clear of a cold restore and follows it",
+			answers: []restoreAnswer{
+				coldClearRequired,
+				coldRestoring,
+				coldComplete,
+			},
 			wantStartCalls:  1,
-			wantCalls:       1,
+			wantCalls:       3,
 			wantStatusJobID: testGeneratedRestoreJobID,
-			wantLogs:        []string{logStarted, logClearHint},
+			wantLogs:        []string{logStarted, logClearHint, logClearWait, msgRestoreComplete},
 		},
 		{
 			// Clearing cannot help a job that is already stopping, so it is followed to
@@ -137,11 +145,13 @@ func TestServiceStartRestore(t *testing.T) {
 		{
 			// A start whose answer was lost may have been accepted, and the generated id
 			// is the only way to find the job.
-			name:           "names the job id of a start that may have been accepted",
-			giveStartErr:   errBoom,
-			giveStartSent:  true,
-			wantErr:        errBoom,
-			wantErrMsg:     testGeneratedRestoreJobID,
+			name:          "names the job id of a start that may have been accepted",
+			giveStartErr:  errBoom,
+			giveStartSent: true,
+			wantErr:       errBoom,
+			// The error tells how to check the job, with the values the user can copy.
+			wantErrMsg: "check it with 'absctl snapshot-restore progress --namespace " + testRequestNamespace +
+				" --job-id " + testGeneratedRestoreJobID + " ...'",
 			wantStartCalls: 1,
 		},
 		{

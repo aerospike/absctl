@@ -241,7 +241,7 @@ func startError(kind, jobID, followCmd string, err error) error {
 	case followCmd == "":
 		return fmt.Errorf("failed to start %s, job-id %s may have been accepted: %w", kind, jobID, err)
 	default:
-		return fmt.Errorf("failed to start %s, job-id %s may have been accepted, check it with %q: %w",
+		return fmt.Errorf("failed to start %s, job-id %s may have been accepted, check it with '%s': %w",
 			kind, jobID, followCmd, err)
 	}
 }
