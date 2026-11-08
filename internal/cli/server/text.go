@@ -29,7 +29,6 @@ const (
 	UseStart           = "start"
 	UseList            = "list"
 	UseProgress        = "progress"
-	UsePrepare         = "prepare"
 	UseValidate        = "validate"
 	UseAbort           = "abort"
 	UseOpen            = "open"
@@ -45,11 +44,10 @@ const (
 	ShortBackupValidate  = "Validate server-integrated backups"
 	ShortRestore         = "Manage server-integrated restores"
 	ShortRestoreStart    = "Start a server-integrated restore"
-	ShortRestorePrepare  = "Prepare a server-integrated restore"
 	ShortRestoreProgress = "Show the progress of a restore"
 	ShortBackupAbort     = "Abort a server-integrated backup"
 	ShortRestoreAbort    = "Abort a server-integrated restore"
-	ShortRestoreOpen     = "Release the namespace of an aborted cold restore"
+	ShortRestoreOpen     = "Release the namespace of a failed or aborted cold restore"
 	ShortRestoreClear    = "Clear the namespace storage for a cold restore"
 )
 
@@ -66,13 +64,15 @@ const (
 	LongRestoreStart   = "Start a server-integrated restore on the Aerospike cluster and\n" +
 		"follow its progress until it completes. Interrupting the command\n" +
 		"stops the reporting only; use the abort command to stop the restore.\n" +
-		"With --async the command returns as soon as the cluster accepts\n" +
-		"the restore."
-	LongRestorePrepare = "Prepare a server-integrated restore on the Aerospike cluster and\n" +
-		"wait until the namespace is ready for the restore. If the storage of\n" +
-		"the namespace has to be cleared on some nodes first, the command says\n" +
-		"so and returns: run the clear-storage command then. With --async the\n" +
-		"command returns as soon as the cluster accepts the request."
+		"A strict (cold) restore closes the namespace to clients and starts\n" +
+		"once it is empty on every node. If the storage of the namespace has\n" +
+		"to be cleared on some nodes first, the command says so and waits:\n" +
+		"run the clear-storage command from another session, and the restore\n" +
+		"starts and is followed once the storage is cleared. The command waits\n" +
+		"for the clear with no time limit; interrupting it stops the waiting\n" +
+		"only, and the restore starts once the storage is cleared anyway.\n" +
+		"With --async the command returns as soon as the cluster accepts the\n" +
+		"restore and does not wait for the clear."
 	LongRestoreProgress = "Show the progress of a server-integrated restore job.\n" +
 		"With --watch the progress is followed until the restore completes."
 	LongBackupAbort = "Abort a server-integrated backup on the Aerospike cluster and wait\n" +
@@ -84,13 +84,17 @@ const (
 		"cold restore keeps the namespace closed to clients until it is\n" +
 		"released with the open command. With --async the command returns as\n" +
 		"soon as the cluster accepts the abort."
-	LongRestoreOpen = "Release the namespace held by an aborted cold restore, so that it\n" +
-		"opens to clients again, and wait until it does. The data the restore\n" +
-		"wrote so far stays in the namespace. With --async the command\n" +
-		"returns as soon as the cluster accepts the request."
+	LongRestoreOpen = "Release the namespace held by a failed or aborted cold restore, so that it\n" +
+		"opens to clients again. The cluster finds the restore by the namespace.\n" +
+		"The data the restore wrote so far stays in the namespace. The --job-id\n" +
+		"flag is optional: with it the command checks that the job is one of\n" +
+		"the namespace before the release, then follows the job and waits until\n" +
+		"the namespace opens; without it the command returns as soon as the\n" +
+		"cluster accepts the request. With --async the command returns as soon\n" +
+		"as the cluster accepts the request even when --job-id is set."
 	LongRestoreClear = "Clear the storage of the namespace a cold restore is preparing, on\n" +
 		"every node that asks for it, and wait until the namespace is ready\n" +
-		"for the restore. Clearing erases all data of the namespace on those\n" +
-		"nodes. With --async the command returns as soon as the nodes accept\n" +
-		"the request."
+		"for the restore, which the cluster then starts on its own. Clearing\n" +
+		"erases all data of the namespace on those nodes. With --async the\n" +
+		"command returns as soon as the nodes accept the request."
 )

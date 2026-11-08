@@ -79,10 +79,12 @@ Backup Flags:
                                  local timezone applies. If only HH:MM:SS is specified, then
                                  today's date is assumed as the date. If only YYYY-MM-DD is
                                  specified, then 00:00:00 (midnight) is assumed as the time.
+                                 Must be after 2010-01-01 and not in the future.
 
   -b, --modified-before string   <YYYY-MM-DD_HH:MM:SS>
                                  Only include records that last changed before the given
-                                 date and time. May combined with --modified-after to specify a range.
+                                 date and time. May be combined with --modified-after to specify a range.
+                                 Must be after 2010-01-01.
   -s, --set-list string          The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
                                  If empty, include all sets.
   -B, --bin-list string          Only include the given bins in the backup.
@@ -92,16 +94,18 @@ Backup Flags:
                                  tombstones are always backed up.
   -I, --no-indexes               Exclude indexes from the backup.
   -u, --no-udfs                  Exclude user-defined functions from the backup.
+      --no-config                Do not upload the config file of each node with the backup.
       --policy string            Backup policy: strict, best-effort or fuzzy. strict aborts the backup
                                  on any failure. best-effort commits the backup as fuzzy instead of
                                  aborting it on a failure after the base scan is durable cluster-wide.
                                  fuzzy runs the base scan only, without the change stream.
-                                 If empty, the server default is used.
+                                 The value is case-insensitive. If empty, the server default is used.
       --async                    Return as soon as the cluster accepts the backup, without
                                  following its progress. Use the progress command to follow
                                  the backup later.
   -L, --records-per-second int   Limit the records per second of each scan on each node.
-                                 A non-zero value must be at least 5 x --parallel-read.
+                                 A non-zero value must be at least 5 x --parallel-read, or 20 when
+                                 --parallel-read is 0 and the server uses its default of 4 threads.
                                  If 0, the server default is used, which is no limit.
       --parallel-read int        Number of scan threads per node, from 1 to 128.
                                  If 0, the server default is used. (default 8)
@@ -114,13 +118,14 @@ For S3, the storage bucket name must be set with the --s3-bucket-name flag.
 --s3-endpoint-override is used for MinIO storage instead of AWS.
 Any AWS parameter can be retrieved from Secret Agent.
       --s3-bucket-name string         Existing S3 bucket name
-      --s3-region string              The S3 region that the bucket(s) exist in.
+      --s3-region string              The S3 region that the bucket(s) exist in. Required.
       --s3-profile string             The S3 profile to use for credentials.
       --s3-access-key-id string       S3 access key ID. If not set, profile auth info will be used.
                                       Used locally by absctl only, it is not sent to the server.
       --s3-secret-access-key string   S3 secret access key. If not set, profile auth info will be used.
                                       Used locally by absctl only, it is not sent to the server.
       --s3-endpoint-override string   An alternate URL endpoint to send S3 API calls to.
+                                      An http:// or https:// URL with a host, the scheme in lower case.
       --s3-throughput int             Target throughput of the S3 client per node, in gigabits per second
                                       (Gbit/s), from 1 to 400. If 0, the server default is used.
 
@@ -526,10 +531,12 @@ backup:
   # local timezone applies. If only HH:MM:SS is specified, then
   # today's date is assumed as the date. If only YYYY-MM-DD is
   # specified, then 00:00:00 (midnight) is assumed as the time.
+  # Must be after 2010-01-01 and not in the future.
   modified-after: ""
   # <YYYY-MM-DD_HH:MM:SS>
   # Only include records that last changed before the given
-  # date and time. May combined with modified-after to specify a range.
+  # date and time. May be combined with modified-after to specify a range.
+  # Must be after 2010-01-01.
   modified-before: ""
   # The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
   # If empty, include all sets.
@@ -547,18 +554,21 @@ backup:
   no-indexes: false
   # Exclude user-defined functions from the backup.
   no-udfs: false
+  # Do not upload the config file of each node with the backup.
+  no-config: false
   # Backup policy: strict, best-effort or fuzzy. strict aborts the backup
   # on any failure. best-effort commits the backup as fuzzy instead of
   # aborting it on a failure after the base scan is durable cluster-wide.
   # fuzzy runs the base scan only, without the change stream.
-  # If empty, the server default is used.
+  # The value is case-insensitive. If empty, the server default is used.
   policy: ""
   # Return as soon as the cluster accepts the backup, without
   # following its progress. Use the progress command to follow
   # the backup later.
   async: false
   # Limit the records per second of each scan on each node.
-  # A non-zero value must be at least 5 x parallel-read.
+  # A non-zero value must be at least 5 x parallel-read, or 20 when
+  # parallel-read is 0 and the server uses its default of 4 threads.
   # If 0, the server default is used, which is no limit.
   records-per-second: 0
   # Number of scan threads per node, from 1 to 128.
@@ -615,11 +625,12 @@ aws:
   s3:
     # Existing S3 bucket name
     bucket-name: backup-bucket
-    # The S3 region that the bucket(s) exist in.
+    # The S3 region that the bucket(s) exist in. Required.
     region: us-east-1
     # The S3 profile to use for credentials.
     profile: ""
     # An alternate URL endpoint to send S3 API calls to.
+    # An http:// or https:// URL with a host, the scheme in lower case.
     endpoint-override: ""
     # S3 access key ID. If not set, profile auth info will be used.
     # Used locally by absctl only, it is not sent to the server.

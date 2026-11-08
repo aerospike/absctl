@@ -77,27 +77,29 @@ func TestServiceAbortBackup(t *testing.T) {
 			wantLogs:       []string{logAborting, logAborted},
 		},
 		{
-			// The cluster drops the state of a job that is no longer running, so a job
-			// that goes missing from the status after the abort has stopped too - once
-			// it was missed as many times as a just-started job is given to turn up.
-			name:           "confirms the abort for a job the cluster no longer reports",
+			// The cluster keeps the state of a finished job, so a job that goes missing
+			// from the status after the abort - once it was missed as many times as a
+			// just-started job is given to turn up - was lost, not confirmed as aborted.
+			name:           "fails when the job is not reported after the abort",
 			answers:        []statusAnswer{runningStatus},
+			wantErr:        errBackupStatusLost,
 			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
+			notWantLogs:    []string{logAborted},
 		},
 		{
 			// A job reported while winding down has to be missed several times in a
-			// row before it is accepted as stopped, the same way "backup start" treats
+			// row before it is accepted as gone, the same way "backup start" treats
 			// the job it follows.
-			name: "confirms the abort for a job that stopped reporting while winding down",
+			name: "fails when the job stops reporting while winding down",
 			answers: append(
 				[]statusAnswer{runningStatus, {status: testStatus(infomodels.BackupStateAborting, 12)}},
 				repeatNotFound(vanishedJobConfirmations)...,
 			),
+			wantErr:        errBackupStatusLost,
 			wantCalls:      2 + vanishedJobConfirmations,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
+			notWantLogs:    []string{logAborted},
 		},
 		{
 			// A single miss is a gap in the merged status, not a stopped job.
@@ -196,12 +198,13 @@ func TestServiceAbortBackup(t *testing.T) {
 		},
 		{
 			// The same empty answer during the confirmation says the job is no longer
-			// reported, which is what the cluster does to a job that stopped.
-			name:           "confirms the abort for a job whose status comes back empty",
+			// reported, which does not confirm the abort.
+			name:           "fails when the status comes back empty after the abort",
 			answers:        []statusAnswer{runningStatus, {}},
+			wantErr:        errBackupStatusLost,
 			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logAborted},
+			notWantLogs:    []string{logAborted},
 		},
 		{
 			// The state of a finished job is kept for a while, and there is nothing left

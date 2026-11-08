@@ -15,7 +15,9 @@
 package models
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
@@ -25,9 +27,21 @@ import (
 // to the server default, so it is accepted by each of them.
 const (
 	maxServerBackupParallel = 128
+	// serverDefaultBackupParallelRead is the number of scan threads the server uses
+	// when none is sent.
+	serverDefaultBackupParallelRead = 4
 	// minServerBackupRPSPerReader is how many records per second each scan thread
 	// needs at least: a non-zero limit below it is refused by the server.
 	minServerBackupRPSPerReader = 5
+)
+
+// Bounds of the modified time range, in Unix seconds, as enforced by the server.
+const (
+	// minServerModifiedTime is 2010-01-01T00:00:00Z: both bounds must be after it.
+	minServerModifiedTime = 1_262_304_000
+	// maxServerModifiedTime is the largest modified-before the server accepts, the
+	// largest value a 64-bit nanosecond clock holds in seconds.
+	maxServerModifiedTime = 18_446_744_073
 )
 
 // ServerBackup contains flags that will be mapped to ServerBackup.
@@ -37,8 +51,12 @@ type ServerBackup struct {
 	ModifiedBefore string
 	ModifiedAfter  string
 	BinList        string
+	// NoConfig skips the upload of the config file of each node with the backup.
+	NoConfig bool
 }
 
+// Validate checks the backup settings against the rules the server applies, so that a
+// value the server refuses fails the command before the cluster is reached.
 func (s *ServerBackup) Validate() error {
 	if s == nil {
 		return nil
@@ -48,26 +66,17 @@ func (s *ServerBackup) Validate() error {
 		return err
 	}
 
-	var modifiedAfter, modifiedBefore time.Time
-
-	if s.ModifiedAfter != "" {
-		ma, err := s.ModifiedAfterTime()
-		if err != nil {
-			return fmt.Errorf("failed to parse modified after: %w", err)
-		}
-		modifiedAfter = ma
+	if err := s.validateSetList(); err != nil {
+		return err
 	}
 
-	if s.ModifiedBefore != "" {
-		mb, err := s.ModifiedBeforeTime()
-		if err != nil {
-			return fmt.Errorf("failed to parse modified before: %w", err)
-		}
-		modifiedBefore = mb
+	if err := validateServerNameList("bin-list", s.BinList, maxServerBinListLen,
+		maxServerBinNameLen); err != nil {
+		return err
 	}
 
-	if s.ModifiedAfter != "" && s.ModifiedBefore != "" && !modifiedBefore.After(modifiedAfter) {
-		return fmt.Errorf("modified-before must be strictly greater than modified-after")
+	if err := s.validateModifiedRange(time.Now()); err != nil {
+		return err
 	}
 
 	if err := s.validatePolicy(); err != nil {
@@ -77,9 +86,76 @@ func (s *ServerBackup) Validate() error {
 	return s.validateJobSettings()
 }
 
+// validateSetList rejects the set of the multi-record transaction monitor records, which
+// a backup cannot name. The rest of the list is checked by ServerCommon.
+func (s *ServerBackup) validateSetList() error {
+	if s.SetList == "" {
+		return nil
+	}
+
+	for name := range strings.SplitSeq(s.SetList, serverNameListSeparator) {
+		if name == mrtMonitorSet {
+			return fmt.Errorf("set-list must not name the MRT monitor set %s", mrtMonitorSet)
+		}
+	}
+
+	return nil
+}
+
+// validateModifiedRange checks the modified time range against now: both bounds after
+// 2010-01-01, the lower one not in the future, as it would match no record, the upper
+// one within the range the server reads, and the lower one before the upper one.
+func (s *ServerBackup) validateModifiedRange(now time.Time) error {
+	var modifiedAfter, modifiedBefore time.Time
+
+	if s.ModifiedAfter != "" {
+		ma, err := s.ModifiedAfterTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified after: %w", err)
+		}
+
+		switch {
+		case ma.Unix() <= minServerModifiedTime:
+			return errors.New("modified-after must be after 2010-01-01")
+		case ma.After(now):
+			return errors.New("modified-after is in the future, it would match no records")
+		}
+
+		modifiedAfter = ma
+	}
+
+	if s.ModifiedBefore != "" {
+		mb, err := s.ModifiedBeforeTime()
+		if err != nil {
+			return fmt.Errorf("failed to parse modified before: %w", err)
+		}
+
+		switch {
+		case mb.Unix() <= minServerModifiedTime:
+			return errors.New("modified-before must be after 2010-01-01")
+		case mb.Unix() > maxServerModifiedTime:
+			return fmt.Errorf("modified-before must be at most %d in Unix seconds", maxServerModifiedTime)
+		}
+
+		modifiedBefore = mb
+	}
+
+	if s.ModifiedAfter != "" && s.ModifiedBefore != "" && !modifiedBefore.After(modifiedAfter) {
+		return errors.New("modified-before must be strictly greater than modified-after")
+	}
+
+	return nil
+}
+
+// BackupPolicy returns the backup policy in the lower case the server expects. The policy
+// is accepted in any case.
+func (s *ServerBackup) BackupPolicy() infomodels.BackupPolicy {
+	return infomodels.BackupPolicy(strings.ToLower(s.Policy))
+}
+
 // validatePolicy checks that the policy, when set, is one the server accepts.
 func (s *ServerBackup) validatePolicy() error {
-	switch infomodels.BackupPolicy(s.Policy) {
+	switch s.BackupPolicy() {
 	case "",
 		infomodels.BackupPolicyStrict,
 		infomodels.BackupPolicyBestEffort,
@@ -104,12 +180,22 @@ func (s *ServerBackup) validateJobSettings() error {
 			maxServerBackupParallel, s.ParallelWrite)
 	}
 
-	// The minimum depends on the number of scan threads, which is only known here when
-	// it is set: the server checks the limit against its own default otherwise.
-	minRPS := minServerBackupRPSPerReader * s.ParallelRead
+	// The minimum depends on the number of scan threads: the server checks the limit
+	// against its own default when none is sent.
+	readers := s.ParallelRead
+	if readers == 0 {
+		readers = serverDefaultBackupParallelRead
+	}
+
+	minRPS := minServerBackupRPSPerReader * readers
 	if s.RecordsPerSecond > 0 && s.RecordsPerSecond < minRPS {
+		if s.ParallelRead == 0 {
+			return fmt.Errorf("records-per-second must be 0 or at least %d for the %d scan threads "+
+				"the server uses when parallel-read is 0, got %d", minRPS, readers, s.RecordsPerSecond)
+		}
+
 		return fmt.Errorf("records-per-second must be 0 or at least %d for %d parallel-read, got %d",
-			minRPS, s.ParallelRead, s.RecordsPerSecond)
+			minRPS, readers, s.RecordsPerSecond)
 	}
 
 	return nil

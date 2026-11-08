@@ -35,6 +35,8 @@ const (
 	maxServerRestoreParallelRead    = 128
 	// maxServerRestoreExtraTTL is ten years, in seconds.
 	maxServerRestoreExtraTTL = 315_360_000
+	// maxServerRestoreBackupIDs is the number of backups a single restore reads at most.
+	maxServerRestoreBackupIDs = 32
 )
 
 // backupIDsSeparator separates the ids of the backups a single restore reads. The
@@ -45,9 +47,6 @@ const backupIDsSeparator = ","
 // ServerRestore contains flags that will be mapped to ServerRestore.
 type ServerRestore struct {
 	ServerCommon
-	// JobID is the id of the restore job. When a single backup is restored and
-	// JobID is empty, the id of that backup is used instead.
-	JobID string
 	// BackupIDs is a comma-separated list of the ids of the backups to restore from.
 	BackupIDs string
 	// IncrementalPath is the key prefix the incremental backups, every backup id after
@@ -57,28 +56,33 @@ type ServerRestore struct {
 	// ExtraTTL is added to the expiry of every restored record that expires, in seconds.
 	ExtraTTL int
 
+	// The fields below apply to one policy only, and the server refuses each of them,
+	// whatever its value, with the other policy. Nil leaves a field unset: it is not
+	// sent, and the server applies its default.
+
+	// HydrateReplica restores every replica of each partition when true, and only the
+	// master when false. It applies to a strict (cold) restore only.
+	HydrateReplica *bool
+
 	// The fields below apply to a fuzzy restore only.
 
-	MaxInflight int
+	MaxInflight *int
 	// RetryBaseInterval is the base delay before a retry, in milliseconds.
-	RetryBaseInterval int
-	RetryMultiplier   float64
-	RetryMaxAttempts  int
-	IgnoreRecordError bool
+	RetryBaseInterval *int
+	RetryMultiplier   *float64
+	// RetryMaxAttempts is the number of retries per record after its first failed
+	// write, 0 for none.
+	RetryMaxAttempts  *int
+	IgnoreRecordError *bool
 	// ApplyMetadataLast creates the secondary indexes and UDFs after the records
 	// instead of before.
-	ApplyMetadataLast bool
+	ApplyMetadataLast *bool
 }
 
-// RestoreJobID returns the id of the restore job, which defaults to the id of the
-// backup being restored. Validate rejects the empty JobID of a multi-backup restore,
-// so the fallback never names the job after more than one backup.
-func (s *ServerRestore) RestoreJobID() string {
-	if s.JobID != "" {
-		return s.JobID
-	}
-
-	return s.BackupIDs
+// RestorePolicy returns the restore policy in the lower case the server expects. The
+// policy is accepted in any case.
+func (s *ServerRestore) RestorePolicy() infomodels.RestorePolicy {
+	return infomodels.RestorePolicy(strings.ToLower(s.Policy))
 }
 
 // BackupIDList returns the ids of the backups to restore from, one per element.
@@ -114,10 +118,29 @@ func (s *ServerRestore) Validate() error {
 	return s.validateJobSettings()
 }
 
-// validateIncrementalPath checks the path of the incremental backups. The server refuses
-// it for a restore of a single backup, which has no incremental backups to read.
+// IncrementalPrefix returns the key prefix the incremental backups are read from, in the
+// normalized form the server is sent. Empty means none is set, and the server reads them
+// from under the path.
+func (s *ServerRestore) IncrementalPrefix() string {
+	return NormalizeS3Prefix(s.IncrementalPath)
+}
+
+// validateIncrementalPath checks the path of the incremental backups in the form it is
+// sent. The server refuses it for a restore of a single backup, which has no incremental
+// backups to read, and an empty one is not sent at all, so it cannot name the bucket root
+// while the path names a prefix.
 func (s *ServerRestore) validateIncrementalPath() error {
-	if s.IncrementalPath == "" {
+	if err := validatePath(s.IncrementalPath); err != nil {
+		return err
+	}
+
+	if s.IncrementalPrefix() == "" {
+		if s.IncrementalPath != "" && NormalizeS3Prefix(s.Path) != "" {
+			return fmt.Errorf("incremental-path %q names the bucket root, which cannot be "+
+				"told apart from no incremental-path: omit it to read the incremental backups "+
+				"from under path", s.IncrementalPath)
+		}
+
 		return nil
 	}
 
@@ -125,7 +148,7 @@ func (s *ServerRestore) validateIncrementalPath() error {
 		return errors.New("incremental-path requires more than one backup id")
 	}
 
-	return validatePath(s.IncrementalPath)
+	return validateServerPath("incremental-path", s.IncrementalPath)
 }
 
 // validateJobSettings checks the settings that apply to both cold and fuzzy restore.
@@ -148,9 +171,8 @@ func (s *ServerRestore) validateJobSettings() error {
 }
 
 // validateBackupIDs checks the backup id list the server is sent verbatim. The server
-// rejects an empty element of the list, every backup is looked up by its id, and an id
-// list cannot name the restore job, so all of these are caught here rather than after
-// the cluster and the object storage are reached.
+// rejects an empty element of the list, and every backup is looked up by its id, so both
+// are caught here rather than after the cluster and the object storage are reached.
 func (s *ServerRestore) validateBackupIDs() error {
 	if s.BackupIDs == "" {
 		return errors.New("backup-ids is required")
@@ -161,26 +183,35 @@ func (s *ServerRestore) validateBackupIDs() error {
 		return errors.New("backup-ids must not contain an empty id")
 	}
 
+	if len(ids) > maxServerRestoreBackupIDs {
+		return fmt.Errorf("backup-ids takes at most %d ids, got %d", maxServerRestoreBackupIDs, len(ids))
+	}
+
+	seen := make(map[string]struct{}, len(ids))
+
 	for _, id := range ids {
 		if err := validateBackupID("backup-ids", id); err != nil {
 			return err
 		}
-	}
 
-	if s.JobID == "" && len(ids) > 1 {
-		return errors.New("job-id is required when more than one backup id is given")
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("backup-ids must not repeat an id, got %q twice", id)
+		}
+
+		seen[id] = struct{}{}
 	}
 
 	return nil
 }
 
-// validateRestoreMode checks the policy and the settings that depend on it. The policy
-// is strict, the cold partition hydration, or fuzzy, writes into the live namespace;
-// empty leaves it to the server default, strict. The server
-// rejects the fuzzy restore settings of a strict restore, so a value changed from its
-// default without the fuzzy policy fails the command before the cluster is reached.
+// validateRestoreMode checks the policy and the settings that depend on it. The policy is
+// strict (the cold restore, which hydrates the partitions of a closed namespace) or fuzzy
+// (which writes into the live namespace); empty leaves it to the server default, strict.
+// The server rejects the settings of one policy, whatever their values, with the other
+// one, so a setting given for the other policy fails the command before the cluster is
+// reached.
 func (s *ServerRestore) validateRestoreMode() error {
-	switch infomodels.RestorePolicy(s.Policy) {
+	switch s.RestorePolicy() {
 	case "", infomodels.RestorePolicyStrict:
 		return s.validateColdRestore()
 	case infomodels.RestorePolicyFuzzy:
@@ -193,48 +224,46 @@ func (s *ServerRestore) validateRestoreMode() error {
 
 // validateFuzzyRestore checks the settings of a restore with the fuzzy policy.
 func (s *ServerRestore) validateFuzzyRestore() error {
-	if s.FilterExp != "" {
-		return fmt.Errorf("filter-exp is not supported with policy %s", infomodels.RestorePolicyFuzzy)
-	}
-
-	if ids := s.BackupIDList(); len(ids) > 1 {
-		return fmt.Errorf("policy %s restores a single backup, got %d backup ids",
-			infomodels.RestorePolicyFuzzy, len(ids))
-	}
-
 	switch {
-	case s.MaxInflight < minServerRestoreMaxInflight || s.MaxInflight > maxServerRestoreMaxInflight:
+	case s.HydrateReplica != nil:
+		return fmt.Errorf("hydrate-replica requires policy %s", infomodels.RestorePolicyStrict)
+	case s.MaxInflight != nil &&
+		(*s.MaxInflight < minServerRestoreMaxInflight || *s.MaxInflight > maxServerRestoreMaxInflight):
 		return fmt.Errorf("max-inflight must be between %d and %d, got %d",
-			minServerRestoreMaxInflight, maxServerRestoreMaxInflight, s.MaxInflight)
-	case s.RetryBaseInterval < 0 || int64(s.RetryBaseInterval) > math.MaxUint32:
+			minServerRestoreMaxInflight, maxServerRestoreMaxInflight, *s.MaxInflight)
+	case s.RetryBaseInterval != nil && !inUint32Range(*s.RetryBaseInterval):
 		return fmt.Errorf("retry-base-interval must be between 0 and %d, got %d",
-			uint32(math.MaxUint32), s.RetryBaseInterval)
-	case s.RetryMultiplier < minServerRestoreRetryMultiplier:
+			uint32(math.MaxUint32), *s.RetryBaseInterval)
+	// NaN compares false with everything, and the server reads neither it nor an
+	// infinity as a number.
+	case s.RetryMultiplier != nil && (math.IsNaN(*s.RetryMultiplier) || math.IsInf(*s.RetryMultiplier, 0) ||
+		*s.RetryMultiplier < minServerRestoreRetryMultiplier):
 		return fmt.Errorf("retry-multiplier must be at least %.1f, got %g",
-			minServerRestoreRetryMultiplier, s.RetryMultiplier)
-	case s.RetryMaxAttempts <= 0:
-		return fmt.Errorf("retry-max-attempts must be positive, got %d", s.RetryMaxAttempts)
-	case s.ApplyMetadataLast && s.NoIndexes && s.NoUDFs:
+			minServerRestoreRetryMultiplier, *s.RetryMultiplier)
+	case s.RetryMaxAttempts != nil && !inUint32Range(*s.RetryMaxAttempts):
+		return fmt.Errorf("retry-max-attempts must be between 0 and %d, got %d",
+			uint32(math.MaxUint32), *s.RetryMaxAttempts)
+	// The server refuses apply-metadata-last, whatever its value, when there is no
+	// metadata to apply.
+	case s.ApplyMetadataLast != nil && s.NoIndexes && s.NoUDFs:
 		return errors.New("apply-metadata-last has nothing to apply with no-indexes and no-udfs")
 	}
 
 	return nil
 }
 
-// validateColdRestore rejects the fuzzy policy settings changed from their defaults.
-// A value passed explicitly but equal to its default cannot be told apart from an unset
-// one, and is accepted.
+// validateColdRestore rejects the fuzzy policy settings given for a strict restore.
 func (s *ServerRestore) validateColdRestore() error {
 	fuzzyOnly := []struct {
 		name string
 		set  bool
 	}{
-		{"max-inflight", changed(s.MaxInflight, DefaultServerRestoreMaxInflight)},
-		{"retry-base-interval", changed(s.RetryBaseInterval, DefaultServerRestoreRetryBaseInterval)},
-		{"retry-multiplier", changed(s.RetryMultiplier, DefaultServerRestoreRetryMultiplier)},
-		{"retry-max-attempts", changed(s.RetryMaxAttempts, DefaultServerRestoreRetryMaxAttempts)},
-		{"ignore-record-error", changed(s.IgnoreRecordError, DefaultServerRestoreIgnoreRecordError)},
-		{"apply-metadata-last", changed(s.ApplyMetadataLast, DefaultServerRestoreApplyMetadataLast)},
+		{"max-inflight", s.MaxInflight != nil},
+		{"retry-base-interval", s.RetryBaseInterval != nil},
+		{"retry-multiplier", s.RetryMultiplier != nil},
+		{"retry-max-attempts", s.RetryMaxAttempts != nil},
+		{"ignore-record-error", s.IgnoreRecordError != nil},
+		{"apply-metadata-last", s.ApplyMetadataLast != nil},
 	}
 
 	for _, f := range fuzzyOnly {
@@ -246,39 +275,9 @@ func (s *ServerRestore) validateColdRestore() error {
 	return nil
 }
 
-// changed reports whether v differs from its default def. Comparing a bool against a
-// constant default inline reads as "x != false", which linters rewrite into something
-// that loses the reference to the default, so every field goes through this instead.
-func changed[T comparable](v, def T) bool {
-	return v != def
-}
-
-// ServerRestorePrepare contains flags that will be mapped to ServerRestorePrepare.
-type ServerRestorePrepare struct {
-	Namespace string
-	// JobID is the id of the restore job. The restore must be started with the same id.
-	JobID string
-	// HydrateReplica restores all replicas when true, and only the master when false.
-	HydrateReplica bool
-	// Async returns as soon as the cluster accepts the request, instead of waiting for
-	// the namespace to become ready for the restore.
-	Async bool
-}
-
-func (s *ServerRestorePrepare) Validate() error {
-	if s == nil {
-		return nil
-	}
-
-	if s.JobID == "" {
-		return fmt.Errorf("job-id is required")
-	}
-
-	if s.Namespace == "" {
-		return fmt.Errorf("namespace is required")
-	}
-
-	return nil
+// inUint32Range reports whether v fits the unsigned 32-bit range the server reads it in.
+func inUint32Range(v int) bool {
+	return v >= 0 && int64(v) <= math.MaxUint32
 }
 
 // ServerRestoreProgress contains flags that will be mapped to ServerRestoreProgress.
@@ -318,22 +317,33 @@ func (s *ServerRestoreAbort) Validate() error {
 }
 
 // ServerRestoreOpen contains flags that will be mapped to ServerRestoreOpen.
+// A namespace has at most one restore job, so the cluster finds the failed or aborted
+// cold restore that holds the namespace by the namespace alone.
 type ServerRestoreOpen struct {
 	Namespace string
-	// JobID is the id of the aborted cold restore job that holds the namespace.
+	// JobID is the optional id of the failed or aborted cold restore job that holds the
+	// namespace. It is not sent with the request: the status of the job is read by it, so
+	// the release is followed only when it is set.
 	JobID string
 	// Async returns as soon as the cluster accepts the request, instead of waiting for
-	// the namespace to be released.
+	// the namespace to be released. It applies only when JobID is set.
 	Async bool
 }
 
-// Validate checks that the restore job to open is named.
+// Validate checks that the namespace to open is named, and that the job id, when one is
+// given, is one the server accepts.
 func (s *ServerRestoreOpen) Validate() error {
 	if s == nil {
 		return nil
 	}
 
-	return validateRestoreJob(s.Namespace, s.JobID)
+	if s.JobID != "" {
+		if err := validateServerJobID("job-id", s.JobID); err != nil {
+			return err
+		}
+	}
+
+	return validateRestoreNamespace(s.Namespace)
 }
 
 // ServerRestoreClearStorage contains flags that will be mapped to ServerRestoreClearStorage.
@@ -355,15 +365,22 @@ func (s *ServerRestoreClearStorage) Validate() error {
 	return validateRestoreJob(s.Namespace, s.JobID)
 }
 
-// validateRestoreJob checks the namespace and the job id that name a restore job.
+// validateRestoreJob checks the namespace and the job id that name a restore job, as the
+// server does.
 func validateRestoreJob(namespace, jobID string) error {
-	if jobID == "" {
-		return errors.New("job-id is required")
+	if err := validateServerJobID("job-id", jobID); err != nil {
+		return err
 	}
 
+	return validateRestoreNamespace(namespace)
+}
+
+// validateRestoreNamespace checks the namespace a restore subcommand acts on, as the
+// server does.
+func validateRestoreNamespace(namespace string) error {
 	if namespace == "" {
 		return errors.New("namespace is required")
 	}
 
-	return nil
+	return validateServerText("namespace", namespace, maxServerNamespaceLen)
 }
