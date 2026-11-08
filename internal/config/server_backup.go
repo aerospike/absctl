@@ -90,17 +90,21 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
-	// The throughput is sent to the server by Start only, so the other subcommands
-	// ignore it.
-	if s.Start != nil {
-		if err := models.ValidateS3Throughput(s.S3Throughput); err != nil {
+	// Abort talks only to the cluster; the other subcommands need object storage.
+	if s.needsObjectStorage() {
+		if _, err := s.ObjectStorageType(); err != nil {
 			return err
 		}
 	}
 
-	// Abort talks only to the cluster; the other subcommands need object storage.
-	if s.needsObjectStorage() {
-		if _, err := s.ObjectStorageType(); err != nil {
+	// The cluster writes the backup itself, with the S3 settings Start sends it, the
+	// throughput included, so the other subcommands ignore them.
+	if s.Start != nil {
+		if err := models.ValidateS3Throughput(s.S3Throughput); err != nil {
+			return err
+		}
+
+		if err := models.ValidateServerS3(s.AwsS3); err != nil {
 			return err
 		}
 	}

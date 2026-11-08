@@ -42,13 +42,13 @@ type ServerCommon struct {
 	Path string
 	// SetList is a comma-separated list of set names.
 	SetList string
-	// FilterExp is a base64-encoded filter expression. A restore accepts it with the
-	// strict policy only.
+	// FilterExp is a base64-encoded filter expression.
 	FilterExp string
 	NoIndexes bool
 	NoUDFs    bool
-	// Policy is the consistency policy of the job. The values accepted by backup and
-	// restore differ and are checked by each of them. Empty leaves it to the server default.
+	// Policy is the consistency policy of the job, in any case. The values accepted by
+	// backup and restore differ and are checked by each of them. Empty leaves it to the
+	// server default.
 	Policy string
 	// Async returns from the start command as soon as the cluster accepts the job,
 	// instead of following the job until it ends.
@@ -73,7 +73,16 @@ func (s *ServerCommon) Validate() error {
 		return errors.New("namespace is required")
 	}
 
-	if err := validatePath(s.Path); err != nil {
+	if err := validateServerText("namespace", s.Namespace, maxServerNamespaceLen); err != nil {
+		return err
+	}
+
+	if err := validateServerPath("path", s.Path); err != nil {
+		return err
+	}
+
+	if err := validateServerNameList("set-list", s.SetList, maxServerSetListLen,
+		maxServerSetNameLen); err != nil {
 		return err
 	}
 
@@ -96,6 +105,12 @@ func (s *ServerCommon) Validate() error {
 func validateFilterExp(exp string) error {
 	if exp == "" {
 		return nil
+	}
+
+	// Base64 decoding skips line breaks, which the server refuses as text that is not
+	// printable ASCII, so the text is checked before the encoding.
+	if err := validateServerText("filter-exp", exp, maxServerFilterExpLen); err != nil {
+		return err
 	}
 
 	if _, err := aerospike.ExpFromBase64(exp); err != nil {

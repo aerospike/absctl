@@ -26,7 +26,7 @@ const (
 	testBucket                     = "test-bucket"
 	testEndpoint                   = "test-endpoint"
 	testErrMsgStorageNotConfigured = "object storage is not configured"
-	testErrMsgBucketRequired       = "bucket name is required"
+	testErrMsgBucketRequired       = "s3-bucket-name is required"
 )
 
 func TestServiceConfigCommon_ObjectStorageType(t *testing.T) {
