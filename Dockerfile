@@ -1,9 +1,13 @@
 # syntax=docker/dockerfile:1.12.0
 
-ARG GO_VERSION=1.27.3
+# Minor-version tag so plain `docker build` works even before a new Go patch image is
+# published; release builds pass an exact GO_VERSION (see qa-build.yml).
+ARG GO_VERSION=1.27
 ARG REGISTRY="docker.io"
 
 # Build-time only (never shipped), so pin exactly; bump tag and digest together.
+# The golang builder is not digest-pinned: its tag comes from GO_VERSION, which release
+# builds resolve per run.
 FROM --platform=$BUILDPLATFORM ${REGISTRY}/tonistiigi/xx:1.10.0@sha256:40fe21f44bb8cddf1eb1226db190d0a984118f62ee02a91b77d99448d28264a6 AS xx
 FROM --platform=$BUILDPLATFORM ${REGISTRY}/golang:${GO_VERSION} AS builder
 
@@ -20,6 +24,7 @@ COPY . .
 RUN xx-go --wrap
 
 RUN --mount=type=secret,id=GOPROXY <<-EOF
+    set -e
     if [ -s /run/secrets/GOPROXY ]; then
         export GOPROXY="$(cat /run/secrets/GOPROXY)"
     fi
@@ -27,6 +32,7 @@ RUN --mount=type=secret,id=GOPROXY <<-EOF
 EOF
 
 RUN --mount=type=secret,id=GOPROXY <<-EOF
+    set -e
     if [ -s /run/secrets/GOPROXY ]; then
         export GOPROXY="$(cat /run/secrets/GOPROXY)"
     fi
@@ -48,8 +54,22 @@ RUN apk upgrade --no-cache
 RUN addgroup -g 65532 -S abtgroup && \
     adduser -S -u 65532 -G abtgroup -h /home/abtuser abtuser
 
-COPY --chown=abtuser:abtgroup --chmod=0755 --from=builder \
+# Owned by root so the runtime user cannot replace its own binary.
+COPY --chmod=0755 --from=builder \
     /app/absctl/dist/absctl_${TARGETOS}_${TARGETARCH} \
     /usr/bin/absctl
 
+# Run absctl by default. A leading "absctl" argument is dropped so the documented
+# `docker run <image> absctl backup ...` form keeps working.
+COPY --chmod=0755 <<-'EOF' /usr/local/bin/docker-entrypoint.sh
+	#!/bin/sh
+	case "$1" in
+	    absctl|/usr/bin/absctl) shift ;;
+	esac
+	exec /usr/bin/absctl "$@"
+EOF
+
 USER abtuser
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["--help"]

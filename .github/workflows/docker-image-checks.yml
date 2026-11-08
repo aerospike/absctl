@@ -50,5 +50,5 @@ jobs:
             if apk info 2>/dev/null | grep -qi openssh; then echo "::error::openssh package in image"; exit 1; fi
             if command -v sshd >/dev/null 2>&1 || [ -e /usr/sbin/sshd ]; then echo "::error::sshd binary in image"; exit 1; fi
             owner="$(stat -c %u:%g /usr/bin/absctl)"
-            if [ "$owner" != "65532:65532" ]; then echo "::error::/usr/bin/absctl owned by $owner, expected 65532:65532 (abtuser:abtgroup)"; exit 1; fi
+            if [ "$owner" != "0:0" ]; then echo "::error::/usr/bin/absctl owned by $owner, expected 0:0 (root)"; exit 1; fi
             echo "image checks passed"'
