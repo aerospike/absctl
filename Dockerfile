@@ -55,7 +55,7 @@ RUN addgroup -g 65532 -S abtgroup && \
     adduser -S -u 65532 -G abtgroup -h /home/abtuser abtuser
 
 # Owned by root so the runtime user cannot replace its own binary.
-COPY --chmod=0755 --from=builder \
+COPY --chown=0:0 --chmod=0755 --from=builder \
     /app/absctl/dist/absctl_${TARGETOS}_${TARGETARCH} \
     /usr/bin/absctl
 
