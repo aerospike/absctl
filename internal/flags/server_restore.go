@@ -70,24 +70,10 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 			"the restore later.")
 	flagSet.IntVar(&f.ParallelDownloadThreads, "parallel-download-threads",
 		models.DefaultServerRestoreParallelDownloadThreads,
-		"Number of threads per node that download the backup files, from 1 to 128.\n"+
-			"The threads fetch and verify the backup segments, partition by partition,\n"+
-			"to hide the latency of the object storage. Raise it when the download is\n"+
-			"the bottleneck. Each thread holds a downloaded segment, so more threads\n"+
-			"need more memory on each node. The server uses no more threads than\n"+
-			"there are partitions left to restore. Download threads and writers\n"+
-			"together must fit within the max-restore-threads server config.\n"+
-			"If 0, the server default is used, which is 8.")
+		"Number of threads per node that download the backup files, from 1 to 128.")
 	flagSet.IntVarP(&f.ParallelWriters, "parallel-writers", "w",
 		models.DefaultServerRestoreParallelWriters,
-		"Number of threads per node that write the records, from 1 to 128.\n"+
-			"The threads decode the downloaded segments. With the strict policy they\n"+
-			"write the records straight into the namespace storage. With the fuzzy\n"+
-			"policy they submit the records as write transactions, with at most\n"+
-			"--max-inflight writes in flight. Raise it when decoding and writing the\n"+
-			"records is the bottleneck. Download threads and writers together must\n"+
-			"fit within the max-restore-threads server config.\n"+
-			"If 0, the server default is used, which is 8.")
+		"Number of threads per node that write the data, from 1 to 128.")
 	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
 		models.DefaultServerRestoreRecordsPerSecond,
 		"Limit the records per second each node writes. If 0, no limit is applied.")
