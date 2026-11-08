@@ -110,6 +110,13 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 		status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone)),
 	}
 
+	// coldRestoringHalf has hydrated half of the namespace testBackupDuration after the
+	// job started, long enough for an estimate of the time left from the job start.
+	restoringHalf := testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+	restoringHalf.ProgressPct = 50
+	coldRestoringHalf := restoreAnswer{status: restoringHalf}
+	logRemaining := "remaining="
+
 	tests := []struct {
 		name        string
 		mode        progressMode
@@ -119,6 +126,22 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 		wantLogs    []string
 		notWantLogs []string
 	}{
+		{
+			name:      "projects the time left of a cold restore from the job start",
+			mode:      reportOnce,
+			answers:   []restoreAnswer{coldRestoringHalf},
+			wantCalls: 1,
+			wantLogs:  []string{logRemaining},
+		},
+		{
+			// The wait for the clear is not hydration, so the time left is projected
+			// from the hydration start, too recent for an estimate yet.
+			name:        "projects the time left of a cold restore from the hydration start after a wait",
+			mode:        followJob,
+			answers:     []restoreAnswer{coldClearRequired, coldRestoringHalf, coldComplete},
+			wantCalls:   3,
+			notWantLogs: []string{logRemaining},
+		},
 		{
 			name:      "follows a fuzzy restore to completion",
 			mode:      followJob,
@@ -221,17 +244,15 @@ func TestServiceReportRestoreProgress(t *testing.T) {
 			wantCalls: 1 + vanishedJobConfirmations,
 		},
 		{
-			// The abort of a fuzzy restore removes the job, so an aborting fuzzy job that
-			// leaves the status was aborted.
-			name:      "reports an aborting fuzzy job that leaves the status as aborted",
+			// A fuzzy job keeps its state when it is aborted, as a cold one does, so its
+			// leaving the status is not an abort.
+			name:      "reports an aborting fuzzy job that leaves the status as lost",
 			mode:      followJob,
 			answers:   []restoreAnswer{{status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
-			wantErr:   errRestoreAborted,
+			wantErr:   errRestoreStatusLost,
 			wantCalls: 1 + vanishedJobConfirmations,
 		},
 		{
-			// A cold job keeps its state when it is aborted, so its leaving the status is
-			// not an abort.
 			name: "reports an aborting cold job that leaves the status as lost",
 			mode: followJob,
 			answers: []restoreAnswer{
@@ -525,7 +546,7 @@ func TestProgressPrinterPrintRestore(t *testing.T) {
 		wantLogs []string
 	}{
 		{
-			name: "fuzzy restore",
+			name: "fuzzy restore prints the progress, the rate and the time left",
 			status: &infomodels.ResponseRestoreState{
 				JobID:         testJobID,
 				Kind:          infomodels.RestoreKindFuzzy,
@@ -618,6 +639,18 @@ func TestWaitsForPreparation(t *testing.T) {
 			want: true,
 		},
 		{
+			// The gate is not up yet on some node.
+			name: "cold restore starting",
+			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateNone),
+			want: true,
+		},
+		{
+			// Every node reports a stub row, which the merged state skips.
+			name: "cold restore with no namespace state",
+			give: testColdStatus(infomodels.RestoreStateActive, ""),
+			want: true,
+		},
+		{
 			name: "cold restore hydrating",
 			give: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring),
 		},
@@ -626,7 +659,7 @@ func TestWaitsForPreparation(t *testing.T) {
 			give: testColdStatus(infomodels.RestoreStateAborting, infomodels.NamespaceStatePreparing),
 		},
 		{
-			name: "fuzzy restore",
+			name: "fuzzy restore has no preparation",
 			give: testFuzzyStatus(infomodels.RestoreStateActive),
 		},
 	}
@@ -636,6 +669,136 @@ func TestWaitsForPreparation(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.want, waitsForPreparation(tt.give))
+		})
+	}
+}
+
+func TestHydrationClockTrack(t *testing.T) {
+	t.Parallel()
+
+	var (
+		now           = time.Now()
+		preparing     = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStatePreparing)
+		restoring     = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+		restoringHalf = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+	)
+
+	restoringHalf.ProgressPct = 50
+
+	// The statuses are seen one second apart, the first at now plus one second.
+	tests := []struct {
+		name string
+		give []*infomodels.ResponseRestoreState
+		// wantFromStep is the 1-based step the last status is projected from, zero for
+		// the job start.
+		wantFromStep   int
+		wantStartRatio float64
+	}{
+		{
+			// A watch that began during the hydration cannot tell how long the
+			// preparation took.
+			name: "hydrating from the first status",
+			give: []*infomodels.ResponseRestoreState{restoring, restoring},
+		},
+		{
+			name: "still preparing",
+			give: []*infomodels.ResponseRestoreState{preparing, preparing},
+		},
+		{
+			name:         "hydrating after a wait",
+			give:         []*infomodels.ResponseRestoreState{preparing, preparing, restoring, restoring},
+			wantFromStep: 3,
+		},
+		{
+			// A hydration seen only once it got some way keeps what it did before out
+			// of the projection.
+			name:           "hydrating after a wait from a later point",
+			give:           []*infomodels.ResponseRestoreState{preparing, restoringHalf, restoring},
+			wantFromStep:   2,
+			wantStartRatio: 0.5,
+		},
+		{
+			name: "fuzzy restore keeps the job start",
+			give: []*infomodels.ResponseRestoreState{
+				testFuzzyStatus(infomodels.RestoreStateActive),
+				testFuzzyStatus(infomodels.RestoreStateActive),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				clock hydrationClock
+				snap  *progressSnapshot
+			)
+
+			for i, status := range tt.give {
+				snap = restoreSnapshot(status)
+				clock.track(status, snap, now.Add(time.Duration(i+1)*time.Second))
+			}
+
+			want := tt.give[len(tt.give)-1].StartTime
+			if tt.wantFromStep > 0 {
+				want = now.Add(time.Duration(tt.wantFromStep) * time.Second)
+			}
+
+			assert.Equal(t, want, snap.startTime)
+			assert.InDelta(t, tt.wantStartRatio, snap.startRatio, 1e-9)
+		})
+	}
+}
+
+func TestHydrationClockWaits(t *testing.T) {
+	t.Parallel()
+
+	var (
+		preparing = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStatePreparing)
+		restoring = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)
+		none      = testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateNone)
+	)
+
+	tests := []struct {
+		name string
+		// give are the statuses seen in order; want is for the last one.
+		give []*infomodels.ResponseRestoreState
+		want bool
+	}{
+		{
+			name: "gate not up yet",
+			give: []*infomodels.ResponseRestoreState{none},
+			want: true,
+		},
+		{
+			name: "namespace preparing",
+			give: []*infomodels.ResponseRestoreState{none, preparing},
+			want: true,
+		},
+		{
+			name: "hydrating",
+			give: []*infomodels.ResponseRestoreState{preparing, restoring},
+		},
+		{
+			// The namespace is released for a moment before the job is COMPLETE.
+			name: "released after the hydration",
+			give: []*infomodels.ResponseRestoreState{restoring, none},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var clock hydrationClock
+
+			now := time.Now()
+			for _, status := range tt.give {
+				clock.track(status, restoreSnapshot(status), now)
+			}
+
+			assert.Equal(t, tt.want, clock.waits(tt.give[len(tt.give)-1]))
 		})
 	}
 }

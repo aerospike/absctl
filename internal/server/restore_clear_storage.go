@@ -55,11 +55,13 @@ var stoppedRestoreStates = map[infomodels.RestoreState]bool{
 // preparedNamespaceStates are the merged namespace states of a cold restore that got past
 // its preparation on every node. The cluster starts the restore as soon as every node is
 // READY, so a clear that is followed by a quick restore is never seen READY.
+//
+// NONE is left out: a node reports it both before its gate goes up and for a moment after
+// the release, before the job is COMPLETE, and the merged state hides which one it is.
 var preparedNamespaceStates = map[infomodels.NamespaceState]bool{
 	infomodels.NamespaceStateReady:     true,
 	infomodels.NamespaceStateRestoring: true,
 	infomodels.NamespaceStateOpening:   true,
-	infomodels.NamespaceStateNone:      true,
 }
 
 // ClearRestoreStorage clears the storage of the namespace of the configured cold restore

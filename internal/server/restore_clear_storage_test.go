@@ -336,7 +336,9 @@ func TestNamespacePrepared(t *testing.T) {
 		{name: "ready", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateReady, want: true},
 		{name: "restoring", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateRestoring, want: true},
 		{name: "opening", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateOpening, want: true},
-		{name: "opened", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateNone, want: true},
+		// NONE is also what a node reports before its gate goes up, so only COMPLETE
+		// confirms a namespace that was already released.
+		{name: "gate not up or released", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateNone},
 		{name: "preparing", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStatePreparing},
 		{name: "failed", giveClear: infomodels.ClearStateNone, giveNs: infomodels.NamespaceStateFailed},
 		{name: "clear required", giveClear: infomodels.ClearStateRequired, giveNs: infomodels.NamespaceStateReady},

@@ -144,23 +144,25 @@ func TestServiceAbortRestore(t *testing.T) {
 			notWantLogs:    []string{logRestoreAborted},
 		},
 		{
-			// The abort of a fuzzy restore removes the job, so its leaving the status
-			// confirms the abort.
-			name:           "confirms the abort of a fuzzy job the status no longer reports",
+			// The cluster keeps the state of an aborted fuzzy job too, so its leaving the
+			// status does not confirm the abort: the job may have completed and been lost.
+			name:           "fails when a fuzzy job is not reported after the abort",
 			answers:        []restoreAnswer{fuzzyActive},
+			wantErr:        errRestoreStatusLost,
 			wantCalls:      1 + startedJobConfirmations,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
+			notWantLogs:    []string{logRestoreAborted},
 		},
 		{
-			name: "confirms the abort of a fuzzy job that leaves the status while winding down",
+			name: "fails when a fuzzy job stops reporting while winding down",
 			answers: append(
 				[]restoreAnswer{fuzzyActive, {status: testFuzzyStatus(infomodels.RestoreStateAborting)}},
 				repeatRestoreNotFound(vanishedJobConfirmations)...,
 			),
+			wantErr:        errRestoreStatusLost,
 			wantCalls:      2 + vanishedJobConfirmations,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logRestoreAborted},
+			notWantLogs:    []string{logRestoreAborted},
 		},
 		{
 			name: "waits for a job that is still winding down",

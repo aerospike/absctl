@@ -230,13 +230,13 @@ func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecke
 	return nil
 }
 
-// startError reports a failed start of a job of kind. A start whose answer was lost may
-// still have been accepted, and the generated jobID is then the only way to find the job,
-// so it is named, along with followCmd, the command that tells, when one is given. An
-// empty jobID means the request was never sent.
+// startError reports a failed start of a job of kind. A start whose outcome is unknown
+// (err wraps asinfo.ErrOutcomeUnknown) may still have been accepted, and the generated
+// jobID is then the only way to find the job, so it is named, along with followCmd, the
+// command that tells, when one is given. Any other failure means the job was not started.
 func startError(kind, jobID, followCmd string, err error) error {
 	switch {
-	case jobID == "":
+	case !errors.Is(err, asinfo.ErrOutcomeUnknown):
 		return fmt.Errorf("failed to start %s: %w", kind, err)
 	case followCmd == "":
 		return fmt.Errorf("failed to start %s, job-id %s may have been accepted: %w", kind, jobID, err)

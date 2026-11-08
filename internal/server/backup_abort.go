@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -105,8 +106,9 @@ func (s *Service) abortBackup(ctx context.Context, client backup.ServerBackupInf
 // The job is followed the same way "backup start" follows the job it started: it is
 // given startedJobConfirmations lookups to turn up in the status, and once reported, it
 // has to be missed vanishedJobConfirmations times in a row before it is accepted as gone.
-// The cluster drops the state of a job that is no longer running, so a job gone from the
-// status has stopped.
+// The cluster keeps the state of a finished job, so only its state confirms the abort, and
+// a job gone from the status ends the wait with errBackupStatusLost: it may as well have
+// completed before it was lost.
 func (s *Service) waitForBackupAbort(
 	ctx context.Context,
 	client backup.ServerBackupInfo,
@@ -115,10 +117,13 @@ func (s *Service) waitForBackupAbort(
 	var outcome abortOutcome
 
 	w := s.newBackupWatch(client, jobID, startedJobConfirmations,
-		func(context.Context, *infomodels.ResponseBackupState, bool) error {
-			outcome = abortStopped
+		func(_ context.Context, last *infomodels.ResponseBackupState, seen bool) error {
+			if !seen {
+				return fmt.Errorf("%w: backup-id %s", errBackupStatusLost, jobID)
+			}
 
-			return nil
+			return fmt.Errorf("%w: backup-id %s, last reported state %q",
+				errBackupStatusLost, jobID, backupStateLabel(last.State))
 		})
 
 	w.handle = func(_ context.Context, status *infomodels.ResponseBackupState) (bool, time.Duration, error) {

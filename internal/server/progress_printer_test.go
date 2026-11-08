@@ -121,6 +121,54 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 	}
 }
 
+func TestProgressSnapshotProjectedRatio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		giveRatio      float64
+		giveStartRatio float64
+		want           float64
+	}{
+		{name: "projected from the job start", giveRatio: 0.25, want: 0.25},
+		{name: "half of what was left", giveRatio: 0.75, giveStartRatio: 0.5, want: 0.5},
+		{name: "nothing done since the start point", giveRatio: 0.5, giveStartRatio: 0.5},
+		{name: "below the start point", giveRatio: 0.25, giveStartRatio: 0.5},
+		{name: "nothing was left at the start point", giveRatio: 1, giveStartRatio: 1, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			snap := &progressSnapshot{ratio: tt.giveRatio, startRatio: tt.giveStartRatio}
+
+			assert.InDelta(t, tt.want, snap.projectedRatio(), 1e-9)
+		})
+	}
+}
+
+// TestProgressPrinterProjectsFromStartRatio checks that the time left is projected at the
+// rate seen since the start point, over the work left: 25% in an hour since 50% leaves
+// 25%, another hour.
+func TestProgressPrinterProjectsFromStartRatio(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	now := time.Now()
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	printer := newProgressPrinter(logger, msgRestoreProgress)
+
+	require.True(t, printer.Print(t.Context(), &progressSnapshot{
+		stage:      stateRestoring,
+		ratio:      0.75,
+		startTime:  now.Add(-time.Hour),
+		startRatio: 0.5,
+	}, now))
+	assert.Contains(t, buf.String(), "remaining=1h0m0s")
+}
+
 func TestCompletionRatio(t *testing.T) {
 	t.Parallel()
 

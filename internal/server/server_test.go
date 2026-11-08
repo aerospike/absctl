@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -162,13 +163,19 @@ type fakeRestoreInfoClient struct {
 	unstable bool
 
 	startErr error
-	// startSent makes a failed start report the generated job id, as one whose answer
-	// was lost does.
+	// startSent makes a failed start wrap asinfo.ErrOutcomeUnknown, as one whose answer
+	// was lost does. The generated job id comes with every failure, as with the real client.
 	startSent    bool
 	startRequest *infomodels.RequestRestore
 	startCalls   int
 	// statusJobID is the job id the last status lookup asked for.
 	statusJobID string
+}
+
+// withUnknownOutcome wraps err as backup-go wraps a failed start that may have reached
+// the server.
+func withUnknownOutcome(err error) error {
+	return fmt.Errorf("%w: %w", asinfo.ErrOutcomeUnknown, err)
 }
 
 // testGeneratedRestoreJobID is the job id the fake client generates for a restore it
@@ -187,10 +194,10 @@ func (f *fakeRestoreInfoClient) StartRestore(
 
 	if f.startErr != nil {
 		if f.startSent {
-			return testGeneratedRestoreJobID, f.startErr
+			return testGeneratedRestoreJobID, withUnknownOutcome(f.startErr)
 		}
 
-		return "", f.startErr
+		return testGeneratedRestoreJobID, f.startErr
 	}
 
 	return testGeneratedRestoreJobID, nil
@@ -612,32 +619,49 @@ func TestStartError(t *testing.T) {
 	const (
 		followCmd         = "absctl snapshot-restore progress --namespace " + testNamespace + " --job-id " + testJobID + " ..."
 		errMsgMayBeActive = "may have been accepted"
+		msgNotStarted     = "failed to start restore: "
 	)
+
+	errUnknown := withUnknownOutcome(errBoom)
 
 	tests := []struct {
 		name          string
 		giveJobID     string
 		giveFollowCmd string
+		giveErr       error
 		wantMsg       string
 		notWantMsg    string
 	}{
 		{
 			name:       "request never sent",
-			wantMsg:    "failed to start restore: " + errBoom.Error(),
+			giveErr:    errBoom,
+			wantMsg:    msgNotStarted + errBoom.Error(),
 			notWantMsg: errMsgMayBeActive,
+		},
+		{
+			// The job id comes with every failure, but only an unknown outcome may
+			// leave a job behind.
+			name:          "refused by the server",
+			giveJobID:     testJobID,
+			giveFollowCmd: followCmd,
+			giveErr:       errBoom,
+			wantMsg:       msgNotStarted + errBoom.Error(),
+			notWantMsg:    testJobID,
 		},
 		{
 			name:          "outcome unknown with a command to follow the job",
 			giveJobID:     testJobID,
 			giveFollowCmd: followCmd,
+			giveErr:       errUnknown,
 			wantMsg:       "job-id " + testJobID + " " + errMsgMayBeActive + ", check it with '" + followCmd + "'",
 			// A start that may have been accepted is not reported as one never sent.
-			notWantMsg: "failed to start restore: ",
+			notWantMsg: msgNotStarted,
 		},
 		{
 			name:       "outcome unknown without a command",
 			giveJobID:  testJobID,
-			wantMsg:    "job-id " + testJobID + " " + errMsgMayBeActive + ": " + errBoom.Error(),
+			giveErr:    errUnknown,
+			wantMsg:    "job-id " + testJobID + " " + errMsgMayBeActive + ": " + errUnknown.Error(),
 			notWantMsg: "check it with",
 		},
 	}
@@ -646,7 +670,7 @@ func TestStartError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := startError("restore", tt.giveJobID, tt.giveFollowCmd, errBoom)
+			err := startError("restore", tt.giveJobID, tt.giveFollowCmd, tt.giveErr)
 
 			require.ErrorIs(t, err, errBoom)
 			require.ErrorContains(t, err, tt.wantMsg)

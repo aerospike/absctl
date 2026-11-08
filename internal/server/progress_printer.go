@@ -58,6 +58,23 @@ type progressSnapshot struct {
 	recsPerSec uint64
 	// startTime is zero when the cluster reported no usable start time.
 	startTime time.Time
+	// startRatio is the completion at startTime. It is zero unless the job is projected
+	// from a later point than its start, such as the start of a cold restore's hydration.
+	startRatio float64
+}
+
+// projectedRatio returns the completion of the work that was left at startTime, in
+// [0, 1], which the projections of the time left are made from.
+func (s *progressSnapshot) projectedRatio() float64 {
+	if s.startRatio <= 0 {
+		return s.ratio
+	}
+
+	if s.startRatio >= 1 {
+		return 1
+	}
+
+	return min(max((s.ratio-s.startRatio)/(1-s.startRatio), 0), 1)
 }
 
 // progressPrinter decides whether a progress update carries enough new information to
@@ -83,8 +100,9 @@ func newProgressPrinter(logger *slog.Logger, msg string) *progressPrinter {
 // did. now is passed in so that the decision is reproducible under test.
 func (p *progressPrinter) Print(ctx context.Context, snap *progressSnapshot, now time.Time) bool {
 	elapsed := elapsedSince(snap.startTime, now)
+	projected := snap.projectedRatio()
 
-	if !p.shouldPrint(snap.stage, snap.ratio, elapsed, now) {
+	if !p.shouldPrint(snap.stage, projected, elapsed, now) {
 		return false
 	}
 
@@ -93,14 +111,14 @@ func (p *progressPrinter) Print(ctx context.Context, snap *progressSnapshot, now
 		slog.Float64("pct", math.Round(snap.ratio*percentScale*pctPrecision)/pctPrecision),
 		slog.Uint64("rec/s", snap.recsPerSec))
 
-	if remaining := estimates.RemainingTime(elapsed, snap.ratio); remaining > 0 {
+	if remaining := estimates.RemainingTime(elapsed, projected); remaining > 0 {
 		attrs = append(attrs, slog.String("remaining", remaining.Round(time.Second).String()))
 	}
 
 	p.logger.InfoContext(ctx, p.msg, withDebugAttrs(ctx, p.logger, attrs, snap.debugAttrs)...)
 
 	p.stage = snap.stage
-	p.lastRatio = snap.ratio
+	p.lastRatio = projected
 	p.lastPrinted = now
 
 	return true
@@ -109,7 +127,8 @@ func (p *progressPrinter) Print(ctx context.Context, snap *progressSnapshot, now
 // shouldPrint reports whether the snapshot is worth a log line. The first observation, a
 // stage transition and an expired heartbeat are always printed. Otherwise the progress
 // must have advanced by at least the threshold derived from the projected duration of
-// the job, so that a multi hour job does not flood the log.
+// the job, so that a multi hour job does not flood the log. ratio is the projected
+// completion, see progressSnapshot.projectedRatio.
 func (p *progressPrinter) shouldPrint(stage string, ratio float64, elapsed time.Duration, now time.Time) bool {
 	switch {
 	case p.lastPrinted.IsZero():
@@ -141,12 +160,14 @@ func completionRatio(pct float64, complete bool) float64 {
 // average job, faster on a short one and backing off on a long one.
 func nextPoll(snap *progressSnapshot, now time.Time) time.Duration {
 	elapsed := elapsedSince(snap.startTime, now)
-	if elapsed < estimates.EstimateWarmup || snap.ratio <= 0 {
+	projected := snap.projectedRatio()
+
+	if elapsed < estimates.EstimateWarmup || projected <= 0 {
 		return minPollInterval
 	}
 
-	totalDuration := float64(elapsed) / snap.ratio
-	interval := time.Duration(estimates.ProgressThreshold(elapsed, snap.ratio) * totalDuration)
+	totalDuration := float64(elapsed) / projected
+	interval := time.Duration(estimates.ProgressThreshold(elapsed, projected) * totalDuration)
 
 	return min(max(interval, minPollInterval), maxPollInterval)
 }

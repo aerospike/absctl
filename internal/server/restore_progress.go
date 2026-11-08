@@ -141,19 +141,13 @@ func (s *Service) newRestoreWatch(
 }
 
 // missingRestore returns the missing function of a watch of the restore job jobID of
-// namespace. The cluster keeps the state of a finished cold restore job, so such a job
-// missing from the status has not finished, and ends the watch with restoreMissingError.
-// The abort of a fuzzy restore removes the job instead, so a fuzzy job last seen
-// aborting that leaves the status was aborted.
+// namespace. The cluster keeps the state of a finished restore job, cold or fuzzy, so a
+// job missing from the status has not finished, and ends the watch with
+// restoreMissingError.
 func missingRestore(
 	namespace, jobID string,
 ) func(context.Context, *infomodels.ResponseRestoreState, bool) error {
-	return func(_ context.Context, last *infomodels.ResponseRestoreState, seen bool) error {
-		if seen && last != nil && last.Kind == infomodels.RestoreKindFuzzy &&
-			last.State == infomodels.RestoreStateAborting {
-			return restoreTerminalError(errRestoreAborted, namespace, jobID, last.ErrorReason)
-		}
-
+	return func(_ context.Context, _ *infomodels.ResponseRestoreState, seen bool) error {
 		return restoreMissingError(namespace, jobID, seen)
 	}
 }
@@ -178,8 +172,8 @@ func restoreMissingError(namespace, jobID string, seen bool) error {
 // already stopping is not reported as waiting for a clear, as clearing cannot help it.
 //
 // A job is missing from the status the same way as a backup job is, see
-// reportBackupProgress, except that the cluster keeps the state of a finished cold
-// restore job, so a job that stops reporting has not completed, see missingRestore.
+// reportBackupProgress, except that the cluster keeps the state of a finished restore
+// job, so a job that stops reporting has not completed, see missingRestore.
 func (s *Service) reportRestoreProgress(
 	ctx context.Context,
 	client restoreStatusGetter,
@@ -188,9 +182,12 @@ func (s *Service) reportRestoreProgress(
 ) error {
 	printer := newProgressPrinter(s.logger, msgRestoreProgress)
 
-	// clearReported keeps the hint from repeating on every poll while the same clear is
-	// pending.
-	var clearReported bool
+	var (
+		// clearReported keeps the hint from repeating on every poll while the same clear
+		// is pending.
+		clearReported bool
+		clock         hydrationClock
+	)
 
 	w := s.newRestoreWatch(client, namespace, jobID, mode.unseenLookups(),
 		missingRestore(namespace, jobID))
@@ -198,6 +195,7 @@ func (s *Service) reportRestoreProgress(
 	w.handle = func(ctx context.Context, status *infomodels.ResponseRestoreState) (bool, time.Duration, error) {
 		now := time.Now()
 		snap := restoreSnapshot(status)
+		clock.track(status, snap, now)
 
 		printer.Print(ctx, snap, now)
 
@@ -242,7 +240,7 @@ func (s *Service) reportRestoreProgress(
 		// A cold restore held before its hydration waits for the operator, which takes
 		// seconds at least, and its progress stays at zero, which the progress pacing
 		// would answer with the shortest interval.
-		if clearRequired || waitsForPreparation(status) {
+		if clearRequired || clock.waits(status) {
 			return mode == reportOnce, s.statePollInterval, nil
 		}
 
@@ -351,9 +349,64 @@ func restoreSnapshot(status *infomodels.ResponseRestoreState) *progressSnapshot 
 	}
 }
 
+// preparationNamespaceStates are the merged namespace states of an active cold restore
+// before any partition is hydrated: the gate is not up yet on some node (NONE, or no state
+// when every node reports a stub row), or the namespace is being prepared.
+var preparationNamespaceStates = map[infomodels.NamespaceState]bool{
+	infomodels.NamespaceStateNone:      true,
+	"":                                 true,
+	infomodels.NamespaceStatePreparing: true,
+	infomodels.NamespaceStateReady:     true,
+}
+
 // waitsForPreparation reports whether a cold restore is still preparing its namespace,
 // before any partition is hydrated.
 func waitsForPreparation(status *infomodels.ResponseRestoreState) bool {
 	return status.Kind == infomodels.RestoreKindCold && status.State == infomodels.RestoreStateActive &&
-		(status.NsState == infomodels.NamespaceStatePreparing || status.NsState == infomodels.NamespaceStateReady)
+		preparationNamespaceStates[status.NsState]
+}
+
+// hydrationClock follows the stages of a cold restore across the statuses of one watch.
+// It tells when the hydration started after a wait for a clear or for the preparation,
+// which can take any time and would throw the projected time left far off, and tells the
+// NONE of a released namespace from the NONE of a gate that is not up yet.
+type hydrationClock struct {
+	// held is set once the watch has seen the job waiting for its preparation.
+	held bool
+	// hydrating is set once the watch has seen the job past its preparation.
+	hydrating bool
+	// start and startRatio are when the watch first saw the job past its preparation
+	// after a wait, and the completion it reported then.
+	start      time.Time
+	startRatio float64
+}
+
+// track records the status seen at now, and sets the point snap, the snapshot of that
+// status, is projected from: the start of the hydration once the watch has seen it begin
+// after a wait. Otherwise snap keeps the job start, such as for a job that was already
+// hydrating when the watch began.
+func (c *hydrationClock) track(status *infomodels.ResponseRestoreState, snap *progressSnapshot, now time.Time) {
+	switch {
+	case c.waits(status):
+		c.held = true
+	case !c.hydrating && status.Kind == infomodels.RestoreKindCold &&
+		status.State == infomodels.RestoreStateActive:
+		c.hydrating = true
+
+		if c.held {
+			c.start, c.startRatio = now, snap.ratio
+		}
+	}
+
+	if !c.start.IsZero() {
+		snap.startTime, snap.startRatio = c.start, c.startRatio
+	}
+}
+
+// waits reports whether the cold restore still waits for its preparation, see
+// waitsForPreparation. Once the job was seen hydrating, NONE is the namespace being
+// released, for a moment before the job is COMPLETE, and not a gate still to come up.
+func (c *hydrationClock) waits(status *infomodels.ResponseRestoreState) bool {
+	return waitsForPreparation(status) &&
+		(!c.hydrating || status.NsState != infomodels.NamespaceStateNone)
 }

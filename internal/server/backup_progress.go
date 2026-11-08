@@ -63,8 +63,9 @@ var (
 	// aborted: the job stopped on request and left no usable backup behind.
 	errBackupAborted = errors.New("backup aborted")
 
-	// errBackupStatusLost is returned when the cluster stopped reporting a job in the
-	// middle of a backup and left no manifest behind.
+	// errBackupStatusLost is returned when the cluster stopped reporting a job before its
+	// end was confirmed: by a manifest while following a backup, or by the job state
+	// while confirming an abort.
 	errBackupStatusLost = errors.New("cluster stopped reporting backup status")
 )
 
@@ -254,9 +255,10 @@ func backupStatus(
 }
 
 // reportMissingBackup handles a job that was being watched and that the cluster no longer
-// reports, once the caller has confirmed that it is really gone. The cluster drops the
-// state of a job shortly after finishing it, so a job last seen in one of the
-// completionStates has completed, and its manifest is worth waiting for. Anything else
+// reports, once the caller has confirmed that it is really gone. The cluster keeps the
+// state of a finished job, but loses it when the job is evicted from its bounded list of
+// finished jobs or a node restarts. A job last seen in one of the completionStates got
+// through the backup before that, and its manifest is worth waiting for. Anything else
 // stopped reporting in the middle of a backup, and only a manifest can turn that into a
 // completion.
 func (s *Service) reportMissingBackup(

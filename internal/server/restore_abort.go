@@ -81,7 +81,7 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 		return nil
 	}
 
-	outcome, last, err := s.waitForRestoreAbort(ctx, client, namespace, jobID, status.Kind)
+	outcome, last, err := s.waitForRestoreAbort(ctx, client, namespace, jobID)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 
 	// A job some node failed before the abort landed stopped all the same, which is what
 	// the abort asks for, but the cause of the failure must not be lost.
-	if last != nil && last.State == infomodels.RestoreStateFailed {
+	if last.State == infomodels.RestoreStateFailed {
 		s.logger.Warn("restore failed before the abort landed",
 			slog.String("job-id", jobID),
 			slog.String("error-reason", last.ErrorReason))
@@ -112,20 +112,16 @@ func (s *Service) abortRestore(ctx context.Context, client backup.ServerBackupIn
 	return nil
 }
 
-// waitForRestoreAbort follows the restore job of kind that was asked to stop until it
-// does, and reports how it stopped along with the last status read, nil when the job
-// left the status. The job is followed the same way "restore start" follows the job it
-// started, see jobWatch.
+// waitForRestoreAbort follows the restore job that was asked to stop until it does, and
+// reports how it stopped along with the last status read. The job is followed the same
+// way "restore start" follows the job it started, see jobWatch.
 //
-// The cluster keeps the state of a stopped cold restore job, which holds the namespace
-// until it is released, so only its state confirms the abort, and a cold job the status
-// no longer reports ends the wait with an error. The abort of a fuzzy restore removes
-// the job, so a fuzzy job that leaves the status has stopped, as a backup job does.
+// The cluster keeps the state of a stopped restore job, cold or fuzzy, so only its state
+// confirms the abort, and a job the status no longer reports ends the wait with an error.
 func (s *Service) waitForRestoreAbort(
 	ctx context.Context,
 	client restoreStatusGetter,
 	namespace, jobID string,
-	kind infomodels.RestoreKind,
 ) (abortOutcome, *infomodels.ResponseRestoreState, error) {
 	var (
 		outcome abortOutcome
@@ -136,13 +132,6 @@ func (s *Service) waitForRestoreAbort(
 	// the cluster stopped reporting.
 	w := s.newRestoreWatch(client, namespace, jobID, startedJobConfirmations,
 		func(context.Context, *infomodels.ResponseRestoreState, bool) error {
-			if kind == infomodels.RestoreKindFuzzy {
-				outcome = abortStopped
-				last = nil
-
-				return nil
-			}
-
 			return restoreMissingError(namespace, jobID, true)
 		})
 

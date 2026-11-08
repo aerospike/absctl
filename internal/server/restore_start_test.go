@@ -155,9 +155,11 @@ func TestServiceStartRestore(t *testing.T) {
 			wantStartCalls: 1,
 		},
 		{
+			// A refused start comes with the generated job id too, but names no job.
 			name:           "propagates a rejected start without following it",
 			giveStartErr:   errBoom,
 			wantErr:        errBoom,
+			wantErrMsg:     "failed to start restore: " + errBoom.Error(),
 			wantStartCalls: 1,
 		},
 	}
