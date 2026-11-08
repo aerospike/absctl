@@ -317,22 +317,33 @@ func (s *ServerRestoreAbort) Validate() error {
 }
 
 // ServerRestoreOpen contains flags that will be mapped to ServerRestoreOpen.
+// A namespace has at most one restore job, so the cluster finds the failed or aborted
+// cold restore that holds the namespace by the namespace alone.
 type ServerRestoreOpen struct {
 	Namespace string
-	// JobID is the id of the failed or aborted cold restore job that holds the namespace.
+	// JobID is the optional id of the failed or aborted cold restore job that holds the
+	// namespace. It is not sent with the request: the status of the job is read by it, so
+	// the release is followed only when it is set.
 	JobID string
 	// Async returns as soon as the cluster accepts the request, instead of waiting for
-	// the namespace to be released.
+	// the namespace to be released. It applies only when JobID is set.
 	Async bool
 }
 
-// Validate checks that the restore job to open is named.
+// Validate checks that the namespace to open is named, and that the job id, when one is
+// given, is one the server accepts.
 func (s *ServerRestoreOpen) Validate() error {
 	if s == nil {
 		return nil
 	}
 
-	return validateRestoreJob(s.Namespace, s.JobID)
+	if s.JobID != "" {
+		if err := validateServerJobID("job-id", s.JobID); err != nil {
+			return err
+		}
+	}
+
+	return validateRestoreNamespace(s.Namespace)
 }
 
 // ServerRestoreClearStorage contains flags that will be mapped to ServerRestoreClearStorage.
@@ -361,6 +372,12 @@ func validateRestoreJob(namespace, jobID string) error {
 		return err
 	}
 
+	return validateRestoreNamespace(namespace)
+}
+
+// validateRestoreNamespace checks the namespace a restore subcommand acts on, as the
+// server does.
+func validateRestoreNamespace(namespace string) error {
 	if namespace == "" {
 		return errors.New("namespace is required")
 	}

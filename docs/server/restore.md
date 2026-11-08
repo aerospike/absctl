@@ -333,9 +333,13 @@ Example: absctl snapshot-restore --azure-account-name secret:resource1:azaccount
 Release the namespace of a failed or aborted cold restore
 
 Release the namespace held by a failed or aborted cold restore, so that it
-opens to clients again, and wait until it does. The data the restore
-wrote so far stays in the namespace. With --async the command
-returns as soon as the cluster accepts the request.
+opens to clients again. The cluster finds the restore by the namespace.
+The data the restore wrote so far stays in the namespace. The --job-id
+flag is optional: with it the command checks that the job is one of
+the namespace before the release, then follows the job and waits until
+the namespace opens; without it the command returns as soon as the
+cluster accepts the request. With --async the command returns as soon
+as the cluster accepts the request even when --job-id is set.
 
 ### Supported flags
 ```bash
@@ -394,10 +398,14 @@ Aerospike Client Flags:
 
 Restore Flags:
   -n, --namespace string   The namespace to release.
-      --job-id string      Id of the failed or aborted cold restore job that holds the namespace.
+      --job-id string      Optional id of the failed or aborted cold restore job that holds the namespace.
+                           With it the command checks the job before the release and waits until the
+                           namespace opens to clients; without it the command returns as soon as the
+                           cluster accepts the request.
                            The id is logged by 'absctl snapshot-restore start' as job-id.
       --async              Return as soon as the cluster accepts the request, without
-                           waiting for the namespace to be released.
+                           waiting for the namespace to be released. Applies with --job-id only,
+                           which is still checked before the release.
 
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
@@ -664,11 +672,15 @@ abort:
 open:
   # The namespace to release.
   namespace: source-ns1
-  # Id of the failed or aborted cold restore job that holds the namespace.
+  # Optional id of the failed or aborted cold restore job that holds the namespace.
+  # With it the command checks the job before the release and waits until the
+  # namespace opens to clients; without it the command returns as soon as the
+  # cluster accepts the request.
   # The id is logged by 'absctl snapshot-restore start' as job-id.
   job-id: restore-job-1
   # Return as soon as the cluster accepts the request, without
-  # waiting for the namespace to be released.
+  # waiting for the namespace to be released. Applies with job-id only,
+  # which is still checked before the release.
   async: false
 clear-storage:
   # The namespace to clear.

@@ -803,13 +803,6 @@ func TestServerRestoreJob_Validate(t *testing.T) {
 			zero: (*ServerRestoreProgress)(nil),
 		},
 		{
-			name: "open",
-			make: func(namespace, jobID string) validator {
-				return &ServerRestoreOpen{Namespace: namespace, JobID: jobID, Async: true}
-			},
-			zero: (*ServerRestoreOpen)(nil),
-		},
-		{
 			name: "clear storage",
 			make: func(namespace, jobID string) validator {
 				return &ServerRestoreClearStorage{Namespace: namespace, JobID: jobID, Async: true}
@@ -851,6 +844,58 @@ func TestServerRestoreJob_Validate(t *testing.T) {
 				require.NoError(t, err)
 			})
 		}
+	}
+}
+
+// TestServerRestoreOpen_Validate covers the open, which the cluster finds the restore
+// of by the namespace alone, so its job id is optional, but checked when given.
+func TestServerRestoreOpen_Validate(t *testing.T) {
+	t.Parallel()
+
+	const errMsgNamespaceRequired = "namespace is required"
+
+	tests := []struct {
+		name       string
+		give       *ServerRestoreOpen
+		wantErrMsg string
+	}{
+		{name: "nil", give: nil},
+		{name: "valid without job id", give: &ServerRestoreOpen{Namespace: testServerNamespace}},
+		{
+			name: "valid with job id",
+			give: &ServerRestoreOpen{Namespace: testServerNamespace, JobID: testServerRestoreJobID, Async: true},
+		},
+		{
+			name:       "job id with a separator",
+			give:       &ServerRestoreOpen{Namespace: testServerNamespace, JobID: "job:1"},
+			wantErrMsg: "job-id must not contain",
+		},
+		{
+			// The namespace is required whether or not the job is named.
+			name:       "job id without namespace",
+			give:       &ServerRestoreOpen{JobID: testServerRestoreJobID},
+			wantErrMsg: errMsgNamespaceRequired,
+		},
+		{name: "missing namespace", give: &ServerRestoreOpen{}, wantErrMsg: errMsgNamespaceRequired},
+		{
+			name:       "namespace with a control character",
+			give:       &ServerRestoreOpen{Namespace: "ns\x01"},
+			wantErrMsg: "namespace must be printable ASCII",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.give.Validate()
+
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
+				return
+			}
+			require.NoError(t, err)
+		})
 	}
 }
 

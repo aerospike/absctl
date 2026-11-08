@@ -204,11 +204,15 @@ func (f *ServerRestoreOpen) NewFlagSet() *pflag.FlagSet {
 		"The namespace to release.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the failed or aborted cold restore job that holds the namespace."+descJobIDFromStart)
+		"Optional id of the failed or aborted cold restore job that holds the namespace.\n"+
+			"With it the command checks the job before the release and waits until the\n"+
+			"namespace opens to clients; without it the command returns as soon as the\n"+
+			"cluster accepts the request."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the cluster accepts the request, without\n"+
-			"waiting for the namespace to be released.")
+			"waiting for the namespace to be released. Applies with --job-id only,\n"+
+			"which is still checked before the release.")
 
 	return flagSet
 }

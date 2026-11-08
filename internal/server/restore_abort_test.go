@@ -66,7 +66,7 @@ func TestServiceAbortRestore(t *testing.T) {
 			answers:        []restoreAnswer{coldActive, coldAborted},
 			wantCalls:      2,
 			wantAbortCalls: 1,
-			wantLogs:       []string{logAbortingRestore, logRestoreAborted, logOpenHint},
+			wantLogs:       []string{logAbortingRestore, logRestoreAborted, logOpenCmd},
 		},
 		{
 			name:           "confirms the abort of a fuzzy restore without the open hint",

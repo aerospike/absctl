@@ -35,8 +35,9 @@ const (
 	flagJobID     = "job-id"
 	flagAsync     = "async"
 
-	errMsgJobIDRequired = "job-id is required"
-	errMsgInitPrefix    = "failed to initialize"
+	errMsgJobIDRequired     = "job-id is required"
+	errMsgNamespaceRequired = "namespace is required"
+	errMsgInitPrefix        = "failed to initialize"
 )
 
 // newTestRestoreCmd builds the snapshot-restore command with its output discarded.
@@ -83,19 +84,30 @@ func TestNewRestoreCmdSubcommands(t *testing.T) {
 }
 
 // TestNewRestoreCmdInitError covers the prefix a subcommand puts on a configuration it
-// cannot build the service from. A missing job id fails validation before the cluster
-// is reached.
+// cannot build the service from. A missing job id, or for the open a missing namespace,
+// fails validation before the cluster is reached.
 func TestNewRestoreCmdInitError(t *testing.T) {
 	t.Parallel()
 
+	withNamespace := []string{"--" + flagNamespace, testNamespace}
+
 	tests := []struct {
 		giveUse    string
+		giveArgs   []string
+		wantErrMsg string
 		wantPrefix string
 	}{
-		{giveUse: UseProgress},
-		{giveUse: UseAbort, wantPrefix: "failed to initialize restore abort: "},
-		{giveUse: UseOpen, wantPrefix: "failed to initialize restore open: "},
-		{giveUse: UseClearStorage, wantPrefix: "failed to initialize restore clear storage: "},
+		{giveUse: UseProgress, giveArgs: withNamespace, wantErrMsg: errMsgJobIDRequired},
+		{
+			giveUse: UseAbort, giveArgs: withNamespace, wantErrMsg: errMsgJobIDRequired,
+			wantPrefix: "failed to initialize restore abort: ",
+		},
+		// The job id of the open is optional, so only a missing namespace is refused.
+		{giveUse: UseOpen, wantErrMsg: errMsgNamespaceRequired, wantPrefix: "failed to initialize restore open: "},
+		{
+			giveUse: UseClearStorage, giveArgs: withNamespace, wantErrMsg: errMsgJobIDRequired,
+			wantPrefix: "failed to initialize restore clear storage: ",
+		},
 	}
 
 	for _, tt := range tests {
@@ -103,11 +115,11 @@ func TestNewRestoreCmdInitError(t *testing.T) {
 			t.Parallel()
 
 			cmd := newTestRestoreCmd()
-			cmd.SetArgs([]string{tt.giveUse, "--" + flagNamespace, testNamespace})
+			cmd.SetArgs(append([]string{tt.giveUse}, tt.giveArgs...))
 
 			err := cmd.ExecuteContext(t.Context())
 
-			require.ErrorContains(t, err, errMsgJobIDRequired)
+			require.ErrorContains(t, err, tt.wantErrMsg)
 
 			if tt.wantPrefix == "" {
 				assert.NotContains(t, err.Error(), errMsgInitPrefix)

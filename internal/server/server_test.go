@@ -149,7 +149,6 @@ type fakeRestoreInfoClient struct {
 
 	openErr       error
 	openNamespace string
-	openJobID     string
 	openCalls     int
 
 	// clearErrs are the answers to the clear requests, one per call; the requests past
@@ -224,10 +223,9 @@ func (f *fakeRestoreInfoClient) AbortRestore(_ context.Context, namespace, jobID
 	return f.abortErr
 }
 
-func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace, jobID string) error {
+func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace string) error {
 	f.openCalls++
 	f.openNamespace = namespace
-	f.openJobID = jobID
 
 	return f.openErr
 }

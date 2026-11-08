@@ -29,15 +29,15 @@ import (
 )
 
 // The parts of the commands the hints tell the user to run: the command the
-// subcommand follows, the flag that opens the ones naming the job, the flags that name
-// the restore job of testNamespace and testJobID, the flag that keeps the progress
-// watched, and the end that stands for the connection flags.
+// subcommand follows, the flag that names the namespace, the flags that name
+// testNamespace and the restore job testJobID of it, and the end that stands for the
+// connection flags.
 const (
-	cmdRestore   = "absctl snapshot-restore "
-	cmdNamespace = " --namespace "
-	cmdTestJob   = cmdNamespace + testNamespace + " --job-id " + testJobID
-	cmdWatch     = "--watch"
-	cmdMore      = " ..."
+	cmdRestore       = "absctl snapshot-restore "
+	cmdNamespace     = " --namespace "
+	cmdTestNamespace = cmdNamespace + testNamespace
+	cmdTestJob       = cmdTestNamespace + " " + flagJobID + " " + testJobID
+	cmdMore          = " ..."
 )
 
 // logClearHint is part of the warning about a storage that must be cleared, and
@@ -51,8 +51,9 @@ const (
 // to run, quoted as the hints print them.
 const (
 	logClearCmd  = "'" + cmdRestore + restoreCmdClearStorage + cmdTestJob + cmdMore + "'"
-	logFollowCmd = "'" + cmdRestore + restoreCmdProgress + cmdTestJob + " " + cmdWatch + cmdMore + "'"
-	logOpenCmd   = "'" + cmdRestore + restoreCmdOpen + cmdTestJob + cmdMore + "'"
+	logFollowCmd = "'" + cmdRestore + restoreCmdProgress + cmdTestJob + " " + flagWatch + cmdMore + "'"
+	// The open names the job, which it needs to follow the release.
+	logOpenCmd = "'" + cmdRestore + restoreCmdOpen + cmdTestJob + cmdMore + "'"
 )
 
 // The state labels of a restore line, as the info level prints them.
@@ -649,15 +650,15 @@ func TestRestoreCommand(t *testing.T) {
 		want           string
 	}{
 		{
-			name:           "names the job",
-			giveSubcommand: restoreCmdClearStorage,
-			want:           cmdRestore + restoreCmdClearStorage + cmdTestJob + cmdMore,
+			name:           "names the namespace only",
+			giveSubcommand: restoreCmdOpen,
+			want:           cmdRestore + restoreCmdOpen + cmdTestNamespace + cmdMore,
 		},
 		{
-			name:           "puts the extra flags after the job",
+			name:           "puts the extra flags after the namespace",
 			giveSubcommand: restoreCmdProgress,
-			giveExtra:      []string{cmdWatch},
-			want:           cmdRestore + restoreCmdProgress + cmdTestJob + " " + cmdWatch + cmdMore,
+			giveExtra:      []string{flagJobID, testJobID, flagWatch},
+			want:           cmdRestore + restoreCmdProgress + cmdTestJob + " " + flagWatch + cmdMore,
 		},
 	}
 
@@ -665,7 +666,34 @@ func TestRestoreCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, restoreCommand(tt.giveSubcommand, testNamespace, testJobID, tt.giveExtra...))
+			assert.Equal(t, tt.want, restoreCommand(tt.giveSubcommand, testNamespace, tt.giveExtra...))
+		})
+	}
+}
+
+// TestServiceLogOpenHint pins down that the open hint names the job when it is known, so
+// that the copied command follows the release, and the namespace alone otherwise.
+func TestServiceLogOpenHint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		giveJobID string
+		want      string
+	}{
+		{name: "with the job id", giveJobID: testJobID, want: logOpenCmd},
+		{name: "without the job id", want: "'" + cmdRestore + restoreCmdOpen + cmdTestNamespace + cmdMore + "'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, buf := newTestService(t)
+
+			svc.logOpenHint(testNamespace, tt.giveJobID)
+
+			assert.Contains(t, buf.String(), tt.want)
 		})
 	}
 }

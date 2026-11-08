@@ -223,10 +223,10 @@ func (s *Service) reportRestoreProgress(
 		clearRequired := status.Clear == infomodels.ClearStateRequired &&
 			status.State == infomodels.RestoreStateActive
 		if clearRequired && !clearReported {
-			clearCmd := restoreCommand(restoreCmdClearStorage, namespace, jobID)
+			clearCmd := restoreCommand(restoreCmdClearStorage, namespace, flagJobID, jobID)
 
 			msg := fmt.Sprintf(msgClearThenFollow, clearCmd,
-				restoreCommand(restoreCmdProgress, namespace, jobID, "--watch"))
+				restoreCommand(restoreCmdProgress, namespace, flagJobID, jobID, flagWatch))
 			if mode != reportOnce {
 				// The watch goes on reporting the restore once the storage is cleared.
 				msg = fmt.Sprintf(msgClearThenWait, clearCmd)
@@ -265,26 +265,36 @@ func (s *Service) logRestoreComplete(status *infomodels.ResponseRestoreState) {
 }
 
 // logOpenHint tells how to release the namespace a failed or aborted cold restore keeps
-// closed.
+// closed. The cluster finds the restore by the namespace, but the open follows the
+// release only with the job id, so the command names the job when jobID is known.
 func (s *Service) logOpenHint(namespace, jobID string) {
-	// The message names the job in the command it gives, so it carries no attributes
-	// that would repeat it.
-	s.logger.Warn(fmt.Sprintf(msgOpenHint, restoreCommand(restoreCmdOpen, namespace, jobID)))
+	var extra []string
+	if jobID != "" {
+		extra = []string{flagJobID, jobID}
+	}
+
+	// The message names the namespace and the job in the command it gives, so it carries
+	// no attributes that would repeat them.
+	s.logger.Warn(fmt.Sprintf(msgOpenHint, restoreCommand(restoreCmdOpen, namespace, extra...)))
 }
 
-// The snapshot-restore subcommands a hint tells the user to run.
+// The snapshot-restore subcommands a hint tells the user to run, and the flags a hint
+// adds to them.
 const (
 	restoreCmdProgress     = "progress"
 	restoreCmdOpen         = "open"
 	restoreCmdClearStorage = "clear-storage"
+
+	flagJobID = "--job-id"
+	flagWatch = "--watch"
 )
 
 // restoreCommand returns the command line of the snapshot-restore subcommand that acts
-// on the restore job jobID of namespace, with the extra flags after the ones that name
-// the job. The line ends with "..." for the connection and auth flags, which the hint
-// cannot know.
-func restoreCommand(subcommand, namespace, jobID string, extra ...string) string {
-	cmd := fmt.Sprintf("absctl snapshot-restore %s --namespace %s --job-id %s", subcommand, namespace, jobID)
+// on namespace, with the extra flags and their values after it, such as the job id of
+// a subcommand that names the job. The line ends with "..." for the connection and auth
+// flags, which the hint cannot know.
+func restoreCommand(subcommand, namespace string, extra ...string) string {
+	cmd := fmt.Sprintf("absctl snapshot-restore %s --namespace %s", subcommand, namespace)
 	if len(extra) > 0 {
 		cmd += " " + strings.Join(extra, " ")
 	}

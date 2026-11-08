@@ -284,28 +284,16 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 				return &ServerRestoreServiceConfig{
 					Open: &models.ServerRestoreOpen{
 						Namespace: testServerNamespace,
-						JobID:     testServerJobID,
 					},
 					App: &models.App{},
 				}
 			},
 		},
 		{
-			name: "missing open job id",
-			cfg: func() *ServerRestoreServiceConfig {
-				return &ServerRestoreServiceConfig{
-					Open: &models.ServerRestoreOpen{Namespace: testServerNamespace},
-					App:  &models.App{},
-				}
-			},
-			wantErr:    true,
-			wantErrMsg: testErrMsgJobIDRequired,
-		},
-		{
 			name: "missing open namespace",
 			cfg: func() *ServerRestoreServiceConfig {
 				return &ServerRestoreServiceConfig{
-					Open: &models.ServerRestoreOpen{JobID: testServerJobID},
+					Open: &models.ServerRestoreOpen{},
 					App:  &models.App{},
 				}
 			},

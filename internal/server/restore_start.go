@@ -87,7 +87,7 @@ func (s *Service) startRestore(ctx context.Context, client restoreStarter) error
 	jobID, err := client.StartRestore(ctx, rReq)
 	if err != nil {
 		return startError("restore", jobID,
-			restoreCommand(restoreCmdProgress, start.Namespace, jobID), err)
+			restoreCommand(restoreCmdProgress, start.Namespace, flagJobID, jobID), err)
 	}
 
 	s.logger.Info("server integrated restore started",

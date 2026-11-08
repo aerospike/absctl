@@ -85,9 +85,13 @@ const (
 		"released with the open command. With --async the command returns as\n" +
 		"soon as the cluster accepts the abort."
 	LongRestoreOpen = "Release the namespace held by a failed or aborted cold restore, so that it\n" +
-		"opens to clients again, and wait until it does. The data the restore\n" +
-		"wrote so far stays in the namespace. With --async the command\n" +
-		"returns as soon as the cluster accepts the request."
+		"opens to clients again. The cluster finds the restore by the namespace.\n" +
+		"The data the restore wrote so far stays in the namespace. The --job-id\n" +
+		"flag is optional: with it the command checks that the job is one of\n" +
+		"the namespace before the release, then follows the job and waits until\n" +
+		"the namespace opens; without it the command returns as soon as the\n" +
+		"cluster accepts the request. With --async the command returns as soon\n" +
+		"as the cluster accepts the request even when --job-id is set."
 	LongRestoreClear = "Clear the storage of the namespace a cold restore is preparing, on\n" +
 		"every node that asks for it, and wait until the namespace is ready\n" +
 		"for the restore, which the cluster then starts on its own. Clearing\n" +
