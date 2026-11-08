@@ -18,12 +18,16 @@ on:
       - Dockerfile
       - go.mod
       - go.sum
+      - Makefile
+      - .dockerignore
       - .github/workflows/docker-image-checks.yml
   pull_request:
     paths:
       - Dockerfile
       - go.mod
       - go.sum
+      - Makefile
+      - .dockerignore
       - .github/workflows/docker-image-checks.yml
 
 permissions:
@@ -52,3 +56,11 @@ jobs:
             owner="$(stat -c %u:%g /usr/bin/absctl)"
             if [ "$owner" != "0:0" ]; then echo "::error::/usr/bin/absctl owned by $owner, expected 0:0 (root)"; exit 1; fi
             echo "image checks passed"'
+
+      - name: Check runtime user can run but not modify the binary
+        run: |
+          docker run --rm --entrypoint sh absctl:ci -c '
+            if [ "$(id -u)" = 0 ]; then echo "::error::image runs as root"; exit 1; fi
+            if [ -w /usr/bin/absctl ]; then echo "::error::/usr/bin/absctl is writable by $(id -un)"; exit 1; fi
+            /usr/bin/absctl --version >/dev/null || { echo "::error::absctl fails to run as $(id -un)"; exit 1; }
+            echo "runtime user checks passed"'
