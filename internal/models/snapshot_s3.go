@@ -15,11 +15,26 @@
 package models
 
 import (
+	"errors"
 	"fmt"
+	"strings"
+	"unicode"
 )
 
 // maxSnapshotS3Throughput is the highest S3 throughput the server accepts, in Gbit/s.
 const maxSnapshotS3Throughput = 400
+
+// Limits of the S3 settings the server is sent, as enforced by the server.
+const (
+	maxServerS3BucketLen   = 255
+	maxServerS3RegionLen   = 63
+	maxServerS3ProfileLen  = 63
+	maxServerS3EndpointLen = 511
+)
+
+// unsetEndpointValues are values the server refuses as an endpoint, since they read as
+// an endpoint someone meant to leave unset.
+var unsetEndpointValues = []string{"none", "null", "nil", "undefined", "(none)", "n/a"}
 
 // SnapshotS3 represents the S3 configuration of the server-integrated snapshot commands.
 //
@@ -52,6 +67,81 @@ func ValidateS3Throughput(throughput int) error {
 	if throughput < 0 || throughput > maxSnapshotS3Throughput {
 		return fmt.Errorf("s3-throughput must be between 0 and %d, got %d",
 			maxSnapshotS3Throughput, throughput)
+	}
+
+	return nil
+}
+
+// ValidateServerS3 checks the S3 settings a start command sends to the server against
+// the rules the server applies: the bucket and the region are required, and every
+// setting is printable ASCII within its length limit. The access keys and the client
+// settings stay local and are not checked here.
+func ValidateServerS3(a *AwsS3) error {
+	// An unconfigured section is reported by the object storage type check first.
+	if a == nil {
+		return errors.New("object storage is not configured")
+	}
+
+	switch {
+	case a.BucketName == "":
+		return errors.New("s3-bucket-name is required")
+	case a.Region == "":
+		return errors.New("s3-region is required")
+	}
+
+	if err := validateServerText("s3-bucket-name", a.BucketName, maxServerS3BucketLen); err != nil {
+		return err
+	}
+
+	if err := validateServerText("s3-region", a.Region, maxServerS3RegionLen); err != nil {
+		return err
+	}
+
+	if err := validateServerText("s3-profile", a.Profile, maxServerS3ProfileLen); err != nil {
+		return err
+	}
+
+	return validateServerS3Endpoint(a.Endpoint)
+}
+
+// validateServerS3Endpoint checks the endpoint, when it is set: an http:// or https://
+// URL with a host, the scheme in lower case as the server matches it case-sensitively.
+func validateServerS3Endpoint(endpoint string) error {
+	const name = "s3-endpoint-override"
+
+	if endpoint == "" {
+		return nil
+	}
+
+	if err := validateServerText(name, endpoint, maxServerS3EndpointLen); err != nil {
+		return err
+	}
+
+	for _, unset := range unsetEndpointValues {
+		if strings.EqualFold(endpoint, unset) {
+			return fmt.Errorf("%s looks like an unset value, omit it to use the default AWS endpoint", name)
+		}
+	}
+
+	if strings.ContainsFunc(endpoint, unicode.IsSpace) {
+		return fmt.Errorf("%s must not contain whitespace", name)
+	}
+
+	var host string
+
+	switch lower := strings.ToLower(endpoint); {
+	case strings.HasPrefix(endpoint, "http://"):
+		host = strings.TrimPrefix(endpoint, "http://")
+	case strings.HasPrefix(endpoint, "https://"):
+		host = strings.TrimPrefix(endpoint, "https://")
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+		return fmt.Errorf("%s scheme must be lowercase", name)
+	default:
+		return fmt.Errorf("%s scheme must be http:// or https://", name)
+	}
+
+	if host == "" || strings.HasPrefix(host, "/") {
+		return fmt.Errorf("%s has no host", name)
 	}
 
 	return nil

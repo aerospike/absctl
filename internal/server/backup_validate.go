@@ -47,7 +47,7 @@ func (s *Service) BackupValidate(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.checkBackupExists(ctx, metaClient, s.backupCfg.AwsS3.BucketName, prefix,
+	if _, err := s.checkBackupExists(ctx, metaClient, s.backupCfg.AwsS3.BucketName, prefix,
 		s.backupCfg.Validation.JobID); err != nil {
 		return err
 	}

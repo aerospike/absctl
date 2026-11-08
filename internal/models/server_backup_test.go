@@ -166,11 +166,24 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 		},
 		{
-			// The server checks the rate against its own number of scan threads.
-			name: "records per second without parallel read",
+			// The server checks the rate against its own number of scan threads, 4.
+			name: "records per second below the minimum without parallel read",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
+				backup.ParallelRead = 0
 				backup.RecordsPerSecond = 1
+				return backup
+			},
+			wantErr: true,
+			wantErrMsg: "records-per-second must be 0 or at least 20 for the 4 scan threads " +
+				"the server uses when parallel-read is 0, got 1",
+		},
+		{
+			name: "records per second at the minimum without parallel read",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelRead = 0
+				backup.RecordsPerSecond = serverDefaultBackupParallelRead * minServerBackupRPSPerReader
 				return backup
 			},
 		},
@@ -269,6 +282,7 @@ func TestServerBackup_ValidatePolicy(t *testing.T) {
 
 	const (
 		testUpperCasePolicy = "STRICT"
+		testMixedCasePolicy = "Best-Effort"
 		// errMsgBackupPolicy is the common part of the unknown backup policy errors.
 		errMsgBackupPolicy = `policy must be strict, best-effort or fuzzy, got "`
 	)
@@ -276,22 +290,40 @@ func TestServerBackup_ValidatePolicy(t *testing.T) {
 	tests := []struct {
 		name       string
 		givePolicy string
+		want       infomodels.BackupPolicy
 		wantErrMsg string
 	}{
 		{name: "empty uses the server default"},
-		{name: "strict", givePolicy: string(infomodels.BackupPolicyStrict)},
-		{name: "best effort", givePolicy: string(infomodels.BackupPolicyBestEffort)},
-		{name: "fuzzy", givePolicy: string(infomodels.BackupPolicyFuzzy)},
+		{
+			name:       "strict",
+			givePolicy: string(infomodels.BackupPolicyStrict),
+			want:       infomodels.BackupPolicyStrict,
+		},
+		{
+			name:       "best effort",
+			givePolicy: string(infomodels.BackupPolicyBestEffort),
+			want:       infomodels.BackupPolicyBestEffort,
+		},
+		{
+			name:       "fuzzy",
+			givePolicy: string(infomodels.BackupPolicyFuzzy),
+			want:       infomodels.BackupPolicyFuzzy,
+		},
 		{
 			name:       "unknown",
 			givePolicy: testUnknownPolicy,
 			wantErrMsg: errMsgBackupPolicy + testUnknownPolicy,
 		},
 		{
-			// Policies are matched exactly, as the server does.
+			// Policies are accepted in any case and sent in lower case.
 			name:       "upper case",
 			givePolicy: testUpperCasePolicy,
-			wantErrMsg: errMsgBackupPolicy + testUpperCasePolicy,
+			want:       infomodels.BackupPolicyStrict,
+		},
+		{
+			name:       "mixed case",
+			givePolicy: testMixedCasePolicy,
+			want:       infomodels.BackupPolicyBestEffort,
 		},
 	}
 
@@ -309,6 +341,7 @@ func TestServerBackup_ValidatePolicy(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			assert.Equal(t, tt.want, backup.BackupPolicy())
 		})
 	}
 }

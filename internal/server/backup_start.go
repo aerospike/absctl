@@ -55,7 +55,9 @@ func (s *Service) StartBackup(ctx context.Context) error {
 
 	jobID, err := client.StartBackup(ctx, bReq)
 	if err != nil {
-		return fmt.Errorf("failed to start backup: %w", err)
+		// Following a backup takes the S3 settings it was started with, so no command is
+		// spelled out: the id is what the user needs.
+		return startError("backup", jobID, "", err)
 	}
 
 	s.logger.Info("server integrated backup started",
@@ -111,7 +113,7 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 
 	return &infomodels.RequestBackup{
 		Namespace:      start.Namespace,
-		Storage:        objectStorage,
+		Storage:        infomodels.StorageType(objectStorage),
 		Path:           models.NormalizeS3Prefix(start.Path),
 		Bucket:         s.backupCfg.AwsS3.BucketName,
 		Region:         s.backupCfg.AwsS3.Region,
@@ -121,10 +123,11 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 		FilterExp:      start.FilterExp,
 		NoIndexes:      new(start.NoIndexes),
 		NoUDFs:         new(start.NoUDFs),
+		NoConfig:       new(start.NoConfig),
 		BinList:        start.BinList,
 		ModifiedAfter:  ma,
 		ModifiedBefore: mb,
-		Policy:         infomodels.BackupPolicy(start.Policy),
+		Policy:         start.BackupPolicy(),
 
 		BackupRPS:                    start.RecordsPerSecond,
 		BackupWorkerThreads:          start.ParallelRead,

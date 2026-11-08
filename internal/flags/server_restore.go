@@ -19,6 +19,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// descJobIDFromStart tells where the id of a restore job comes from: it is generated when
+// the restore starts.
+const descJobIDFromStart = "\nThe id is logged by 'absctl snapshot-restore start' as job-id."
+
 // ServerRestore holds flags for the server restore start command.
 type ServerRestore struct {
 	models.ServerRestore
@@ -36,12 +40,8 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		"The namespace to restore.")
 	flagSet.StringVar(&f.BackupIDs, "backup-ids",
 		models.DefaultServerBackupJobID,
-		"Comma separated list of the ids of the backups to restore from.")
-	flagSet.StringVar(&f.JobID, "job-id",
-		models.DefaultServerRestoreJobID,
-		"Id of the restore job. A strict (cold) restore must use the job id\n"+
-			"passed to the restore preparation. If empty, the id of the single backup\n"+
-			"being restored is used, so it is required when several backup ids are given.")
+		"Comma separated list of the ids of the backups to restore from, up to 32:\n"+
+			"the full backup first, then its incremental backups.")
 	flagSet.StringVar(&f.Path, "path",
 		models.DefaultServerBackupPath,
 		"Key prefix in the bucket the backup was written under.")
@@ -55,7 +55,8 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		descSetListRestore)
 	flagSet.StringVar(&f.FilterExp, "filter-exp",
 		models.DefaultServerFilterExp,
-		"Base64 encoded filter expression. Strict policy only.")
+		"Base64 encoded filter expression. Only matching records are restored,\n"+
+			"deletes are always applied.")
 	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "I",
 		models.DefaultCommonNoIndexes,
 		descNoIndexesRestore)
@@ -82,28 +83,39 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 			"from 0 to 315360000 (10 years). Records that never expire are unchanged.")
 	flagSet.StringVar(&f.Policy, "policy",
 		models.DefaultServerRestorePolicy,
-		"Restore policy: strict or fuzzy. strict, the cold restore, hydrates the\n"+
-			"partitions of a prepared namespace from strict backups only. fuzzy\n"+
-			"writes the records of a single backup of any consistency into the\n"+
-			"live namespace.\n"+
-			"If empty, the server default is used, which is strict.\n"+
-			"The flags below apply to the fuzzy policy only.")
-	flagSet.IntVar(&f.MaxInflight, "max-inflight",
+		"Restore policy: strict or fuzzy. strict, the cold restore, closes the\n"+
+			"namespace to clients, empties it and hydrates its partitions from\n"+
+			"strict backups only. fuzzy writes the records into the live namespace,\n"+
+			"from a single fuzzy backup, or from one or more strict backups.\n"+
+			"The value is case-insensitive. If empty, the server default is used,\n"+
+			"which is strict.\n"+
+			"The flags below apply to one policy only: --hydrate-replica to strict,\n"+
+			"the others to fuzzy. A flag that is not set is not sent, and the server\n"+
+			"applies its default, which is the default shown.")
+	// The flags below apply to one policy only. Each of them reaches the model only when
+	// it is given, so that a flag of the other policy is found by the validation, and one
+	// left out is left to the server default.
+	optionalBoolVar(flagSet, &f.HydrateReplica, "hydrate-replica",
+		models.DefaultServerRestoreHydrateReplica,
+		"Restore all replicas. If false, only the master is restored and\n"+
+			"the other replicas are filled by migrations.")
+	optionalIntVar(flagSet, &f.MaxInflight, "max-inflight",
 		models.DefaultServerRestoreMaxInflight,
 		"Maximum number of concurrent writes, up to 100000.")
-	flagSet.IntVar(&f.RetryBaseInterval, "retry-base-interval",
+	optionalIntVar(flagSet, &f.RetryBaseInterval, "retry-base-interval",
 		models.DefaultServerRestoreRetryBaseInterval,
 		"Base delay before a retry (in ms). 0 retries without a delay.")
-	flagSet.Float64Var(&f.RetryMultiplier, "retry-multiplier",
+	optionalFloat64Var(flagSet, &f.RetryMultiplier, "retry-multiplier",
 		models.DefaultServerRestoreRetryMultiplier,
 		"Backoff multiplier of the retry delay. Must be at least 1.0.")
-	flagSet.IntVar(&f.RetryMaxAttempts, "retry-max-attempts",
+	optionalIntVar(flagSet, &f.RetryMaxAttempts, "retry-max-attempts",
 		models.DefaultServerRestoreRetryMaxAttempts,
-		"Maximum number of attempts per record, the first one included.")
-	flagSet.BoolVar(&f.IgnoreRecordError, "ignore-record-error",
+		"Number of retries per record after its first failed write.\n"+
+			"0 disables retries.")
+	optionalBoolVar(flagSet, &f.IgnoreRecordError, "ignore-record-error",
 		models.DefaultServerRestoreIgnoreRecordError,
 		"Continue the restore on errors of individual records.")
-	flagSet.BoolVar(&f.ApplyMetadataLast, "apply-metadata-last",
+	optionalBoolVar(flagSet, &f.ApplyMetadataLast, "apply-metadata-last",
 		models.DefaultServerRestoreApplyMetadataLast,
 		"Create secondary indexes and UDFs after the records instead of before.")
 
@@ -112,40 +124,6 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 
 func (f *ServerRestore) GetServerRestore() *models.ServerRestore {
 	return &f.ServerRestore
-}
-
-// ServerRestorePrepare holds flags for the server restore prepare command.
-type ServerRestorePrepare struct {
-	models.ServerRestorePrepare
-}
-
-func NewServerRestorePrepare() *ServerRestorePrepare {
-	return &ServerRestorePrepare{}
-}
-
-func (f *ServerRestorePrepare) NewFlagSet() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-
-	flagSet.StringVarP(&f.Namespace, "namespace", "n",
-		models.DefaultCommonNamespace,
-		"The namespace to restore.")
-	flagSet.StringVar(&f.JobID, "job-id",
-		models.DefaultServerRestoreJobID,
-		"Id of the restore job. The restore must be started with the same job id.")
-	flagSet.BoolVar(&f.HydrateReplica, "hydrate-replica",
-		models.DefaultServerRestoreHydrateReplica,
-		"Restore all replicas. If false, only the master is restored and\n"+
-			"the other replicas are filled by migrations.")
-	flagSet.BoolVar(&f.Async, "async",
-		models.DefaultServerRestoreAsync,
-		"Return as soon as the cluster accepts the request, without\n"+
-			"waiting for the namespace to become ready for the restore.")
-
-	return flagSet
-}
-
-func (f *ServerRestorePrepare) GetServerRestorePrepare() *models.ServerRestorePrepare {
-	return &f.ServerRestorePrepare
 }
 
 type ServerRestoreProgress struct {
@@ -164,7 +142,7 @@ func (f *ServerRestoreProgress) NewFlagSet() *pflag.FlagSet {
 		"The namespace the restore writes into.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the restore job to follow.")
+		"Id of the restore job to follow."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Watch, "watch",
 		models.DefaultServerRestoreProgressWatch,
 		"Watch the progress of the restore.")
@@ -194,7 +172,7 @@ func (f *ServerRestoreAbort) NewFlagSet() *pflag.FlagSet {
 		"The namespace the restore is aborted for.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the restore job to abort.")
+		"Id of the restore job to abort."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the cluster accepts the abort, without\n"+
@@ -226,11 +204,15 @@ func (f *ServerRestoreOpen) NewFlagSet() *pflag.FlagSet {
 		"The namespace to release.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the aborted cold restore job that holds the namespace.")
+		"Optional id of the failed or aborted cold restore job that holds the namespace.\n"+
+			"With it the command checks the job before the release and waits until the\n"+
+			"namespace opens to clients; without it the command returns as soon as the\n"+
+			"cluster accepts the request."+descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the cluster accepts the request, without\n"+
-			"waiting for the namespace to be released.")
+			"waiting for the namespace to be released. Applies with --job-id only,\n"+
+			"which is still checked before the release.")
 
 	return flagSet
 }
@@ -259,7 +241,8 @@ func (f *ServerRestoreClearStorage) NewFlagSet() *pflag.FlagSet {
 		"The namespace to clear.")
 	flagSet.StringVar(&f.JobID, "job-id",
 		models.DefaultServerRestoreJobID,
-		"Id of the cold restore job being prepared.")
+		"Id of the cold restore job that waits for the namespace storage to be cleared."+
+			descJobIDFromStart)
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerRestoreAsync,
 		"Return as soon as the nodes accept the clear, without waiting\n"+

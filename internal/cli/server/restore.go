@@ -30,7 +30,6 @@ import (
 // subcommands.
 type restoreCtx struct {
 	start    *flags.ServerRestore
-	prepare  *flags.ServerRestorePrepare
 	progress *flags.ServerRestoreProgress
 	abort    *flags.ServerRestoreAbort
 	open     *flags.ServerRestoreOpen
@@ -42,7 +41,6 @@ type restoreCtx struct {
 func newRestoreCtx() *restoreCtx {
 	return &restoreCtx{
 		start:    flags.NewServerRestore(),
-		prepare:  flags.NewServerRestorePrepare(),
 		progress: flags.NewServerRestoreProgress(),
 		abort:    flags.NewServerRestoreAbort(),
 		open:     flags.NewServerRestoreOpen(),
@@ -107,7 +105,6 @@ func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime stri
 
 	cmd.AddCommand(
 		newRestoreStartCmd(rc, rf),
-		newRestorePrepareCmd(rc, rf),
 		newRestoreProgressCmd(rc, rf),
 		newRestoreAbortCmd(rc, rf),
 		newRestoreOpenCmd(rc, rf),
@@ -137,6 +134,9 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		Use:   UseStart,
 		Short: ShortRestoreStart,
 		Long:  LongRestoreStart,
+		// A stray argument is a mistyped flag value, such as "--hydrate-replica false",
+		// which must fail rather than be dropped.
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandStart,
 				func() *config.ServerRestoreServiceConfig {
@@ -216,6 +216,7 @@ func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command 
 		Use:   sub.use,
 		Short: sub.short,
 		Long:  sub.long,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := restoreServiceConfig(cmd.Context(), rc, sub.command,
 				func() *config.ServerRestoreServiceConfig {
@@ -253,28 +254,6 @@ func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command 
 	usageFromHelp(cmd)
 
 	return cmd
-}
-
-func newRestorePrepareCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
-		use:          UsePrepare,
-		short:        ShortRestorePrepare,
-		long:         LongRestorePrepare,
-		usage:        flags.SectionTextUsageRestorePrepare,
-		command:      config.ServerRestoreCommandPrepare,
-		flagSet:      rf.prepare.NewFlagSet(),
-		helpSections: restorePrepareHelpSections,
-		commands: func() config.ServerRestoreCommands {
-			return config.ServerRestoreCommands{Prepare: rf.prepare.GetServerRestorePrepare()}
-		},
-		run: func(ctx context.Context, svc *server.Service) error {
-			if err := svc.PrepareRestore(ctx); err != nil {
-				return fmt.Errorf("server side restore preparation failed: %w", err)
-			}
-
-			return nil
-		},
-	})
 }
 
 func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
