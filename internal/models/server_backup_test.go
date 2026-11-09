@@ -160,52 +160,52 @@ func TestServerBackup_Validate(t *testing.T) {
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
 				backup.RecordsPerSecond = math.MaxUint32
-				backup.ParallelRead = maxServerBackupParallel
-				backup.ParallelWrite = maxServerBackupParallel
+				backup.ParallelReaders = maxServerBackupParallel
+				backup.ParallelUploadThreads = maxServerBackupParallel
 				return backup
 			},
 		},
 		{
 			// The server checks the rate against its own number of scan threads, 4.
-			name: "records per second below the minimum without parallel read",
+			name: "records per second below the minimum without parallel readers",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = 0
+				backup.ParallelReaders = 0
 				backup.RecordsPerSecond = 1
 				return backup
 			},
 			wantErr: true,
 			wantErrMsg: "records-per-second must be 0 or at least 20 for the 4 scan threads " +
-				"the server uses when parallel-read is 0, got 1",
+				"the server uses when parallel-readers is 0, got 1",
 		},
 		{
-			name: "records per second at the minimum without parallel read",
+			name: "records per second at the minimum without parallel readers",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = 0
-				backup.RecordsPerSecond = serverDefaultBackupParallelRead * minServerBackupRPSPerReader
+				backup.ParallelReaders = 0
+				backup.RecordsPerSecond = serverDefaultBackupParallelReaders * minServerBackupRPSPerReader
 				return backup
 			},
 		},
 		{
-			name: "records per second at the minimum for parallel read",
+			name: "records per second at the minimum for parallel readers",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = 4
+				backup.ParallelReaders = 4
 				backup.RecordsPerSecond = 4 * minServerBackupRPSPerReader
 				return backup
 			},
 		},
 		{
-			name: "records per second below the minimum for parallel read",
+			name: "records per second below the minimum for parallel readers",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = 4
+				backup.ParallelReaders = 4
 				backup.RecordsPerSecond = 4*minServerBackupRPSPerReader - 1
 				return backup
 			},
 			wantErr:    true,
-			wantErrMsg: "records-per-second must be 0 or at least 20 for 4 parallel-read, got 19",
+			wantErrMsg: "records-per-second must be 0 or at least 20 for 4 parallel-readers, got 19",
 		},
 		{
 			name: "negative records per second",
@@ -228,34 +228,34 @@ func TestServerBackup_Validate(t *testing.T) {
 			wantErrMsg: "records-per-second must be between 0 and 4294967295, got 4294967296",
 		},
 		{
-			name: "parallel read above range",
+			name: "parallel readers above range",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = maxServerBackupParallel + 1
+				backup.ParallelReaders = maxServerBackupParallel + 1
 				return backup
 			},
 			wantErr:    true,
-			wantErrMsg: "parallel-read must be between 0 and 128, got 129",
+			wantErrMsg: "parallel-readers must be between 0 and 128, got 129",
 		},
 		{
-			name: "negative parallel read",
+			name: "negative parallel readers",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelRead = -1
+				backup.ParallelReaders = -1
 				return backup
 			},
 			wantErr:    true,
-			wantErrMsg: "parallel-read must be between 0 and 128, got -1",
+			wantErrMsg: "parallel-readers must be between 0 and 128, got -1",
 		},
 		{
-			name: "parallel write above range",
+			name: "parallel upload threads above range",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
-				backup.ParallelWrite = maxServerBackupParallel + 1
+				backup.ParallelUploadThreads = maxServerBackupParallel + 1
 				return backup
 			},
 			wantErr:    true,
-			wantErrMsg: "parallel-write must be between 0 and 128, got 129",
+			wantErrMsg: "parallel-upload-threads must be between 0 and 128, got 129",
 		},
 	}
 

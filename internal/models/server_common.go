@@ -54,16 +54,9 @@ type ServerCommon struct {
 	// instead of following the job until it ends.
 	Async bool
 
-	// The settings below are checked by backup and restore against their own limits.
-
-	// ParallelRead is the number of read threads per node: the scan threads of a backup,
-	// the threads that download the backup files of a restore.
-	ParallelRead int
-	// ParallelWrite is the number of write threads per node: the upload threads of a
-	// backup, the threads that apply the records of a restore.
-	ParallelWrite int
 	// RecordsPerSecond limits the records per second each node reads (backup) or
-	// applies (restore). Zero means no limit.
+	// applies (restore). Zero means no limit. Its range is checked here, and backup also
+	// checks it against its scan threads.
 	RecordsPerSecond int
 }
 

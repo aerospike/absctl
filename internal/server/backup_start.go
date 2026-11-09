@@ -21,6 +21,7 @@ import (
 	"strconv"
 
 	"github.com/aerospike/absctl/internal/models"
+	"github.com/aerospike/backup-go"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
@@ -34,7 +35,19 @@ func (s *Service) StartBackup(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	if err := s.checkClusterStable(ctx, client, s.backupCfg.Start.Namespace); err != nil {
+	return s.startBackup(ctx, client)
+}
+
+// backupStarter is the part of the info client that starts a backup and follows it.
+type backupStarter interface {
+	stabilityChecker
+	backup.ServerBackupInfo
+}
+
+// startBackup checks the cluster, requests the backup, and follows it unless Async is
+// set.
+func (s *Service) startBackup(ctx context.Context, client backupStarter) error {
+	if err := s.checkClusterStable(ctx, client, s.backupCfg.Start.Namespace, true); err != nil {
 		return err
 	}
 
@@ -130,8 +143,8 @@ func (s *Service) backupRequest() (*infomodels.RequestBackup, error) {
 		Policy:         start.BackupPolicy(),
 
 		BackupRPS:                    start.RecordsPerSecond,
-		BackupWorkerThreads:          start.ParallelRead,
-		BackupUploadThreads:          start.ParallelWrite,
+		BackupWorkerThreads:          start.ParallelReaders,
+		BackupUploadThreads:          start.ParallelUploadThreads,
 		BackupS3ThroughputTargetGbps: s.backupCfg.S3Throughput,
 	}, nil
 }
