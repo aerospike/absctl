@@ -68,12 +68,12 @@ func (f *ServerRestore) NewFlagSet() *pflag.FlagSet {
 		"Return as soon as the cluster accepts the restore, without\n"+
 			"following its progress. Use the progress command to follow\n"+
 			"the restore later.")
-	flagSet.IntVar(&f.ParallelRead, "parallel-read",
-		models.DefaultServerRestoreParallelRead,
+	flagSet.IntVar(&f.ParallelDownloadThreads, "parallel-download-threads",
+		models.DefaultServerRestoreParallelDownloadThreads,
 		"Number of threads per node that download the backup files, from 1 to 128.")
-	flagSet.IntVarP(&f.ParallelWrite, "parallel-write", "w",
-		models.DefaultServerRestoreParallelWrite,
-		"Number of threads per node that write the records, from 1 to 128.")
+	flagSet.IntVarP(&f.ParallelWriters, "parallel-writers", "w",
+		models.DefaultServerRestoreParallelWriters,
+		"Number of threads per node that write the data, from 1 to 128.")
 	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
 		models.DefaultServerRestoreRecordsPerSecond,
 		"Limit the records per second each node writes. If 0, no limit is applied.")

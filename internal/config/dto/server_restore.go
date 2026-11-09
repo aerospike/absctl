@@ -72,45 +72,45 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 // ServerRestoreConfig maps the "restore" section, used by
 // "snapshot-restore start".
 type ServerRestoreConfig struct {
-	Namespace         *string  `yaml:"namespace"`
-	BackupIDs         []string `yaml:"backup-ids"`
-	Path              *string  `yaml:"path"`
-	IncrementalPath   *string  `yaml:"incremental-path"`
-	SetList           []string `yaml:"set-list"`
-	FilterExp         *string  `yaml:"filter-exp"`
-	NoIndexes         *bool    `yaml:"no-indexes"`
-	NoUDFs            *bool    `yaml:"no-udfs"`
-	Async             *bool    `yaml:"async"`
-	ParallelRead      *int     `yaml:"parallel-read"`
-	ParallelWrite     *int     `yaml:"parallel-write"`
-	RecordsPerSecond  *int     `yaml:"records-per-second"`
-	ExtraTTL          *int     `yaml:"extra-ttl"`
-	Policy            *string  `yaml:"policy"`
-	HydrateReplica    *bool    `yaml:"hydrate-replica"`
-	MaxInflight       *int     `yaml:"max-inflight"`
-	RetryBaseInterval *int     `yaml:"retry-base-interval"`
-	RetryMultiplier   *float64 `yaml:"retry-multiplier"`
-	RetryMaxAttempts  *int     `yaml:"retry-max-attempts"`
-	IgnoreRecordError *bool    `yaml:"ignore-record-error"`
-	ApplyMetadataLast *bool    `yaml:"apply-metadata-last"`
+	Namespace               *string  `yaml:"namespace"`
+	BackupIDs               []string `yaml:"backup-ids"`
+	Path                    *string  `yaml:"path"`
+	IncrementalPath         *string  `yaml:"incremental-path"`
+	SetList                 []string `yaml:"set-list"`
+	FilterExp               *string  `yaml:"filter-exp"`
+	NoIndexes               *bool    `yaml:"no-indexes"`
+	NoUDFs                  *bool    `yaml:"no-udfs"`
+	Async                   *bool    `yaml:"async"`
+	ParallelDownloadThreads *int     `yaml:"parallel-download-threads"`
+	ParallelWriters         *int     `yaml:"parallel-writers"`
+	RecordsPerSecond        *int     `yaml:"records-per-second"`
+	ExtraTTL                *int     `yaml:"extra-ttl"`
+	Policy                  *string  `yaml:"policy"`
+	HydrateReplica          *bool    `yaml:"hydrate-replica"`
+	MaxInflight             *int     `yaml:"max-inflight"`
+	RetryBaseInterval       *int     `yaml:"retry-base-interval"`
+	RetryMultiplier         *float64 `yaml:"retry-multiplier"`
+	RetryMaxAttempts        *int     `yaml:"retry-max-attempts"`
+	IgnoreRecordError       *bool    `yaml:"ignore-record-error"`
+	ApplyMetadataLast       *bool    `yaml:"apply-metadata-last"`
 }
 
 func defaultServerRestoreConfig() ServerRestoreConfig {
 	return ServerRestoreConfig{
-		Namespace:        new(models.DefaultCommonNamespace),
-		BackupIDs:        []string{},
-		Path:             new(models.DefaultServerBackupPath),
-		IncrementalPath:  new(models.DefaultServerRestoreIncrementalPath),
-		SetList:          []string{},
-		FilterExp:        new(models.DefaultServerFilterExp),
-		NoIndexes:        new(models.DefaultCommonNoIndexes),
-		NoUDFs:           new(models.DefaultCommonNoUDFs),
-		Async:            new(models.DefaultServerRestoreAsync),
-		ParallelRead:     new(models.DefaultServerRestoreParallelRead),
-		ParallelWrite:    new(models.DefaultServerRestoreParallelWrite),
-		RecordsPerSecond: new(models.DefaultServerRestoreRecordsPerSecond),
-		ExtraTTL:         new(models.DefaultServerRestoreExtraTTL),
-		Policy:           new(models.DefaultServerRestorePolicy),
+		Namespace:               new(models.DefaultCommonNamespace),
+		BackupIDs:               []string{},
+		Path:                    new(models.DefaultServerBackupPath),
+		IncrementalPath:         new(models.DefaultServerRestoreIncrementalPath),
+		SetList:                 []string{},
+		FilterExp:               new(models.DefaultServerFilterExp),
+		NoIndexes:               new(models.DefaultCommonNoIndexes),
+		NoUDFs:                  new(models.DefaultCommonNoUDFs),
+		Async:                   new(models.DefaultServerRestoreAsync),
+		ParallelDownloadThreads: new(models.DefaultServerRestoreParallelDownloadThreads),
+		ParallelWriters:         new(models.DefaultServerRestoreParallelWriters),
+		RecordsPerSecond:        new(models.DefaultServerRestoreRecordsPerSecond),
+		ExtraTTL:                new(models.DefaultServerRestoreExtraTTL),
+		Policy:                  new(models.DefaultServerRestorePolicy),
 		// The settings of a single policy have no default here: an unset one is not sent,
 		// and the server applies its default.
 	}
@@ -123,27 +123,27 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 	}
 
 	return &models.ServerRestore{
-		Namespace:         derefString(r.Restore.Namespace),
-		BackupIDs:         strings.Join(r.Restore.BackupIDs, ","),
-		Path:              derefString(r.Restore.Path),
-		IncrementalPath:   derefString(r.Restore.IncrementalPath),
-		SetList:           strings.Join(r.Restore.SetList, ","),
-		FilterExp:         derefString(r.Restore.FilterExp),
-		NoIndexes:         derefBool(r.Restore.NoIndexes),
-		NoUDFs:            derefBool(r.Restore.NoUDFs),
-		Async:             derefBool(r.Restore.Async),
-		ParallelRead:      derefOr(r.Restore.ParallelRead, models.DefaultServerRestoreParallelRead),
-		ParallelWrite:     derefOr(r.Restore.ParallelWrite, models.DefaultServerRestoreParallelWrite),
-		RecordsPerSecond:  derefInt(r.Restore.RecordsPerSecond),
-		ExtraTTL:          derefInt(r.Restore.ExtraTTL),
-		Policy:            derefString(r.Restore.Policy),
-		HydrateReplica:    cloneValue(r.Restore.HydrateReplica),
-		MaxInflight:       cloneValue(r.Restore.MaxInflight),
-		RetryBaseInterval: cloneValue(r.Restore.RetryBaseInterval),
-		RetryMultiplier:   cloneValue(r.Restore.RetryMultiplier),
-		RetryMaxAttempts:  cloneValue(r.Restore.RetryMaxAttempts),
-		IgnoreRecordError: cloneValue(r.Restore.IgnoreRecordError),
-		ApplyMetadataLast: cloneValue(r.Restore.ApplyMetadataLast),
+		Namespace:               derefString(r.Restore.Namespace),
+		BackupIDs:               strings.Join(r.Restore.BackupIDs, ","),
+		Path:                    derefString(r.Restore.Path),
+		IncrementalPath:         derefString(r.Restore.IncrementalPath),
+		SetList:                 strings.Join(r.Restore.SetList, ","),
+		FilterExp:               derefString(r.Restore.FilterExp),
+		NoIndexes:               derefBool(r.Restore.NoIndexes),
+		NoUDFs:                  derefBool(r.Restore.NoUDFs),
+		Async:                   derefBool(r.Restore.Async),
+		ParallelDownloadThreads: derefInt(r.Restore.ParallelDownloadThreads),
+		ParallelWriters:         derefInt(r.Restore.ParallelWriters),
+		RecordsPerSecond:        derefInt(r.Restore.RecordsPerSecond),
+		ExtraTTL:                derefInt(r.Restore.ExtraTTL),
+		Policy:                  derefString(r.Restore.Policy),
+		HydrateReplica:          cloneValue(r.Restore.HydrateReplica),
+		MaxInflight:             cloneValue(r.Restore.MaxInflight),
+		RetryBaseInterval:       cloneValue(r.Restore.RetryBaseInterval),
+		RetryMultiplier:         cloneValue(r.Restore.RetryMultiplier),
+		RetryMaxAttempts:        cloneValue(r.Restore.RetryMaxAttempts),
+		IgnoreRecordError:       cloneValue(r.Restore.IgnoreRecordError),
+		ApplyMetadataLast:       cloneValue(r.Restore.ApplyMetadataLast),
 	}
 }
 
