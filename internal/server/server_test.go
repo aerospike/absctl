@@ -100,6 +100,34 @@ type fakeInfoClient struct {
 	abortErr   error
 	abortJobID string
 	abortCalls int
+
+	fakeStability
+
+	startCalls int
+}
+
+// fakeStability answers the stability checks of the fake info clients and records how
+// they were made.
+type fakeStability struct {
+	// unstable reports migrations in flight, so the zero value is a stable cluster.
+	unstable bool
+	// stableCalls counts the stability checks, and stableIgnoreMigrations is the
+	// ignoreMigrations the last one was made with.
+	stableCalls            int
+	stableIgnoreMigrations bool
+}
+
+func (f *fakeStability) GetClusterStable(_ context.Context, _ string, ignoreMigrations bool) (bool, error) {
+	f.stableCalls++
+	f.stableIgnoreMigrations = ignoreMigrations
+
+	return !f.unstable, nil
+}
+
+func (f *fakeInfoClient) StartBackup(_ context.Context, _ *infomodels.RequestBackup) (string, error) {
+	f.startCalls++
+
+	return testJobID, nil
 }
 
 func (f *fakeInfoClient) GetBackupStatus(
@@ -159,8 +187,7 @@ type fakeRestoreInfoClient struct {
 	clearTargets []string
 	clearCalls   int
 
-	// unstable reports migrations in flight, so the zero value is a stable cluster.
-	unstable bool
+	fakeStability
 
 	startErr error
 	// startSent makes a failed start wrap asinfo.ErrOutcomeUnknown, as one whose answer
@@ -181,10 +208,6 @@ func withUnknownOutcome(err error) error {
 // testGeneratedRestoreJobID is the job id the fake client generates for a restore it
 // starts.
 const testGeneratedRestoreJobID = "261105T120000-rs01"
-
-func (f *fakeRestoreInfoClient) GetClusterStable(_ context.Context, _ string) (bool, error) {
-	return !f.unstable, nil
-}
 
 func (f *fakeRestoreInfoClient) StartRestore(
 	_ context.Context, request *infomodels.RequestRestore,
@@ -257,13 +280,17 @@ type fakeClusterInfo struct {
 
 	stable    bool
 	stableErr error
+	// gotIgnoreMigrations is the ignoreMigrations the last stability check was made with.
+	gotIgnoreMigrations bool
 }
 
 func (f *fakeClusterInfo) GetVersion(_ context.Context) (infomodels.AerospikeVersion, error) {
 	return f.version, f.versionErr
 }
 
-func (f *fakeClusterInfo) GetClusterStable(_ context.Context, _ string) (bool, error) {
+func (f *fakeClusterInfo) GetClusterStable(_ context.Context, _ string, ignoreMigrations bool) (bool, error) {
+	f.gotIgnoreMigrations = ignoreMigrations
+
 	return f.stable, f.stableErr
 }
 
@@ -391,14 +418,22 @@ func TestServiceCheckClusterStable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		client     *fakeClusterInfo
-		wantErr    error
-		wantErrMsg string
+		name                 string
+		client               *fakeClusterInfo
+		giveIgnoreMigrations bool
+		wantErr              error
+		wantErrMsg           string
 	}{
 		{
 			name:   "accepts a stable namespace",
 			client: &fakeClusterInfo{stable: true},
+		},
+		{
+			// The check is asked to ignore migrations, and the request has to reach the
+			// cluster as given.
+			name:                 "passes ignore migrations to the cluster",
+			client:               &fakeClusterInfo{stable: true},
+			giveIgnoreMigrations: true,
 		},
 		{
 			// The namespace belongs in the failure: it is the one the job would have
@@ -424,7 +459,8 @@ func TestServiceCheckClusterStable(t *testing.T) {
 
 			svc, _ := newTestService(t)
 
-			err := svc.checkClusterStable(t.Context(), tt.client, testNamespace)
+			err := svc.checkClusterStable(t.Context(), tt.client, testNamespace, tt.giveIgnoreMigrations)
+			assert.Equal(t, tt.giveIgnoreMigrations, tt.client.gotIgnoreMigrations)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)

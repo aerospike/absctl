@@ -37,19 +37,19 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 	t.Parallel()
 
 	const (
-		testPath              = "backups/daily"
-		testSetList           = "set1,set2"
-		testFilterExp         = "kwGTUQKkYmluMQE="
-		testParallelWrite     = "16"
-		testRecordsPerSecond  = "1000"
-		testMaxInflight       = "500"
-		testRetryBaseInterval = "2000"
-		testRetryMultiplier   = "1.5"
-		testRetryMaxAttempts  = "3"
-		testParallelRead      = "32"
-		testIncrementalPath   = "backups/incr"
-		testExtraTTL          = "3600"
-		testPolicy            = "fuzzy"
+		testPath                    = "backups/daily"
+		testSetList                 = "set1,set2"
+		testFilterExp               = "kwGTUQKkYmluMQE="
+		testParallelWriters         = "16"
+		testRecordsPerSecond        = "1000"
+		testMaxInflight             = "500"
+		testRetryBaseInterval       = "2000"
+		testRetryMultiplier         = "1.5"
+		testRetryMaxAttempts        = "3"
+		testParallelDownloadThreads = "32"
+		testIncrementalPath         = "backups/incr"
+		testExtraTTL                = "3600"
+		testPolicy                  = "fuzzy"
 	)
 
 	want := &models.ServerRestore{
@@ -61,7 +61,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		NoIndexes:         true,
 		NoUDFs:            true,
 		Policy:            testPolicy,
-		ParallelWrite:     16,
+		ParallelWriters:   16,
 		RecordsPerSecond:  1000,
 		MaxInflight:       new(500),
 		RetryBaseInterval: new(2000),
@@ -74,7 +74,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		ExtraTTL:          3600,
 		HydrateReplica:    new(false),
 
-		ParallelRead: 32,
+		ParallelDownloadThreads: 32,
 	}
 
 	commonArgs := []string{
@@ -88,7 +88,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 		"--retry-multiplier", testRetryMultiplier,
 		"--retry-max-attempts", testRetryMaxAttempts,
 		"--ignore-record-error",
-		"--parallel-read", testParallelRead,
+		"--parallel-download-threads", testParallelDownloadThreads,
 		"--apply-metadata-last",
 		"--incremental-path", testIncrementalPath,
 		flagAsync,
@@ -106,7 +106,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 				flagRestoreNamespace, testRestoreNamespace,
 				"--set-list", testSetList,
 				"--no-indexes",
-				"--parallel-write", testParallelWrite,
+				"--parallel-writers", testParallelWriters,
 				"--records-per-second", testRecordsPerSecond,
 			}, commonArgs...),
 		},
@@ -116,7 +116,7 @@ func TestServerRestore_NewFlagSet(t *testing.T) {
 				"-n", testRestoreNamespace,
 				"-s", testSetList,
 				"-I",
-				"-w", testParallelWrite,
+				"-w", testParallelWriters,
 				"-L", testRecordsPerSecond,
 			}, commonArgs...),
 		},
@@ -153,9 +153,9 @@ func TestServerRestore_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerRestorePolicy, result.Policy)
-	assert.Equal(t, models.DefaultServerRestoreParallelWrite, result.ParallelWrite)
+	assert.Equal(t, models.DefaultServerRestoreParallelWriters, result.ParallelWriters)
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, result.RecordsPerSecond)
-	assert.Equal(t, models.DefaultServerRestoreParallelRead, result.ParallelRead)
+	assert.Equal(t, models.DefaultServerRestoreParallelDownloadThreads, result.ParallelDownloadThreads)
 	assert.Equal(t, models.DefaultServerRestoreIncrementalPath, result.IncrementalPath)
 	assert.Equal(t, models.DefaultServerRestoreAsync, result.Async)
 	assert.Equal(t, models.DefaultServerRestoreExtraTTL, result.ExtraTTL)

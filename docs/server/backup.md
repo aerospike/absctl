@@ -71,46 +71,56 @@ Aerospike Client Flags:
       --client-login-timeout int   Specifies the login operation timeout for external authentication methods such as LDAP. (default 10000)
 
 Backup Flags:
-  -n, --namespace string         The namespace to be backed up.
-      --path string              Key prefix in the bucket to write the backup under.
-  -a, --modified-after string    <YYYY-MM-DD_HH:MM:SS>
-                                 Perform an incremental backup; only include records
-                                 that changed after the given date and time. The system's
-                                 local timezone applies. If only HH:MM:SS is specified, then
-                                 today's date is assumed as the date. If only YYYY-MM-DD is
-                                 specified, then 00:00:00 (midnight) is assumed as the time.
-                                 Must be after 2010-01-01 and not in the future.
+  -n, --namespace string              The namespace to be backed up.
+      --path string                   Key prefix in the bucket to write the backup under.
+  -a, --modified-after string         <YYYY-MM-DD_HH:MM:SS>
+                                      Perform an incremental backup; only include records
+                                      that changed after the given date and time. The system's
+                                      local timezone applies. If only HH:MM:SS is specified, then
+                                      today's date is assumed as the date. If only YYYY-MM-DD is
+                                      specified, then 00:00:00 (midnight) is assumed as the time.
+                                      Must be after 2010-01-01 and not in the future.
 
-  -b, --modified-before string   <YYYY-MM-DD_HH:MM:SS>
-                                 Only include records that last changed before the given
-                                 date and time. May be combined with --modified-after to specify a range.
-                                 Must be after 2010-01-01.
-  -s, --set-list string          The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
-                                 If empty, include all sets.
-  -B, --bin-list string          Only include the given bins in the backup.
-                                 Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
-                                 If empty include all bins.
-  -f, --filter-exp string        Base64 encoded filter expression. Only live records are filtered,
-                                 tombstones are always backed up.
-  -I, --no-indexes               Exclude indexes from the backup.
-  -u, --no-udfs                  Exclude user-defined functions from the backup.
-      --no-config                Do not upload the config file of each node with the backup.
-      --policy string            Backup policy: strict, best-effort or fuzzy. strict aborts the backup
-                                 on any failure. best-effort commits the backup as fuzzy instead of
-                                 aborting it on a failure after the base scan is durable cluster-wide.
-                                 fuzzy runs the base scan only, without the change stream.
-                                 The value is case-insensitive. If empty, the server default is used.
-      --async                    Return as soon as the cluster accepts the backup, without
-                                 following its progress. Use the progress command to follow
-                                 the backup later.
-  -L, --records-per-second int   Limit the records per second of each scan on each node.
-                                 A non-zero value must be at least 5 x --parallel-read, or 20 when
-                                 --parallel-read is 0 and the server uses its default of 4 threads.
-                                 If 0, the server default is used, which is no limit.
-      --parallel-read int        Number of scan threads per node, from 1 to 128.
-                                 If 0, the server default is used. (default 8)
-      --parallel-write int       Number of upload threads per node, from 1 to 128.
-                                 If 0, the server default is used. (default 8)
+  -b, --modified-before string        <YYYY-MM-DD_HH:MM:SS>
+                                      Only include records that last changed before the given
+                                      date and time. May be combined with --modified-after to specify a range.
+                                      Must be after 2010-01-01.
+  -s, --set-list string               The set(s) to be backed up. Accepts comma-separated values with no spaces: 'set1,set2,set3'
+                                      If empty, include all sets.
+  -B, --bin-list string               Only include the given bins in the backup.
+                                      Accepts comma-separated values with no spaces: 'bin1,bin2,bin3'
+                                      If empty include all bins.
+  -f, --filter-exp string             Base64 encoded filter expression. Only live records are filtered,
+                                      tombstones are always backed up.
+  -I, --no-indexes                    Exclude indexes from the backup.
+  -u, --no-udfs                       Exclude user-defined functions from the backup.
+      --no-config                     Do not upload the config file of each node with the backup.
+      --policy string                 Backup policy: strict, best-effort or fuzzy. strict aborts the backup
+                                      on any failure. best-effort commits the backup as fuzzy instead of
+                                      aborting it on a failure after the base scan is durable cluster-wide.
+                                      fuzzy runs the base scan only, without the change stream.
+                                      The value is case-insensitive. If empty, the server default is used.
+      --async                         Return as soon as the cluster accepts the backup, without
+                                      following its progress. Use the progress command to follow
+                                      the backup later.
+  -L, --records-per-second int        Limit the records per second of each scan on each node.
+                                      A non-zero value must be at least 5 x --parallel-readers, or 20 when
+                                      --parallel-readers is 0 and the server uses its default of 4 threads.
+                                      If 0, the server default is used, which is no limit.
+      --parallel-readers int          Number of scan threads per node, from 1 to 128. The threads read the
+                                      master partitions of the namespace and pack the records into segments
+                                      for upload. Raise it when the scan is limited by CPU or device reads.
+                                      It does not help when the upload is the bottleneck: the scan pauses
+                                      while the upload queue is full. More threads need more memory on each
+                                      node for segment buffers, which is not counted against namespace memory.
+                                      Scan and upload threads together must fit within the max-backup-threads
+                                      server config. If 0, the server default is used, which is 4.
+      --parallel-upload-threads int   Number of upload threads per node, from 1 to 128. The threads take the
+                                      segments the scan threads fill and upload them to the object storage.
+                                      Raise it when the upload is the bottleneck. Upload threads add no
+                                      segment buffers. Scan and upload threads together must fit within the
+                                      max-backup-threads server config.
+                                      If 0, the server default is used, which is 8.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -317,6 +327,8 @@ Validate available server-integrated backups from the configured storage.
 
 Usage:
   absctl snapshot-backup validate [flags]
+
+Validation is done by the absctl tool; nothing is sent to the server.
 
 General Flags:
   -Z, --help               Display help information.
@@ -567,16 +579,26 @@ backup:
   # the backup later.
   async: false
   # Limit the records per second of each scan on each node.
-  # A non-zero value must be at least 5 x parallel-read, or 20 when
-  # parallel-read is 0 and the server uses its default of 4 threads.
+  # A non-zero value must be at least 5 x parallel-readers, or 20 when
+  # parallel-readers is 0 and the server uses its default of 4 threads.
   # If 0, the server default is used, which is no limit.
   records-per-second: 0
-  # Number of scan threads per node, from 1 to 128.
-  # If 0, the server default is used.
-  parallel-read: 8
-  # Number of upload threads per node, from 1 to 128.
-  # If 0, the server default is used.
-  parallel-write: 8
+  # Number of scan threads per node, from 1 to 128. The threads read the
+  # master partitions of the namespace and pack the records into segments
+  # for upload. Raise it when the scan is limited by CPU or device reads.
+  # It does not help when the upload is the bottleneck: the scan pauses
+  # while the upload queue is full. More threads need more memory on each
+  # node for segment buffers, which is not counted against namespace memory.
+  # Scan and upload threads together must fit within the max-backup-threads
+  # server config. If 0, the server default is used, which is 4.
+  parallel-readers: 0
+  # Number of upload threads per node, from 1 to 128. The threads take the
+  # segments the scan threads fill and upload them to the object storage.
+  # Raise it when the upload is the bottleneck. Upload threads add no
+  # segment buffers. Scan and upload threads together must fit within the
+  # max-backup-threads server config.
+  # If 0, the server default is used, which is 8.
+  parallel-upload-threads: 0
 list:
   # Path to list backups from.
   path: backup_dir

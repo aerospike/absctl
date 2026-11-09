@@ -55,7 +55,7 @@ type versionGetter interface {
 
 // stabilityChecker reports whether a namespace has migrations in flight.
 type stabilityChecker interface {
-	GetClusterStable(ctx context.Context, namespace string) (bool, error)
+	GetClusterStable(ctx context.Context, namespace string, ignoreMigrations bool) (bool, error)
 }
 
 // Service represents a server integrated backup and restore service.
@@ -217,8 +217,9 @@ func (s *Service) checkServerVersion(ctx context.Context, client versionGetter) 
 //
 // The server version is checked when the info client is opened, so it is not repeated
 // here.
-func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecker, namespace string) error {
-	isStable, err := client.GetClusterStable(ctx, namespace)
+func (s *Service) checkClusterStable(ctx context.Context, client stabilityChecker, namespace string,
+	ignoreMigrations bool) error {
+	isStable, err := client.GetClusterStable(ctx, namespace, ignoreMigrations)
 	if err != nil {
 		return fmt.Errorf("failed to check cluster stability: %w", err)
 	}

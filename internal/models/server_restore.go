@@ -24,15 +24,14 @@ import (
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 )
 
-// Limits of the restore settings, as enforced by the server.
+// Limits of the restore settings, as enforced by the server. Zero leaves a thread count
+// to the server default, so it is accepted by each of them.
 const (
-	minServerRestoreParallelWrite   = 1
-	maxServerRestoreParallelWrite   = 128
-	minServerRestoreMaxInflight     = 1
-	maxServerRestoreMaxInflight     = 100_000
-	minServerRestoreRetryMultiplier = 1.0
-	minServerRestoreParallelRead    = 1
-	maxServerRestoreParallelRead    = 128
+	maxServerRestoreParallelWriters         = 128
+	minServerRestoreMaxInflight             = 1
+	maxServerRestoreMaxInflight             = 100_000
+	minServerRestoreRetryMultiplier         = 1.0
+	maxServerRestoreParallelDownloadThreads = 128
 	// maxServerRestoreExtraTTL is ten years, in seconds.
 	maxServerRestoreExtraTTL = 315_360_000
 	// maxServerRestoreBackupIDs is the number of backups a single restore reads at most.
@@ -55,6 +54,12 @@ type ServerRestore struct {
 
 	// ExtraTTL is added to the expiry of every restored record that expires, in seconds.
 	ExtraTTL int
+	// ParallelDownloadThreads is the number of threads per node that download the backup
+	// files. Zero leaves it to the server default.
+	ParallelDownloadThreads int
+	// ParallelWriters is the number of threads per node that apply the records. Zero
+	// leaves it to the server default.
+	ParallelWriters int
 
 	// The fields below apply to one policy only, and the server refuses each of them,
 	// whatever its value, with the other policy. Nil leaves a field unset: it is not
@@ -154,14 +159,13 @@ func (s *ServerRestore) validateIncrementalPath() error {
 // validateJobSettings checks the settings that apply to both cold and fuzzy restore.
 func (s *ServerRestore) validateJobSettings() error {
 	switch {
-	case s.ParallelRead < minServerRestoreParallelRead ||
-		s.ParallelRead > maxServerRestoreParallelRead:
-		return fmt.Errorf("parallel-read must be between %d and %d, got %d",
-			minServerRestoreParallelRead, maxServerRestoreParallelRead,
-			s.ParallelRead)
-	case s.ParallelWrite < minServerRestoreParallelWrite || s.ParallelWrite > maxServerRestoreParallelWrite:
-		return fmt.Errorf("parallel-write must be between %d and %d, got %d",
-			minServerRestoreParallelWrite, maxServerRestoreParallelWrite, s.ParallelWrite)
+	case s.ParallelDownloadThreads < 0 ||
+		s.ParallelDownloadThreads > maxServerRestoreParallelDownloadThreads:
+		return fmt.Errorf("parallel-download-threads must be between 0 and %d, got %d",
+			maxServerRestoreParallelDownloadThreads, s.ParallelDownloadThreads)
+	case s.ParallelWriters < 0 || s.ParallelWriters > maxServerRestoreParallelWriters:
+		return fmt.Errorf("parallel-writers must be between 0 and %d, got %d",
+			maxServerRestoreParallelWriters, s.ParallelWriters)
 	case s.ExtraTTL < 0 || s.ExtraTTL > maxServerRestoreExtraTTL:
 		return fmt.Errorf("extra-ttl must be between 0 and %d, got %d",
 			maxServerRestoreExtraTTL, s.ExtraTTL)
