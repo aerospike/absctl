@@ -107,20 +107,10 @@ Backup Flags:
                                       A non-zero value must be at least 5 x --parallel-readers, or 20 when
                                       --parallel-readers is 0 and the server uses its default of 4 threads.
                                       If 0, the server default is used, which is no limit.
-      --parallel-readers int          Number of scan threads per node, from 1 to 128. The threads read the
-                                      master partitions of the namespace and pack the records into segments
-                                      for upload. Raise it when the scan is limited by CPU or device reads.
-                                      It does not help when the upload is the bottleneck: the scan pauses
-                                      while the upload queue is full. More threads need more memory on each
-                                      node for segment buffers, which is not counted against namespace memory.
-                                      Scan and upload threads together must fit within the max-backup-threads
-                                      server config. If 0, the server default is used, which is 4.
-      --parallel-upload-threads int   Number of upload threads per node, from 1 to 128. The threads take the
-                                      segments the scan threads fill and upload them to the object storage.
-                                      Raise it when the upload is the bottleneck. Upload threads add no
-                                      segment buffers. Scan and upload threads together must fit within the
-                                      max-backup-threads server config.
-                                      If 0, the server default is used, which is 8.
+      --parallel-readers int          Number of scan threads per node, from 1 to 128.
+                                      If 0, the server default is used.
+      --parallel-upload-threads int   Number of upload threads per node, from 1 to 128.
+                                      If 0, the server default is used.
 
 AWS Storage Flags:
 For S3, the storage bucket name must be set with the --s3-bucket-name flag.
@@ -583,21 +573,11 @@ backup:
   # parallel-readers is 0 and the server uses its default of 4 threads.
   # If 0, the server default is used, which is no limit.
   records-per-second: 0
-  # Number of scan threads per node, from 1 to 128. The threads read the
-  # master partitions of the namespace and pack the records into segments
-  # for upload. Raise it when the scan is limited by CPU or device reads.
-  # It does not help when the upload is the bottleneck: the scan pauses
-  # while the upload queue is full. More threads need more memory on each
-  # node for segment buffers, which is not counted against namespace memory.
-  # Scan and upload threads together must fit within the max-backup-threads
-  # server config. If 0, the server default is used, which is 4.
+  # Number of scan threads per node, from 1 to 128.
+  # If 0, the server default is used.
   parallel-readers: 0
-  # Number of upload threads per node, from 1 to 128. The threads take the
-  # segments the scan threads fill and upload them to the object storage.
-  # Raise it when the upload is the bottleneck. Upload threads add no
-  # segment buffers. Scan and upload threads together must fit within the
-  # max-backup-threads server config.
-  # If 0, the server default is used, which is 8.
+  # Number of upload threads per node, from 1 to 128.
+  # If 0, the server default is used.
   parallel-upload-threads: 0
 list:
   # Path to list backups from.

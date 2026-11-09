@@ -95,21 +95,7 @@ Restore Flags:
                                         following its progress. Use the progress command to follow
                                         the restore later.
       --parallel-download-threads int   Number of threads per node that download the backup files, from 1 to 128.
-                                        The threads fetch and verify the backup segments, partition by partition,
-                                        to hide the latency of the object storage. Raise it when the download is
-                                        the bottleneck. Each thread holds a downloaded segment, so more threads
-                                        need more memory on each node. The server uses no more threads than
-                                        there are partitions left to restore. Download threads and writers
-                                        together must fit within the max-restore-threads server config.
-                                        If 0, the server default is used, which is 8.
-  -w, --parallel-writers int            Number of threads per node that write the records, from 1 to 128.
-                                        The threads decode the downloaded segments. With the strict policy they
-                                        write the records straight into the namespace storage. With the fuzzy
-                                        policy they submit the records as write transactions, with at most
-                                        --max-inflight writes in flight. Raise it when decoding and writing the
-                                        records is the bottleneck. Download threads and writers together must
-                                        fit within the max-restore-threads server config.
-                                        If 0, the server default is used, which is 8.
+  -w, --parallel-writers int            Number of threads per node that write the data, from 1 to 128.
   -L, --records-per-second int          Limit the records per second each node writes. If 0, no limit is applied.
       --extra-ttl int                   Seconds to add to the expiry of every restored record that expires,
                                         from 0 to 315360000 (10 years). Records that never expire are unchanged.
@@ -632,22 +618,8 @@ restore:
   # the restore later.
   async: false
   # Number of threads per node that download the backup files, from 1 to 128.
-  # The threads fetch and verify the backup segments, partition by partition,
-  # to hide the latency of the object storage. Raise it when the download is
-  # the bottleneck. Each thread holds a downloaded segment, so more threads
-  # need more memory on each node. The server uses no more threads than
-  # there are partitions left to restore. Download threads and writers
-  # together must fit within the max-restore-threads server config.
-  # If 0, the server default is used, which is 8.
   parallel-download-threads: 0
-  # Number of threads per node that write the records, from 1 to 128.
-  # The threads decode the downloaded segments. With the strict policy they
-  # write the records straight into the namespace storage. With the fuzzy
-  # policy they submit the records as write transactions, with at most
-  # max-inflight writes in flight. Raise it when decoding and writing the
-  # records is the bottleneck. Download threads and writers together must
-  # fit within the max-restore-threads server config.
-  # If 0, the server default is used, which is 8.
+  # Number of threads per node that write the data, from 1 to 128.
   parallel-writers: 0
   # Limit the records per second each node writes. If 0, no limit is applied.
   records-per-second: 0
