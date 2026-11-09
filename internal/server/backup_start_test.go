@@ -28,13 +28,63 @@ import (
 )
 
 const (
-	testModifiedAfter  = "2024-01-01_00:00:00"
-	testRequestBinList = "bin1"
-	testBackupRPS      = 5000
-	testParallelRead   = 8
-	testParallelWrite  = 4
-	testS3Throughput   = 10
+	testModifiedAfter         = "2024-01-01_00:00:00"
+	testRequestBinList        = "bin1"
+	testBackupRPS             = 5000
+	testParallelReaders       = 8
+	testParallelUploadThreads = 4
+	testS3Throughput          = 10
 )
+
+// TestServiceStartBackup covers the checks made before a backup is requested.
+func TestServiceStartBackup(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		giveUnstable   bool
+		wantErr        error
+		wantStartCalls int
+	}{
+		{
+			name:           "starts on a stable cluster",
+			wantStartCalls: 1,
+		},
+		{
+			name:         "does not start on an unstable cluster",
+			giveUnstable: true,
+			wantErr:      errClusterNotStable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc, _ := newTestService(t)
+			// Async returns once the backup is accepted, so the backup is not followed.
+			svc.backupCfg.Start = &models.ServerBackup{Namespace: testRequestNamespace, Async: true}
+			svc.backupCfg.AwsS3 = testRequestS3()
+
+			// stableIgnoreMigrations starts as the opposite of what a backup asks for, so
+			// that a check made without it is caught.
+			client := &fakeInfoClient{unstable: tt.giveUnstable}
+
+			err := svc.startBackup(t.Context(), client)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			// A backup asks the stability check to ignore migrations.
+			assert.Equal(t, 1, client.stableCalls)
+			assert.True(t, client.stableIgnoreMigrations)
+			assert.Equal(t, tt.wantStartCalls, client.startCalls)
+		})
+	}
+}
 
 func TestServiceBackupRequest(t *testing.T) {
 	t.Parallel()
@@ -73,9 +123,9 @@ func TestServiceBackupRequest(t *testing.T) {
 				NoConfig:      true,
 				Policy:        string(infomodels.BackupPolicyBestEffort),
 
-				RecordsPerSecond: testBackupRPS,
-				ParallelRead:     testParallelRead,
-				ParallelWrite:    testParallelWrite,
+				RecordsPerSecond:      testBackupRPS,
+				ParallelReaders:       testParallelReaders,
+				ParallelUploadThreads: testParallelUploadThreads,
 			},
 			giveS3Throughput: testS3Throughput,
 			want: func() *infomodels.RequestBackup {
@@ -94,8 +144,8 @@ func TestServiceBackupRequest(t *testing.T) {
 					Policy:        infomodels.BackupPolicyBestEffort,
 
 					BackupRPS:                    testBackupRPS,
-					BackupWorkerThreads:          testParallelRead,
-					BackupUploadThreads:          testParallelWrite,
+					BackupWorkerThreads:          testParallelReaders,
+					BackupUploadThreads:          testParallelUploadThreads,
 					BackupS3ThroughputTargetGbps: testS3Throughput,
 				}
 			},

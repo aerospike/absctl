@@ -31,11 +31,11 @@ const (
 func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
-			Namespace:     testServerNamespace,
-			BackupIDs:     testServerJobID,
-			ParallelWrite: models.DefaultServerRestoreParallelWrite,
+			Namespace:       testServerNamespace,
+			BackupIDs:       testServerJobID,
+			ParallelWriters: models.DefaultServerRestoreParallelWriters,
 
-			ParallelRead: models.DefaultServerRestoreParallelRead,
+			ParallelDownloadThreads: models.DefaultServerRestoreParallelDownloadThreads,
 		},
 		App:          &models.App{},
 		ClientConfig: &client.AerospikeConfig{},

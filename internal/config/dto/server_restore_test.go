@@ -48,9 +48,9 @@ func TestDefaultServerRestoreSections(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(restore.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(restore.NoUDFs))
 	assert.Equal(t, models.DefaultServerRestorePolicy, derefString(restore.Policy))
-	assert.Equal(t, models.DefaultServerRestoreParallelWrite, derefInt(restore.ParallelWrite))
+	assert.Equal(t, models.DefaultServerRestoreParallelWriters, derefInt(restore.ParallelWriters))
 	assert.Equal(t, models.DefaultServerRestoreRecordsPerSecond, derefInt(restore.RecordsPerSecond))
-	assert.Equal(t, models.DefaultServerRestoreParallelRead, derefInt(restore.ParallelRead))
+	assert.Equal(t, models.DefaultServerRestoreParallelDownloadThreads, derefInt(restore.ParallelDownloadThreads))
 	assert.Equal(t, models.DefaultServerRestoreIncrementalPath, derefString(restore.IncrementalPath))
 	assert.Equal(t, models.DefaultServerRestoreAsync, derefBool(restore.Async))
 	assert.Equal(t, models.DefaultServerRestoreExtraTTL, derefInt(restore.ExtraTTL))
@@ -95,13 +95,13 @@ func TestServerRestoreToModels(t *testing.T) {
 	enabled := true
 	// The flags that differ from enabled catch a field mapped from its neighbor.
 	disabled := false
-	parallelWrite := 16
+	parallelWriters := 16
 	recordsPerSecond := 1000
 	maxInflight := 500
 	retryBaseInterval := 2000
 	retryMultiplier := 1.5
 	retryMaxAttempts := 3
-	parallelRead := 32
+	parallelDownloadThreads := 32
 	hydrateReplica := false
 	progressNamespace := "ns3"
 	abortNamespace := "ns4"
@@ -121,7 +121,7 @@ func TestServerRestoreToModels(t *testing.T) {
 			NoIndexes:         &disabled,
 			NoUDFs:            &enabled,
 			Policy:            &policy,
-			ParallelWrite:     &parallelWrite,
+			ParallelWriters:   &parallelWriters,
 			RecordsPerSecond:  &recordsPerSecond,
 			MaxInflight:       &maxInflight,
 			RetryBaseInterval: &retryBaseInterval,
@@ -134,7 +134,7 @@ func TestServerRestoreToModels(t *testing.T) {
 			ExtraTTL:          &extraTTL,
 			HydrateReplica:    &hydrateReplica,
 
-			ParallelRead: &parallelRead,
+			ParallelDownloadThreads: &parallelDownloadThreads,
 		},
 		Progress:     ServerRestoreProgressConfig{Namespace: &progressNamespace, JobID: &jobID, Watch: &enabled},
 		Abort:        ServerRestoreAbortConfig{Namespace: &abortNamespace, JobID: &jobID, Async: &enabled},
@@ -154,7 +154,7 @@ func TestServerRestoreToModels(t *testing.T) {
 		NoIndexes:         false,
 		NoUDFs:            true,
 		Policy:            policy,
-		ParallelWrite:     parallelWrite,
+		ParallelWriters:   parallelWriters,
 		RecordsPerSecond:  recordsPerSecond,
 		MaxInflight:       &maxInflight,
 		RetryBaseInterval: &retryBaseInterval,
@@ -167,7 +167,7 @@ func TestServerRestoreToModels(t *testing.T) {
 		ExtraTTL:          extraTTL,
 		HydrateReplica:    &hydrateReplica,
 
-		ParallelRead: parallelRead,
+		ParallelDownloadThreads: parallelDownloadThreads,
 	}, start)
 
 	// The model gets copies of the optional settings, so it shares no memory with the DTO.
@@ -211,13 +211,13 @@ func TestServerRestoreToModelsNullFallsBackToDefaults(t *testing.T) {
 	t.Parallel()
 
 	restore := DefaultServerRestore()
-	restore.Restore.ParallelWrite = nil
-	restore.Restore.ParallelRead = nil
+	restore.Restore.ParallelWriters = nil
+	restore.Restore.ParallelDownloadThreads = nil
 
 	start := restore.ToModelServerRestore()
 	require.NotNil(t, start)
-	assert.Equal(t, models.DefaultServerRestoreParallelWrite, start.ParallelWrite)
-	assert.Equal(t, models.DefaultServerRestoreParallelRead, start.ParallelRead)
+	assert.Equal(t, models.DefaultServerRestoreParallelWriters, start.ParallelWriters)
+	assert.Equal(t, models.DefaultServerRestoreParallelDownloadThreads, start.ParallelDownloadThreads)
 
 	// The settings of a single policy stay unset, for the server to apply its defaults.
 	assert.Nil(t, start.HydrateReplica)
