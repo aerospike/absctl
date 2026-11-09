@@ -84,28 +84,28 @@ type ServerBackupConfig struct {
 	Policy         *string  `yaml:"policy"`
 	Async          *bool    `yaml:"async"`
 
-	RecordsPerSecond *int `yaml:"records-per-second"`
-	ParallelRead     *int `yaml:"parallel-read"`
-	ParallelWrite    *int `yaml:"parallel-write"`
+	RecordsPerSecond      *int `yaml:"records-per-second"`
+	ParallelReaders       *int `yaml:"parallel-readers"`
+	ParallelUploadThreads *int `yaml:"parallel-upload-threads"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
 	return ServerBackupConfig{
-		Namespace:        new(models.DefaultCommonNamespace),
-		Path:             new(models.DefaultServerBackupPath),
-		ModifiedAfter:    new(models.DefaultBackupModifiedAfter),
-		ModifiedBefore:   new(models.DefaultBackupModifiedBefore),
-		SetList:          []string{},
-		BinList:          []string{},
-		FilterExp:        new(models.DefaultServerFilterExp),
-		NoIndexes:        new(models.DefaultCommonNoIndexes),
-		NoUDFs:           new(models.DefaultCommonNoUDFs),
-		NoConfig:         new(models.DefaultServerBackupNoConfig),
-		Policy:           new(models.DefaultServerBackupPolicy),
-		Async:            new(models.DefaultServerBackupAsync),
-		RecordsPerSecond: new(models.DefaultServerBackupRecordsPerSecond),
-		ParallelRead:     new(models.DefaultServerBackupParallelRead),
-		ParallelWrite:    new(models.DefaultServerBackupParallelWrite),
+		Namespace:             new(models.DefaultCommonNamespace),
+		Path:                  new(models.DefaultServerBackupPath),
+		ModifiedAfter:         new(models.DefaultBackupModifiedAfter),
+		ModifiedBefore:        new(models.DefaultBackupModifiedBefore),
+		SetList:               []string{},
+		BinList:               []string{},
+		FilterExp:             new(models.DefaultServerFilterExp),
+		NoIndexes:             new(models.DefaultCommonNoIndexes),
+		NoUDFs:                new(models.DefaultCommonNoUDFs),
+		NoConfig:              new(models.DefaultServerBackupNoConfig),
+		Policy:                new(models.DefaultServerBackupPolicy),
+		Async:                 new(models.DefaultServerBackupAsync),
+		RecordsPerSecond:      new(models.DefaultServerBackupRecordsPerSecond),
+		ParallelReaders:       new(models.DefaultServerBackupParallelReaders),
+		ParallelUploadThreads: new(models.DefaultServerBackupParallelUploadThreads),
 	}
 }
 
@@ -129,9 +129,9 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 		Policy:         derefString(b.Backup.Policy),
 		Async:          derefBool(b.Backup.Async),
 
-		RecordsPerSecond: derefInt(b.Backup.RecordsPerSecond),
-		ParallelRead:     derefInt(b.Backup.ParallelRead),
-		ParallelWrite:    derefInt(b.Backup.ParallelWrite),
+		RecordsPerSecond:      derefInt(b.Backup.RecordsPerSecond),
+		ParallelReaders:       derefInt(b.Backup.ParallelReaders),
+		ParallelUploadThreads: derefInt(b.Backup.ParallelUploadThreads),
 	}
 }
 

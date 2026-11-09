@@ -35,19 +35,22 @@ const (
 	errMsgRequiresStrict = "hydrate-replica requires policy strict"
 	// errMsgRestorePolicy is the common part of the unknown restore policy errors.
 	errMsgRestorePolicy = `policy must be strict or fuzzy, got "`
-	// errMsgParallelRead is the common part of the parallel read range errors.
-	errMsgParallelRead = "parallel-read must be between 1 and 128, got "
+	// errMsgParallelDownloadThreads is the common part of the parallel download threads
+	// range errors.
+	errMsgParallelDownloadThreads = "parallel-download-threads must be between 0 and 128, got "
+	// errMsgParallelWriters is the common part of the parallel writers range errors.
+	errMsgParallelWriters = "parallel-writers must be between 0 and 128, got "
 )
 
 // validServerRestore returns a cold restore with every setting at its default, as the
 // flags and the YAML config produce it: the settings of a single policy are left unset.
 func validServerRestore() *ServerRestore {
 	return &ServerRestore{
-		Namespace:        testServerNamespace,
-		BackupIDs:        testServerJobID,
-		ParallelRead:     DefaultServerRestoreParallelRead,
-		ParallelWrite:    DefaultServerRestoreParallelWrite,
-		RecordsPerSecond: DefaultServerRestoreRecordsPerSecond,
+		Namespace:               testServerNamespace,
+		BackupIDs:               testServerJobID,
+		ParallelDownloadThreads: DefaultServerRestoreParallelDownloadThreads,
+		ParallelWriters:         DefaultServerRestoreParallelWriters,
+		RecordsPerSecond:        DefaultServerRestoreRecordsPerSecond,
 	}
 }
 
@@ -116,7 +119,7 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			name: "valid fuzzy restore at the limits",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.ParallelWrite = maxServerRestoreParallelWrite
+				restore.ParallelWriters = maxServerRestoreParallelWriters
 				restore.MaxInflight = new(maxServerRestoreMaxInflight)
 				restore.RetryMultiplier = new(minServerRestoreRetryMultiplier)
 				restore.RetryMaxAttempts = new(1)
@@ -242,22 +245,22 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 			wantErrMsg: errMsgRestorePolicy + string(infomodels.BackupPolicyBestEffort),
 		},
 		{
-			name: "parallel write below range",
+			name: "negative parallel writers",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.ParallelWrite = minServerRestoreParallelWrite - 1
+				restore.ParallelWriters = -1
 				return restore
 			},
-			wantErrMsg: "parallel-write must be between 1 and 128, got 0",
+			wantErrMsg: errMsgParallelWriters + "-1",
 		},
 		{
-			name: "parallel write above range",
+			name: "parallel writers above range",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.ParallelWrite = maxServerRestoreParallelWrite + 1
+				restore.ParallelWriters = maxServerRestoreParallelWriters + 1
 				return restore
 			},
-			wantErrMsg: "parallel-write must be between 1 and 128, got 129",
+			wantErrMsg: errMsgParallelWriters + "129",
 		},
 		{
 			name: "negative records per second",
@@ -379,22 +382,22 @@ func TestServerRestore_ValidateRestoreMode(t *testing.T) {
 		},
 		{
 			// The worker threads and the rate limit apply to both kinds of restore.
-			name: "parallel write and records per second on a cold restore",
+			name: "parallel writers and records per second on a cold restore",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.ParallelWrite = 16
+				restore.ParallelWriters = 16
 				restore.RecordsPerSecond = 100
 				return restore
 			},
 		},
 		{
-			name: "parallel write out of range on a cold restore",
+			name: "parallel writers out of range on a cold restore",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.ParallelWrite = maxServerRestoreParallelWrite + 1
+				restore.ParallelWriters = maxServerRestoreParallelWriters + 1
 				return restore
 			},
-			wantErrMsg: "parallel-write must be between 1 and 128, got 129",
+			wantErrMsg: errMsgParallelWriters + "129",
 		},
 		{
 			name: "records per second above range",
@@ -642,52 +645,42 @@ func TestServerRestore_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "parallel read at the lower limit on a cold restore",
+			name: "parallel download threads at the lower limit on a cold restore",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.ParallelRead = minServerRestoreParallelRead
+				restore.ParallelDownloadThreads = 1
 				return restore
 			},
 			wantErr: false,
 		},
 		{
-			name: "parallel read at the upper limit on a fuzzy restore",
+			name: "parallel download threads at the upper limit on a fuzzy restore",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.ParallelRead = maxServerRestoreParallelRead
+				restore.ParallelDownloadThreads = maxServerRestoreParallelDownloadThreads
 				return restore
 			},
 			wantErr: false,
 		},
 		{
-			name: "parallel read below range",
+			name: "negative parallel download threads",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.ParallelRead = minServerRestoreParallelRead - 1
+				restore.ParallelDownloadThreads = -1
 				return restore
 			},
 			wantErr:    true,
-			wantErrMsg: errMsgParallelRead + "0",
+			wantErrMsg: errMsgParallelDownloadThreads + "-1",
 		},
 		{
-			name: "negative parallel read",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.ParallelRead = -1
-				return restore
-			},
-			wantErr:    true,
-			wantErrMsg: errMsgParallelRead + "-1",
-		},
-		{
-			name: "parallel read above range on a fuzzy restore",
+			name: "parallel download threads above range on a fuzzy restore",
 			restore: func() *ServerRestore {
 				restore := validServerFuzzyRestore()
-				restore.ParallelRead = maxServerRestoreParallelRead + 1
+				restore.ParallelDownloadThreads = maxServerRestoreParallelDownloadThreads + 1
 				return restore
 			},
 			wantErr:    true,
-			wantErrMsg: errMsgParallelRead + "129",
+			wantErrMsg: errMsgParallelDownloadThreads + "129",
 		},
 	}
 

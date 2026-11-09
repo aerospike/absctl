@@ -27,9 +27,9 @@ import (
 // to the server default, so it is accepted by each of them.
 const (
 	maxServerBackupParallel = 128
-	// serverDefaultBackupParallelRead is the number of scan threads the server uses
+	// serverDefaultBackupParallelReaders is the number of scan threads the server uses
 	// when none is sent.
-	serverDefaultBackupParallelRead = 4
+	serverDefaultBackupParallelReaders = 4
 	// minServerBackupRPSPerReader is how many records per second each scan thread
 	// needs at least: a non-zero limit below it is refused by the server.
 	minServerBackupRPSPerReader = 5
@@ -53,6 +53,12 @@ type ServerBackup struct {
 	BinList        string
 	// NoConfig skips the upload of the config file of each node with the backup.
 	NoConfig bool
+	// ParallelReaders is the number of scan threads per node. Zero leaves it to the
+	// server default.
+	ParallelReaders int
+	// ParallelUploadThreads is the number of upload threads per node. Zero leaves it to
+	// the server default.
+	ParallelUploadThreads int
 }
 
 // Validate checks the backup settings against the rules the server applies, so that a
@@ -172,29 +178,29 @@ func (s *ServerBackup) validatePolicy() error {
 // server refuses fails the command before the cluster is reached.
 func (s *ServerBackup) validateJobSettings() error {
 	switch {
-	case s.ParallelRead < 0 || s.ParallelRead > maxServerBackupParallel:
-		return fmt.Errorf("parallel-read must be between 0 and %d, got %d",
-			maxServerBackupParallel, s.ParallelRead)
-	case s.ParallelWrite < 0 || s.ParallelWrite > maxServerBackupParallel:
-		return fmt.Errorf("parallel-write must be between 0 and %d, got %d",
-			maxServerBackupParallel, s.ParallelWrite)
+	case s.ParallelReaders < 0 || s.ParallelReaders > maxServerBackupParallel:
+		return fmt.Errorf("parallel-readers must be between 0 and %d, got %d",
+			maxServerBackupParallel, s.ParallelReaders)
+	case s.ParallelUploadThreads < 0 || s.ParallelUploadThreads > maxServerBackupParallel:
+		return fmt.Errorf("parallel-upload-threads must be between 0 and %d, got %d",
+			maxServerBackupParallel, s.ParallelUploadThreads)
 	}
 
 	// The minimum depends on the number of scan threads: the server checks the limit
 	// against its own default when none is sent.
-	readers := s.ParallelRead
+	readers := s.ParallelReaders
 	if readers == 0 {
-		readers = serverDefaultBackupParallelRead
+		readers = serverDefaultBackupParallelReaders
 	}
 
 	minRPS := minServerBackupRPSPerReader * readers
 	if s.RecordsPerSecond > 0 && s.RecordsPerSecond < minRPS {
-		if s.ParallelRead == 0 {
+		if s.ParallelReaders == 0 {
 			return fmt.Errorf("records-per-second must be 0 or at least %d for the %d scan threads "+
-				"the server uses when parallel-read is 0, got %d", minRPS, readers, s.RecordsPerSecond)
+				"the server uses when parallel-readers is 0, got %d", minRPS, readers, s.RecordsPerSecond)
 		}
 
-		return fmt.Errorf("records-per-second must be 0 or at least %d for %d parallel-read, got %d",
+		return fmt.Errorf("records-per-second must be 0 or at least %d for %d parallel-readers, got %d",
 			minRPS, readers, s.RecordsPerSecond)
 	}
 
