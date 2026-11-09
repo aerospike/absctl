@@ -53,13 +53,15 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 			"that changed after the given date and time. The system's \n"+
 			"local timezone applies. If only HH:MM:SS is specified, then\n"+
 			"today's date is assumed as the date. If only YYYY-MM-DD is \n"+
-			"specified, then 00:00:00 (midnight) is assumed as the time.\n")
+			"specified, then 00:00:00 (midnight) is assumed as the time.\n"+
+			"Must be after 2010-01-01 and not in the future.\n")
 
 	flagSet.StringVarP(&f.ModifiedBefore, "modified-before", "b",
 		models.DefaultBackupModifiedBefore,
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
 			"Only include records that last changed before the given\n"+
-			"date and time. May combined with --modified-after to specify a range.")
+			"date and time. May be combined with --modified-after to specify a range.\n"+
+			"Must be after 2010-01-01.")
 	flagSet.StringVarP(&f.SetList, "set-list", "s",
 		models.DefaultCommonSetList,
 		descSetListServerBackup)
@@ -76,13 +78,16 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
 		models.DefaultCommonNoUDFs,
 		"Exclude user-defined functions from the backup.")
+	flagSet.BoolVar(&f.NoConfig, "no-config",
+		models.DefaultServerBackupNoConfig,
+		"Do not upload the config file of each node with the backup.")
 	flagSet.StringVar(&f.Policy, "policy",
 		models.DefaultServerBackupPolicy,
 		"Backup policy: strict, best-effort or fuzzy. strict aborts the backup\n"+
 			"on any failure. best-effort commits the backup as fuzzy instead of\n"+
 			"aborting it on a failure after the base scan is durable cluster-wide.\n"+
 			"fuzzy runs the base scan only, without the change stream.\n"+
-			"If empty, the server default is used.")
+			"The value is case-insensitive. If empty, the server default is used.")
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerBackupAsync,
 		"Return as soon as the cluster accepts the backup, without\n"+
@@ -91,14 +96,15 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
 		models.DefaultServerBackupRecordsPerSecond,
 		"Limit the records per second of each scan on each node.\n"+
-			"A non-zero value must be at least 5 x --parallel-read.\n"+
+			"A non-zero value must be at least 5 x --parallel-readers, or 20 when\n"+
+			"--parallel-readers is 0 and the server uses its default of 4 threads.\n"+
 			"If 0, the server default is used, which is no limit.")
-	flagSet.IntVar(&f.ParallelRead, "parallel-read",
-		models.DefaultServerBackupParallelRead,
+	flagSet.IntVar(&f.ParallelReaders, "parallel-readers",
+		models.DefaultServerBackupParallelReaders,
 		"Number of scan threads per node, from 1 to 128.\n"+
 			"If 0, the server default is used.")
-	flagSet.IntVar(&f.ParallelWrite, "parallel-write",
-		models.DefaultServerBackupParallelWrite,
+	flagSet.IntVar(&f.ParallelUploadThreads, "parallel-upload-threads",
+		models.DefaultServerBackupParallelUploadThreads,
 		"Number of upload threads per node, from 1 to 128.\n"+
 			"If 0, the server default is used.")
 

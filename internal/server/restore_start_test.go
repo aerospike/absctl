@@ -29,13 +29,13 @@ import (
 )
 
 const (
-	// testRestoreParallelRead differs from the default, so a value lost on the way to the
+	// testRestoreParallelDownloadThreads differs from the default, so a value lost on the way to the
 	// request is caught.
-	testRestoreParallelRead  = 32
-	testRestoreParallelWrite = 16
-	testRestoreRPS           = 1000
-	testRestoreExtraTTL      = 3600
-	testIncrementalPath      = "incr_dir"
+	testRestoreParallelDownloadThreads = 32
+	testRestoreParallelWriters         = 16
+	testRestoreRPS                     = 1000
+	testRestoreExtraTTL                = 3600
+	testIncrementalPath                = "incr_dir"
 )
 
 // TestServiceStartRestore covers what the start does around the request: the checks
@@ -43,35 +43,99 @@ const (
 func TestServiceStartRestore(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := json.Marshal(servermodels.Metadata{
-		BackupID:  testRequestBackupID,
-		Namespace: testRequestNamespace,
-		Status:    servermodels.BackupStatusComplete,
-	})
-	require.NoError(t, err)
+	fuzzyComplete := restoreAnswer{status: testCompleteRestore(testFuzzyStatus(infomodels.RestoreStateComplete))}
+	coldClearRequired := restoreAnswer{
+		status: testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing),
+	}
+	coldRestoring := restoreAnswer{status: testColdStatus(infomodels.RestoreStateActive, infomodels.NamespaceStateRestoring)}
+	coldComplete := restoreAnswer{
+		status: testCompleteRestore(testColdStatus(infomodels.RestoreStateComplete, infomodels.NamespaceStateNone)),
+	}
 
-	fuzzyComplete := restoreAnswer{status: testFinishedRestore(testFuzzyStatus(infomodels.RestoreStateComplete))}
+	// stoppingClearRequired is a cold restore some node already stopped, while another
+	// node still asks for its storage to be cleared.
+	stoppingClearRequired := testClearStatus(infomodels.ClearStateRequired, infomodels.NamespaceStatePreparing)
+	stoppingClearRequired.State = infomodels.RestoreStateAborting
+
+	// logStarted is the line that names the job id generated for a started restore, which
+	// the other restore commands take.
+	logStarted := "job-id=" + testGeneratedRestoreJobID
 
 	tests := []struct {
-		name           string
-		giveAsync      bool
-		giveUnstable   bool
-		giveStartErr   error
-		answers        []restoreAnswer
-		wantErr        error
-		wantStartCalls int
-		wantCalls      int
+		name            string
+		givePolicy      string
+		giveConsistency servermodels.AchievedConsistency
+		giveAsync       bool
+		giveUnstable    bool
+		giveStartErr    error
+		giveStartSent   bool
+		answers         []restoreAnswer
+		wantErr         error
+		wantErrMsg      string
+		wantStartCalls  int
+		wantCalls       int
+		// wantStatusJobID is the job the status lookups follow, the generated one.
+		wantStatusJobID string
+		wantLogs        []string
 	}{
 		{
-			name:           "follows the restore until it ends",
-			answers:        []restoreAnswer{fuzzyComplete},
-			wantStartCalls: 1,
-			wantCalls:      1,
+			name:            "follows the restore until it ends",
+			answers:         []restoreAnswer{fuzzyComplete},
+			wantStartCalls:  1,
+			wantCalls:       1,
+			wantStatusJobID: testGeneratedRestoreJobID,
+			wantLogs:        []string{logStarted},
+		},
+		{
+			// The cold restore cannot start before the storage is cleared, which is left
+			// to the user, so the command says how, waits for the clear and then follows
+			// the restore to its end.
+			name: "waits for a clear of a cold restore and follows it",
+			answers: []restoreAnswer{
+				coldClearRequired,
+				coldRestoring,
+				coldComplete,
+			},
+			wantStartCalls:  1,
+			wantCalls:       3,
+			wantStatusJobID: testGeneratedRestoreJobID,
+			wantLogs:        []string{logStarted, logClearHint, logClearWait, msgRestoreComplete},
+		},
+		{
+			// Clearing cannot help a job that is already stopping, so it is followed to
+			// its end and reported as what it turns out to be.
+			name: "follows a stopping cold restore instead of asking for a clear",
+			answers: []restoreAnswer{
+				{status: stoppingClearRequired},
+				{status: testFailedRestore(testColdStatus(infomodels.RestoreStateFailed, infomodels.NamespaceStateFailed))},
+			},
+			wantErr:         errRestoreFailed,
+			wantStartCalls:  1,
+			wantCalls:       2,
+			wantStatusJobID: testGeneratedRestoreJobID,
+		},
+		{
+			// A strict restore cannot read a fuzzy backup, which the metadata tells
+			// before the cluster is asked for anything.
+			name:            "does not start a strict restore of a fuzzy backup",
+			giveConsistency: servermodels.AchievedConsistencyFuzzy,
+			wantErr:         errBackupConsistency,
+		},
+		{
+			// The policy is matched in any case, as it is sent.
+			name:            "starts a fuzzy restore of a fuzzy backup with the policy in upper case",
+			givePolicy:      "FUZZY",
+			giveConsistency: servermodels.AchievedConsistencyFuzzy,
+			answers:         []restoreAnswer{fuzzyComplete},
+			wantStartCalls:  1,
+			wantCalls:       1,
+			wantStatusJobID: testGeneratedRestoreJobID,
 		},
 		{
 			name:           "returns as soon as the restore is accepted when async",
 			giveAsync:      true,
 			wantStartCalls: 1,
+			wantLogs:       []string{logStarted},
 		},
 		{
 			name:         "does not start on an unstable cluster",
@@ -79,9 +143,23 @@ func TestServiceStartRestore(t *testing.T) {
 			wantErr:      errClusterNotStable,
 		},
 		{
+			// A start whose answer was lost may have been accepted, and the generated id
+			// is the only way to find the job.
+			name:          "names the job id of a start that may have been accepted",
+			giveStartErr:  errBoom,
+			giveStartSent: true,
+			wantErr:       errBoom,
+			// The error tells how to check the job, with the values the user can copy.
+			wantErrMsg: "check it with 'absctl snapshot-restore progress --namespace " + testRequestNamespace +
+				" --job-id " + testGeneratedRestoreJobID + " ...'",
+			wantStartCalls: 1,
+		},
+		{
+			// A refused start comes with the generated job id too, but names no job.
 			name:           "propagates a rejected start without following it",
 			giveStartErr:   errBoom,
 			wantErr:        errBoom,
+			wantErrMsg:     "failed to start restore: " + errBoom.Error(),
 			wantStartCalls: 1,
 		},
 	}
@@ -90,40 +168,57 @@ func TestServiceStartRestore(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc, _ := newTestService(t)
+			manifest, err := json.Marshal(servermodels.Metadata{
+				BackupID:            testRequestBackupID,
+				Namespace:           testRequestNamespace,
+				Status:              servermodels.BackupStatusComplete,
+				AchievedConsistency: tt.giveConsistency,
+			})
+			require.NoError(t, err)
+
+			svc, buf := newTestService(t)
 			svc.restoreCfg.Start = &models.ServerRestore{
 				Namespace: testRequestNamespace,
 				BackupIDs: testRequestBackupID,
-				JobID:     testJobID,
 				Path:      testBackupPath,
 				Async:     tt.giveAsync,
 			}
+			svc.restoreCfg.Start.Policy = tt.givePolicy
 			svc.restoreCfg.AwsS3 = testRequestS3()
 			svc.metadataS3Client = func(context.Context, *models.AwsS3) (s3API, error) {
 				return &fakeManifestS3{manifest: manifest}, nil
 			}
 
 			client := &fakeRestoreInfoClient{
-				answers:  tt.answers,
-				unstable: tt.giveUnstable,
-				startErr: tt.giveStartErr,
+				answers:   tt.answers,
+				unstable:  tt.giveUnstable,
+				startErr:  tt.giveStartErr,
+				startSent: tt.giveStartSent,
+				// Set to the opposite of what a restore asks for, so that a check made
+				// without it is caught.
+				stableIgnoreMigrations: true,
 			}
 
-			err := svc.startRestore(t.Context(), client, testLayout)
+			err = svc.startRestore(t.Context(), client)
+
+			// A restore writes the whole namespace, so it must not start while
+			// migrations are in flight: the check never ignores them.
+			assert.Equal(t, 1, client.stableCalls)
+			assert.False(t, client.stableIgnoreMigrations)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErrMsg)
 			} else {
 				require.NoError(t, err)
 			}
 
 			assert.Equal(t, tt.wantStartCalls, client.startCalls)
 			assert.Equal(t, tt.wantCalls, client.calls)
+			assert.Equal(t, tt.wantStatusJobID, client.statusJobID)
 
-			// The job the start follows is the one it requested.
-			if tt.wantStartCalls > 0 {
-				require.NotNil(t, client.startRequest)
-				assert.Equal(t, testJobID, client.startRequest.JobID)
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
 			}
 		})
 	}
@@ -138,7 +233,9 @@ func TestServiceRestoreRequest(t *testing.T) {
 		want func() *infomodels.RequestRestore
 	}{
 		{
-			name: "job id defaults to backup id",
+			// A restore that sets no setting of a single policy sends none of them, for
+			// the server to apply its defaults.
+			name: "no setting of a single policy",
 			give: &models.ServerRestore{
 				Namespace: testRequestNamespace,
 				BackupIDs: testRequestBackupID,
@@ -146,29 +243,26 @@ func TestServiceRestoreRequest(t *testing.T) {
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon: testRequestCommon(),
-					JobID:         testRequestBackupID,
 					BackupIDs:     testRequestBackupID,
 				}
 			},
 		},
 		{
-			// A restore without a policy sends no fuzzy only parameters: the server
-			// refuses them with its default policy, strict.
 			name: "cold restore",
 			give: &models.ServerRestore{
 				Namespace:        testRequestNamespace,
 				BackupIDs:        testRequestBackupID,
-				JobID:            testRequestJobID,
 				Path:             testBackupPath,
 				SetList:          testRequestSetList,
 				FilterExp:        testRequestFilterExp,
 				NoIndexes:        true,
 				NoUDFs:           true,
-				ParallelWrite:    testRestoreParallelWrite,
+				ParallelWriters:  testRestoreParallelWriters,
 				RecordsPerSecond: testRestoreRPS,
 				ExtraTTL:         testRestoreExtraTTL,
+				HydrateReplica:   new(true),
 
-				ParallelRead: testRestoreParallelRead,
+				ParallelDownloadThreads: testRestoreParallelDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				common := testRequestCommon()
@@ -180,12 +274,12 @@ func TestServiceRestoreRequest(t *testing.T) {
 
 				return &infomodels.RequestRestore{
 					RequestCommon:          common,
-					JobID:                  testRequestJobID,
 					BackupIDs:              testRequestBackupID,
-					RestoreWorkerThreads:   testRestoreParallelWrite,
-					RestoreDownloadThreads: testRestoreParallelRead,
+					RestoreWorkerThreads:   testRestoreParallelWriters,
+					RestoreDownloadThreads: testRestoreParallelDownloadThreads,
 					RestoreRPS:             testRestoreRPS,
 					ExtraTTL:               testRestoreExtraTTL,
+					HydrateReplica:         new(true),
 				}
 			},
 		},
@@ -194,79 +288,72 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace:         testRequestNamespace,
 				BackupIDs:         testRequestBackupID,
-				JobID:             testRequestJobID,
 				Policy:            string(infomodels.RestorePolicyFuzzy),
-				ParallelWrite:     testRestoreParallelWrite,
+				ParallelWriters:   testRestoreParallelWriters,
 				RecordsPerSecond:  testRestoreRPS,
-				MaxInflight:       500,
-				RetryBaseInterval: 2000,
-				RetryMultiplier:   1.5,
-				RetryMaxAttempts:  3,
-				IgnoreRecordError: true,
-				ApplyMetadataLast: true,
+				MaxInflight:       new(500),
+				RetryBaseInterval: new(2000),
+				RetryMultiplier:   new(1.5),
+				RetryMaxAttempts:  new(3),
+				IgnoreRecordError: new(true),
+				ApplyMetadataLast: new(true),
 
-				ParallelRead: testRestoreParallelRead,
+				ParallelDownloadThreads: testRestoreParallelDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon:          testRequestCommon(),
-					JobID:                  testRequestJobID,
 					BackupIDs:              testRequestBackupID,
-					RestoreWorkerThreads:   testRestoreParallelWrite,
-					RestoreDownloadThreads: testRestoreParallelRead,
+					RestoreWorkerThreads:   testRestoreParallelWriters,
+					RestoreDownloadThreads: testRestoreParallelDownloadThreads,
 					RestoreRPS:             testRestoreRPS,
 					Policy:                 infomodels.RestorePolicyFuzzy,
 					MaxInflight:            500,
 					RetryBaseIntervalMs:    new(2000),
 					RetryMultiplier:        1.5,
-					RetryMaxAttempts:       3,
+					RetryMaxAttempts:       new(3),
 					IgnoreRecordError:      new(true),
 					ApplyMetadataLast:      new(true),
 				}
 			},
 		},
 		{
-			// Zero is a valid retry base interval, so it is sent; apply-metadata-last is
-			// refused for a restore with neither indexes nor UDFs even when false, so it
-			// is left out unless set.
-			name: "fuzzy restore with defaults",
+			// Zero is a valid retry base interval and retry count, and false a valid flag,
+			// so each one given is sent as it is.
+			name: "fuzzy restore with zero and false settings",
 			give: &models.ServerRestore{
-				Namespace: testRequestNamespace,
-				BackupIDs: testRequestBackupID,
-				JobID:     testRequestJobID,
-				Policy:    string(infomodels.RestorePolicyFuzzy),
+				Namespace:         testRequestNamespace,
+				BackupIDs:         testRequestBackupID,
+				Policy:            string(infomodels.RestorePolicyFuzzy),
+				RetryBaseInterval: new(0),
+				RetryMaxAttempts:  new(0),
+				IgnoreRecordError: new(false),
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon:       testRequestCommon(),
-					JobID:               testRequestJobID,
 					BackupIDs:           testRequestBackupID,
 					Policy:              infomodels.RestorePolicyFuzzy,
 					RetryBaseIntervalMs: new(0),
+					RetryMaxAttempts:    new(0),
 					IgnoreRecordError:   new(false),
 				}
 			},
 		},
 		{
-			// The flags and the YAML config fill the fuzzy only settings with their
-			// defaults, which the strict policy must not send.
-			name: "strict restore with fuzzy settings at their defaults",
+			// The policy is accepted in any case and sent in the lower case the server
+			// expects.
+			name: "policy in upper case",
 			give: &models.ServerRestore{
-				Namespace:         testRequestNamespace,
-				BackupIDs:         testRequestBackupIDs,
-				JobID:             testRequestJobID,
-				Policy:            string(infomodels.RestorePolicyStrict),
-				MaxInflight:       models.DefaultServerRestoreMaxInflight,
-				RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
-				RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
-				RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
+				Namespace: testRequestNamespace,
+				BackupIDs: testRequestBackupID,
+				Policy:    "FUZZY",
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon: testRequestCommon(),
-					JobID:         testRequestJobID,
-					BackupIDs:     testRequestBackupIDs,
-					Policy:        infomodels.RestorePolicyStrict,
+					BackupIDs:     testRequestBackupID,
+					Policy:        infomodels.RestorePolicyFuzzy,
 				}
 			},
 		},
@@ -277,12 +364,10 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace: testRequestNamespace,
 				BackupIDs: testRequestBackupIDs,
-				JobID:     testRequestJobID,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon: testRequestCommon(),
-					JobID:         testRequestJobID,
 					BackupIDs:     testRequestBackupIDs,
 				}
 			},
@@ -292,13 +377,11 @@ func TestServiceRestoreRequest(t *testing.T) {
 			give: &models.ServerRestore{
 				Namespace:       testRequestNamespace,
 				BackupIDs:       testRequestBackupIDs,
-				JobID:           testRequestJobID,
 				IncrementalPath: "/" + testIncrementalPath + "/",
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon:   testRequestCommon(),
-					JobID:           testRequestJobID,
 					BackupIDs:       testRequestBackupIDs,
 					IncrementalPath: testIncrementalPath,
 				}
@@ -376,10 +459,11 @@ func TestServiceCheckBackupExistsReadsUnderPrefix(t *testing.T) {
 			client := &fakeManifestS3{manifest: manifest}
 			svc := &Service{logger: slog.New(slog.DiscardHandler)}
 
-			err := svc.checkBackupExists(t.Context(), client, testBucket, tt.givePrefix, testRequestBackupID)
+			md, err := svc.checkBackupExists(t.Context(), client, testBucket, tt.givePrefix, testRequestBackupID)
 			require.NoError(t, err)
 
 			assert.Equal(t, []string{tt.wantKey}, client.keys)
+			assert.Equal(t, testRequestBackupID, md.BackupID)
 		})
 	}
 }
@@ -421,10 +505,11 @@ func TestServiceCheckBackupsExistReadsEveryBackup(t *testing.T) {
 			client := &fakeManifestS3{manifest: manifest}
 			svc := &Service{logger: slog.New(slog.DiscardHandler)}
 
-			err := svc.checkBackupsExist(t.Context(), client, testBucket, "", tt.giveBackupIDs)
+			backups, err := svc.checkBackupsExist(t.Context(), client, testBucket, "", tt.giveBackupIDs)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantKeys, client.keys)
+			assert.Len(t, backups, len(tt.giveBackupIDs))
 		})
 	}
 }
@@ -467,6 +552,17 @@ func TestServiceCheckRestoreBackupsExist(t *testing.T) {
 				testIncrementalPath + "/" + testRequestBackupID2 + testManifestSuffix,
 			},
 		},
+		{
+			// An incremental path that normalizes to nothing is not sent, so the server
+			// reads the incremental backups under the path, and so does the check.
+			name:                "incremental path that normalizes to nothing reads under the path",
+			giveBackupIDs:       testRequestBackupIDs,
+			giveIncrementalPath: "/",
+			wantKeys: []string{
+				testMetadataKey + testManifestSuffix,
+				testBackupPath + "/" + testRequestBackupID2 + testManifestSuffix,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -489,6 +585,165 @@ func TestServiceCheckRestoreBackupsExist(t *testing.T) {
 			require.NoError(t, svc.checkRestoreBackupsExist(t.Context(), client))
 
 			assert.Equal(t, tt.wantKeys, client.keys)
+		})
+	}
+}
+
+// TestServiceCheckRestoreBackupsConsistency pins down that the consistency of every
+// backup of the restore is checked, the incremental ones included, before the cluster is
+// asked for anything.
+func TestServiceCheckRestoreBackupsConsistency(t *testing.T) {
+	t.Parallel()
+
+	manifestOf := func(t *testing.T, id string, consistency servermodels.AchievedConsistency) []byte {
+		t.Helper()
+
+		m, err := json.Marshal(servermodels.Metadata{
+			BackupID:            id,
+			Namespace:           testRequestNamespace,
+			Status:              servermodels.BackupStatusComplete,
+			AchievedConsistency: consistency,
+		})
+		require.NoError(t, err)
+
+		return m
+	}
+
+	// No policy restores a fuzzy backup along with others.
+	const errMsgOnItsOwn = "a fuzzy backup is restored on its own"
+
+	tests := []struct {
+		name       string
+		givePolicy string
+	}{
+		{name: "strict policy"},
+		{name: "fuzzy policy", givePolicy: string(infomodels.RestorePolicyFuzzy)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The full backup is strict and the incremental one fuzzy, so only a check
+			// that reads the incremental backup refuses the restore.
+			client := &fakeManifestS3{manifestsByKey: map[string][]byte{
+				testRequestBackupID + testManifestSuffix: manifestOf(
+					t, testRequestBackupID, servermodels.AchievedConsistencyStrict),
+				testRequestBackupID2 + testManifestSuffix: manifestOf(
+					t, testRequestBackupID2, servermodels.AchievedConsistencyFuzzy),
+			}}
+
+			start := &models.ServerRestore{BackupIDs: testRequestBackupIDs}
+			start.Policy = tt.givePolicy
+
+			svc := &Service{
+				logger: slog.New(slog.DiscardHandler),
+				restoreCfg: &config.ServerRestoreServiceConfig{
+					Start: start,
+					AwsS3: testRequestS3(),
+				},
+			}
+
+			err := svc.checkRestoreBackupsExist(t.Context(), client)
+			require.ErrorIs(t, err, errBackupConsistency)
+			require.ErrorContains(t, err, testRequestBackupID2)
+			require.ErrorContains(t, err, errMsgOnItsOwn)
+		})
+	}
+}
+
+func TestCheckBackupsConsistency(t *testing.T) {
+	t.Parallel()
+
+	// The two refusals advise different remedies, so each is told apart by its own.
+	const (
+		errMsgRestoreWithFuzzy = "restore it with policy fuzzy"
+		errMsgFuzzyOnItsOwn    = "a fuzzy backup is restored on its own"
+	)
+
+	strictBackup := servermodels.Metadata{
+		BackupID:            testRequestBackupID,
+		AchievedConsistency: servermodels.AchievedConsistencyStrict,
+	}
+	fuzzyBackup := servermodels.Metadata{
+		BackupID:            testRequestBackupID2,
+		AchievedConsistency: servermodels.AchievedConsistencyFuzzy,
+	}
+	// unknownBackup was written before the metadata recorded its consistency.
+	unknownBackup := servermodels.Metadata{BackupID: testRequestBackupID}
+
+	tests := []struct {
+		name        string
+		givePolicy  infomodels.RestorePolicy
+		giveBackups []servermodels.Metadata
+		wantErrMsg  string
+	}{
+		{
+			name:        "strict restore of strict backups",
+			givePolicy:  infomodels.RestorePolicyStrict,
+			giveBackups: []servermodels.Metadata{strictBackup, strictBackup},
+		},
+		{
+			name:        "default policy of a strict backup",
+			giveBackups: []servermodels.Metadata{strictBackup},
+		},
+		{
+			name:        "strict restore of a fuzzy backup",
+			givePolicy:  infomodels.RestorePolicyStrict,
+			giveBackups: []servermodels.Metadata{fuzzyBackup},
+			wantErrMsg:  errMsgRestoreWithFuzzy,
+		},
+		{
+			// An empty policy is the server default, strict.
+			name:        "default policy of a fuzzy backup",
+			giveBackups: []servermodels.Metadata{fuzzyBackup},
+			wantErrMsg:  errMsgRestoreWithFuzzy,
+		},
+		{
+			name:        "fuzzy restore of a single fuzzy backup",
+			givePolicy:  infomodels.RestorePolicyFuzzy,
+			giveBackups: []servermodels.Metadata{fuzzyBackup},
+		},
+		{
+			name:        "fuzzy restore of strict backups",
+			givePolicy:  infomodels.RestorePolicyFuzzy,
+			giveBackups: []servermodels.Metadata{strictBackup, strictBackup},
+		},
+		{
+			name:        "fuzzy restore of a fuzzy backup in a list",
+			givePolicy:  infomodels.RestorePolicyFuzzy,
+			giveBackups: []servermodels.Metadata{strictBackup, fuzzyBackup},
+			wantErrMsg:  errMsgFuzzyOnItsOwn,
+		},
+		{
+			// Switching the policy would not help a list, so that is not advised.
+			name:        "strict restore of a fuzzy backup in a list",
+			givePolicy:  infomodels.RestorePolicyStrict,
+			giveBackups: []servermodels.Metadata{strictBackup, fuzzyBackup},
+			wantErrMsg:  errMsgFuzzyOnItsOwn,
+		},
+		{
+			// The cluster checks a backup whose metadata does not tell its consistency.
+			name:        "unknown consistency",
+			givePolicy:  infomodels.RestorePolicyStrict,
+			giveBackups: []servermodels.Metadata{unknownBackup},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := checkBackupsConsistency(tt.givePolicy, tt.giveBackups)
+			if tt.wantErrMsg != "" {
+				require.ErrorIs(t, err, errBackupConsistency)
+				require.ErrorContains(t, err, testRequestBackupID2)
+				require.ErrorContains(t, err, tt.wantErrMsg)
+
+				return
+			}
+
+			require.NoError(t, err)
 		})
 	}
 }

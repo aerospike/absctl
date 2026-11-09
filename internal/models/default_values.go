@@ -174,13 +174,15 @@ const (
 	// Server-specific backup.
 
 	DefaultServerBackupAsync              = false
+	DefaultServerBackupNoConfig           = false
 	DefaultServerBackupValidateSampleSize = 10000
 	DefaultServerBackupProgressWatch      = false
 	DefaultServerBackupRecordsPerSecond   = 0
-	DefaultServerBackupParallelRead       = 8
-	DefaultServerBackupParallelWrite      = 8
-	DefaultSnapshotS3Throughput           = 0
-	DefaultServerBackupPolicy             = ""
+	// Zero leaves the thread counts to the server default.
+	DefaultServerBackupParallelReaders       = 0
+	DefaultServerBackupParallelUploadThreads = 0
+	DefaultSnapshotS3Throughput              = 0
+	DefaultServerBackupPolicy                = ""
 )
 
 // Server-backup common.
@@ -213,22 +215,23 @@ const (
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false
 
-	// Server-specific restore. The values match the defaults of the server.
+	// Server-specific restore. The values match the defaults of the server, except
+	// the thread counts: zero leaves them to the server default.
 
-	DefaultServerRestoreJobID             = ""
-	DefaultServerRestorePolicy            = ""
-	DefaultServerRestoreParallelWrite     = 8
-	DefaultServerRestoreRecordsPerSecond  = 0
-	DefaultServerRestoreMaxInflight       = 200
-	DefaultServerRestoreRetryBaseInterval = 1000
-	DefaultServerRestoreRetryMultiplier   = 1.0
-	DefaultServerRestoreRetryMaxAttempts  = 5
-	DefaultServerRestoreIgnoreRecordError = false
-	DefaultServerRestoreHydrateReplica    = true
-	DefaultServerRestoreParallelRead      = 8
-	DefaultServerRestoreIncrementalPath   = ""
-	DefaultServerRestoreExtraTTL          = 0
-	DefaultServerRestoreApplyMetadataLast = false
-	DefaultServerRestoreAsync             = false
-	DefaultServerRestoreProgressWatch     = false
+	DefaultServerRestoreJobID                   = ""
+	DefaultServerRestorePolicy                  = ""
+	DefaultServerRestoreParallelWriters         = 0
+	DefaultServerRestoreRecordsPerSecond        = 0
+	DefaultServerRestoreMaxInflight             = 200
+	DefaultServerRestoreRetryBaseInterval       = 1000
+	DefaultServerRestoreRetryMultiplier         = 1.0
+	DefaultServerRestoreRetryMaxAttempts        = 5
+	DefaultServerRestoreIgnoreRecordError       = false
+	DefaultServerRestoreHydrateReplica          = true
+	DefaultServerRestoreParallelDownloadThreads = 0
+	DefaultServerRestoreIncrementalPath         = ""
+	DefaultServerRestoreExtraTTL                = 0
+	DefaultServerRestoreApplyMetadataLast       = false
+	DefaultServerRestoreAsync                   = false
+	DefaultServerRestoreProgressWatch           = false
 )

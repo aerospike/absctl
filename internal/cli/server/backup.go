@@ -121,6 +121,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Use:   UseStart,
 		Short: ShortBackupStart,
 		Long:  LongBackupStart,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandStart,
 				func() *config.ServerBackupServiceConfig {
@@ -185,6 +186,7 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Use:   UseList,
 		Short: ShortBackupList,
 		Long:  LongBackupList,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandList,
 				func() *config.ServerBackupServiceConfig {
@@ -245,6 +247,7 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Use:   UseProgress,
 		Short: ShortBackupProgress,
 		Long:  LongBackupProgress,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandProgress,
 				func() *config.ServerBackupServiceConfig {
@@ -307,6 +310,7 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Use:   UseValidate,
 		Short: ShortBackupValidate,
 		Long:  LongBackupValidate,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandValidate,
 				func() *config.ServerBackupServiceConfig {
@@ -366,6 +370,7 @@ func newBackupAbortCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Use:   UseAbort,
 		Short: ShortBackupAbort,
 		Long:  LongBackupAbort,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandAbort,
 				func() *config.ServerBackupServiceConfig {

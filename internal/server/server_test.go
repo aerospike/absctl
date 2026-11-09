@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -49,10 +50,6 @@ const (
 	// testErrorReason stands for the reason the cluster gives for a terminal state.
 	testErrorReason = "storage unreachable"
 
-	// testLayoutNodes is the number of nodes the cold restores of the tests are spread
-	// over.
-	testLayoutNodes = 3
-
 	testJobID     = "527069025"
 	testNamespace = "source-ns1"
 
@@ -71,7 +68,6 @@ const (
 	testRequestBackupID2 = "261025T130000-cd34"
 	// testRequestBackupIDs is the list form a multi-backup restore is given.
 	testRequestBackupIDs = testRequestBackupID + "," + testRequestBackupID2
-	testRequestJobID     = "rst-1"
 	testMetadataKey      = testBackupPath + "/" + testRequestBackupID
 	testManifestSuffix   = "/metadata.json"
 )
@@ -104,6 +100,34 @@ type fakeInfoClient struct {
 	abortErr   error
 	abortJobID string
 	abortCalls int
+
+	fakeStability
+
+	startCalls int
+}
+
+// fakeStability answers the stability checks of the fake info clients and records how
+// they were made.
+type fakeStability struct {
+	// unstable reports migrations in flight, so the zero value is a stable cluster.
+	unstable bool
+	// stableCalls counts the stability checks, and stableIgnoreMigrations is the
+	// ignoreMigrations the last one was made with.
+	stableCalls            int
+	stableIgnoreMigrations bool
+}
+
+func (f *fakeStability) GetClusterStable(_ context.Context, _ string, ignoreMigrations bool) (bool, error) {
+	f.stableCalls++
+	f.stableIgnoreMigrations = ignoreMigrations
+
+	return !f.unstable, nil
+}
+
+func (f *fakeInfoClient) StartBackup(_ context.Context, _ *infomodels.RequestBackup) (string, error) {
+	f.startCalls++
+
+	return testJobID, nil
 }
 
 func (f *fakeInfoClient) GetBackupStatus(
@@ -154,49 +178,59 @@ type fakeRestoreInfoClient struct {
 
 	openErr       error
 	openNamespace string
-	openJobID     string
 	openCalls     int
 
 	// clearErrs are the answers to the clear requests, one per call; the requests past
 	// them succeed.
-	clearErrs      []error
-	clearNamespace string
-	clearJobID     string
-	clearCalls     int
+	clearErrs []error
+	// clearTargets names the job of each clear request, as namespace/job-id.
+	clearTargets []string
+	clearCalls   int
 
-	// unstable reports migrations in flight, so the zero value is a stable cluster.
-	unstable bool
+	fakeStability
 
-	startErr     error
+	startErr error
+	// startSent makes a failed start wrap asinfo.ErrOutcomeUnknown, as one whose answer
+	// was lost does. The generated job id comes with every failure, as with the real client.
+	startSent    bool
 	startRequest *infomodels.RequestRestore
 	startCalls   int
-
-	prepareErr     error
-	prepareRequest *infomodels.RequestPrepareRestore
-	prepareCalls   int
+	// statusJobID is the job id the last status lookup asked for.
+	statusJobID string
 }
 
-func (f *fakeRestoreInfoClient) PrepareRestore(_ context.Context, request *infomodels.RequestPrepareRestore) error {
-	f.prepareCalls++
-	f.prepareRequest = request
-
-	return f.prepareErr
+// withUnknownOutcome wraps err as backup-go wraps a failed start that may have reached
+// the server.
+func withUnknownOutcome(err error) error {
+	return fmt.Errorf("%w: %w", asinfo.ErrOutcomeUnknown, err)
 }
 
-func (f *fakeRestoreInfoClient) GetClusterStable(_ context.Context, _ string) (bool, error) {
-	return !f.unstable, nil
-}
+// testGeneratedRestoreJobID is the job id the fake client generates for a restore it
+// starts.
+const testGeneratedRestoreJobID = "261105T120000-rs01"
 
-func (f *fakeRestoreInfoClient) StartRestore(_ context.Context, request *infomodels.RequestRestore) error {
+func (f *fakeRestoreInfoClient) StartRestore(
+	_ context.Context, request *infomodels.RequestRestore,
+) (string, error) {
 	f.startCalls++
 	f.startRequest = request
 
-	return f.startErr
+	if f.startErr != nil {
+		if f.startSent {
+			return testGeneratedRestoreJobID, withUnknownOutcome(f.startErr)
+		}
+
+		return testGeneratedRestoreJobID, f.startErr
+	}
+
+	return testGeneratedRestoreJobID, nil
 }
 
 func (f *fakeRestoreInfoClient) GetRestoreStatus(
-	_ context.Context, _, _ string,
+	_ context.Context, _, jobID string,
 ) (*infomodels.ResponseRestoreState, error) {
+	f.statusJobID = jobID
+
 	call := f.calls
 	f.calls++
 
@@ -219,10 +253,9 @@ func (f *fakeRestoreInfoClient) AbortRestore(_ context.Context, namespace, jobID
 	return f.abortErr
 }
 
-func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace, jobID string) error {
+func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace string) error {
 	f.openCalls++
 	f.openNamespace = namespace
-	f.openJobID = jobID
 
 	return f.openErr
 }
@@ -230,8 +263,7 @@ func (f *fakeRestoreInfoClient) OpenRestore(_ context.Context, namespace, jobID 
 func (f *fakeRestoreInfoClient) ClearRestoreStorage(_ context.Context, namespace, jobID string) error {
 	call := f.clearCalls
 	f.clearCalls++
-	f.clearNamespace = namespace
-	f.clearJobID = jobID
+	f.clearTargets = append(f.clearTargets, namespace+"/"+jobID)
 
 	if call < len(f.clearErrs) {
 		return f.clearErrs[call]
@@ -248,13 +280,17 @@ type fakeClusterInfo struct {
 
 	stable    bool
 	stableErr error
+	// gotIgnoreMigrations is the ignoreMigrations the last stability check was made with.
+	gotIgnoreMigrations bool
 }
 
 func (f *fakeClusterInfo) GetVersion(_ context.Context) (infomodels.AerospikeVersion, error) {
 	return f.version, f.versionErr
 }
 
-func (f *fakeClusterInfo) GetClusterStable(_ context.Context, _ string) (bool, error) {
+func (f *fakeClusterInfo) GetClusterStable(_ context.Context, _ string, ignoreMigrations bool) (bool, error) {
+	f.gotIgnoreMigrations = ignoreMigrations
+
 	return f.stable, f.stableErr
 }
 
@@ -382,14 +418,22 @@ func TestServiceCheckClusterStable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		client     *fakeClusterInfo
-		wantErr    error
-		wantErrMsg string
+		name                 string
+		client               *fakeClusterInfo
+		giveIgnoreMigrations bool
+		wantErr              error
+		wantErrMsg           string
 	}{
 		{
 			name:   "accepts a stable namespace",
 			client: &fakeClusterInfo{stable: true},
+		},
+		{
+			// The check is asked to ignore migrations, and the request has to reach the
+			// cluster as given.
+			name:                 "passes ignore migrations to the cluster",
+			client:               &fakeClusterInfo{stable: true},
+			giveIgnoreMigrations: true,
 		},
 		{
 			// The namespace belongs in the failure: it is the one the job would have
@@ -415,7 +459,8 @@ func TestServiceCheckClusterStable(t *testing.T) {
 
 			svc, _ := newTestService(t)
 
-			err := svc.checkClusterStable(t.Context(), tt.client, testNamespace)
+			err := svc.checkClusterStable(t.Context(), tt.client, testNamespace, tt.giveIgnoreMigrations)
+			assert.Equal(t, tt.giveIgnoreMigrations, tt.client.gotIgnoreMigrations)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -443,7 +488,6 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 			AwsS3: &models.AwsS3{BucketName: testBucket},
 		},
 		restoreCfg: &config.ServerRestoreServiceConfig{
-			Prepare:      &models.ServerRestorePrepare{Namespace: testNamespace, JobID: testJobID},
 			Abort:        &models.ServerRestoreAbort{Namespace: testNamespace, JobID: testJobID},
 			Open:         &models.ServerRestoreOpen{Namespace: testNamespace, JobID: testJobID},
 			ClearStorage: &models.ServerRestoreClearStorage{Namespace: testNamespace, JobID: testJobID},
@@ -492,9 +536,6 @@ func testFailedStatus(state infomodels.BackupState) *infomodels.ResponseBackupSt
 	return status
 }
 
-// testLayout stands for the active nodes of the cluster.
-func testLayout() int { return testLayoutNodes }
-
 // testColdStatus reports a cold restore job of a single backup.
 func testColdStatus(state infomodels.RestoreState, nsState infomodels.NamespaceState) *infomodels.ResponseRestoreState {
 	return &infomodels.ResponseRestoreState{
@@ -518,6 +559,14 @@ func testFuzzyStatus(state infomodels.RestoreState) *infomodels.ResponseRestoreS
 		BackupEntries: 1,
 		StartTime:     time.Now().Add(-testBackupDuration),
 	}
+}
+
+// testCompleteRestore reports a job the cluster finished, at the progress every node
+// reports once the job is complete.
+func testCompleteRestore(status *infomodels.ResponseRestoreState) *infomodels.ResponseRestoreState {
+	status.ProgressPct = 100
+
+	return testFinishedRestore(status)
 }
 
 // testFinishedRestore reports a job that reached a terminal state, which is the only case
@@ -575,7 +624,9 @@ func testRequestCommon() infomodels.RequestCommon {
 // fakeManifestS3 serves a single complete manifest and records the object keys read.
 type fakeManifestS3 struct {
 	manifest []byte
-	keys     []string
+	// manifestsByKey overrides manifest for the keys it holds.
+	manifestsByKey map[string][]byte
+	keys           []string
 }
 
 func (f *fakeManifestS3) ListObjectsV2(
@@ -587,7 +638,79 @@ func (f *fakeManifestS3) ListObjectsV2(
 func (f *fakeManifestS3) GetObject(
 	_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options),
 ) (*s3.GetObjectOutput, error) {
-	f.keys = append(f.keys, aws.ToString(in.Key))
+	key := aws.ToString(in.Key)
+	f.keys = append(f.keys, key)
 
-	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(f.manifest))}, nil
+	manifest := f.manifest
+	if m, ok := f.manifestsByKey[key]; ok {
+		manifest = m
+	}
+
+	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(manifest))}, nil
+}
+
+func TestStartError(t *testing.T) {
+	t.Parallel()
+
+	const (
+		followCmd         = "absctl snapshot-restore progress --namespace " + testNamespace + " --job-id " + testJobID + " ..."
+		errMsgMayBeActive = "may have been accepted"
+		msgNotStarted     = "failed to start restore: "
+	)
+
+	errUnknown := withUnknownOutcome(errBoom)
+
+	tests := []struct {
+		name          string
+		giveJobID     string
+		giveFollowCmd string
+		giveErr       error
+		wantMsg       string
+		notWantMsg    string
+	}{
+		{
+			name:       "request never sent",
+			giveErr:    errBoom,
+			wantMsg:    msgNotStarted + errBoom.Error(),
+			notWantMsg: errMsgMayBeActive,
+		},
+		{
+			// The job id comes with every failure, but only an unknown outcome may
+			// leave a job behind.
+			name:          "refused by the server",
+			giveJobID:     testJobID,
+			giveFollowCmd: followCmd,
+			giveErr:       errBoom,
+			wantMsg:       msgNotStarted + errBoom.Error(),
+			notWantMsg:    testJobID,
+		},
+		{
+			name:          "outcome unknown with a command to follow the job",
+			giveJobID:     testJobID,
+			giveFollowCmd: followCmd,
+			giveErr:       errUnknown,
+			wantMsg:       "job-id " + testJobID + " " + errMsgMayBeActive + ", check it with '" + followCmd + "'",
+			// A start that may have been accepted is not reported as one never sent.
+			notWantMsg: msgNotStarted,
+		},
+		{
+			name:       "outcome unknown without a command",
+			giveJobID:  testJobID,
+			giveErr:    errUnknown,
+			wantMsg:    "job-id " + testJobID + " " + errMsgMayBeActive + ": " + errUnknown.Error(),
+			notWantMsg: "check it with",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := startError("restore", tt.giveJobID, tt.giveFollowCmd, tt.giveErr)
+
+			require.ErrorIs(t, err, errBoom)
+			require.ErrorContains(t, err, tt.wantMsg)
+			assert.NotContains(t, err.Error(), tt.notWantMsg)
+		})
+	}
 }

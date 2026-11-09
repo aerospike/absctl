@@ -48,11 +48,12 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, derefString(backup.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
+	assert.Equal(t, models.DefaultServerBackupNoConfig, derefBool(backup.NoConfig))
 	assert.Equal(t, models.DefaultServerBackupPolicy, derefString(backup.Policy))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
-	assert.Equal(t, models.DefaultServerBackupParallelRead, derefInt(backup.ParallelRead))
-	assert.Equal(t, models.DefaultServerBackupParallelWrite, derefInt(backup.ParallelWrite))
+	assert.Equal(t, models.DefaultServerBackupParallelReaders, derefInt(backup.ParallelReaders))
+	assert.Equal(t, models.DefaultServerBackupParallelUploadThreads, derefInt(backup.ParallelUploadThreads))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -78,8 +79,10 @@ func TestServerBackupToModels(t *testing.T) {
 	namespace := "ns1"
 	modifiedAfter := "2026-01-01_00:00:00"
 	modifiedBefore := "2026-02-01_00:00:00"
+	// The flags differ from each other, so a field mapped from its neighbor is caught.
 	noIndexes := true
-	noUDFs := true
+	noUDFs := false
+	noConfig := true
 	async := true
 	path := "some/prefix"
 	backupPath := "backups/daily"
@@ -88,8 +91,8 @@ func TestServerBackupToModels(t *testing.T) {
 	sampleSize := 500
 	watch := true
 	recordsPerSecond := 5000
-	parallelRead := 8
-	parallelWrite := 4
+	parallelReaders := 8
+	parallelUploadThreads := 4
 	policy := "best-effort"
 
 	backup := &ServerBackup{
@@ -103,12 +106,13 @@ func TestServerBackupToModels(t *testing.T) {
 			FilterExp:      &filterExp,
 			NoIndexes:      &noIndexes,
 			NoUDFs:         &noUDFs,
+			NoConfig:       &noConfig,
 			Policy:         &policy,
 			Async:          &async,
 
-			RecordsPerSecond: &recordsPerSecond,
-			ParallelRead:     &parallelRead,
-			ParallelWrite:    &parallelWrite,
+			RecordsPerSecond:      &recordsPerSecond,
+			ParallelReaders:       &parallelReaders,
+			ParallelUploadThreads: &parallelUploadThreads,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
@@ -127,12 +131,13 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.Equal(t, backupPath, start.Path)
 	assert.Equal(t, filterExp, start.FilterExp)
 	assert.True(t, start.NoIndexes)
-	assert.True(t, start.NoUDFs)
+	assert.False(t, start.NoUDFs)
+	assert.True(t, start.NoConfig)
 	assert.True(t, start.Async)
 	assert.Equal(t, policy, start.Policy)
 	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
-	assert.Equal(t, parallelRead, start.ParallelRead)
-	assert.Equal(t, parallelWrite, start.ParallelWrite)
+	assert.Equal(t, parallelReaders, start.ParallelReaders)
+	assert.Equal(t, parallelUploadThreads, start.ParallelUploadThreads)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)

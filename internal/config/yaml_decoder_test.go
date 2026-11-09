@@ -94,6 +94,7 @@ backup:
     - bin2
   filter-exp: kwGTUQKkYmluMQE=
   no-indexes: true
+  no-config: true
   policy: best-effort
   async: true
 list:
@@ -127,15 +128,14 @@ restore:
   namespace: test
   backup-ids:
     - 261025T120000-ab12
-  job-id: rst-1
   path: some/prefix
   set-list:
     - set1
   no-indexes: true
   no-udfs: true
   policy: fuzzy
-  parallel-write: 16
-  parallel-read: 4
+  parallel-writers: 16
+  parallel-download-threads: 4
   records-per-second: 1000
   max-inflight: 500
   retry-base-interval: 2000
@@ -144,10 +144,6 @@ restore:
   ignore-record-error: true
   async: true
   extra-ttl: 3600
-prepare:
-  namespace: test
-  job-id: rst-1
-  hydrate-replica: false
 progress:
   namespace: test
   job-id: rst-1
@@ -508,6 +504,7 @@ func TestDecodeServerBackupServiceConfig(t *testing.T) {
 				assert.Equal(t, "bin1,bin2", cfg.Start.BinList)
 				assert.Equal(t, "kwGTUQKkYmluMQE=", cfg.Start.FilterExp)
 				assert.True(t, cfg.Start.NoIndexes)
+				assert.True(t, cfg.Start.NoConfig)
 				assert.Equal(t, string(infomodels.BackupPolicyBestEffort), cfg.Start.Policy)
 				assert.True(t, cfg.Start.Async)
 				assert.Equal(t, 10, cfg.S3Throughput)
@@ -649,11 +646,21 @@ func TestDecodeServerServiceConfig_RemovedKeys(t *testing.T) {
 			},
 		},
 		{
-			name:    "prepare backup-id",
-			yaml:    "prepare:\n  backup-id: 261025T120000-ab12\n",
-			wantKey: "backup-id",
+			// The restore job id is generated when the restore starts.
+			name:    "restore job-id",
+			yaml:    "restore:\n  job-id: rst-1\n",
+			wantKey: "job-id",
 			decode: func(ctx context.Context, filename string) error {
-				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandPrepare)
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
+				return err
+			},
+		},
+		{
+			name:    "prepare section",
+			yaml:    "prepare:\n  job-id: rst-1\n",
+			wantKey: "prepare",
+			decode: func(ctx context.Context, filename string) error {
+				_, err := DecodeServerRestoreServiceConfig(ctx, filename, ServerRestoreCommandStart)
 				return err
 			},
 		},
@@ -696,44 +703,26 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 				t.Helper()
 
 				require.NotNil(t, cfg.Start)
-				assert.Nil(t, cfg.Prepare)
 				assert.Nil(t, cfg.Progress)
 				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Start.Namespace)
 				assert.Equal(t, testServerBackupID, cfg.Start.BackupIDs)
-				assert.Equal(t, testServerRestoreJobID, cfg.Start.JobID)
 				assert.Equal(t, "some/prefix", cfg.Start.Path)
 				assert.Equal(t, "set1", cfg.Start.SetList)
 				assert.True(t, cfg.Start.NoIndexes)
 				assert.True(t, cfg.Start.NoUDFs)
 				assert.Equal(t, string(infomodels.RestorePolicyFuzzy), cfg.Start.Policy)
-				assert.Equal(t, 16, cfg.Start.ParallelWrite)
-				assert.Equal(t, 4, cfg.Start.ParallelRead)
+				assert.Equal(t, 16, cfg.Start.ParallelWriters)
+				assert.Equal(t, 4, cfg.Start.ParallelDownloadThreads)
 				assert.Equal(t, 1000, cfg.Start.RecordsPerSecond)
-				assert.Equal(t, 500, cfg.Start.MaxInflight)
-				assert.Equal(t, 2000, cfg.Start.RetryBaseInterval)
-				assert.InDelta(t, 1.5, cfg.Start.RetryMultiplier, 0)
-				assert.Equal(t, 3, cfg.Start.RetryMaxAttempts)
-				assert.True(t, cfg.Start.IgnoreRecordError)
+				assert.Equal(t, new(500), cfg.Start.MaxInflight)
+				assert.Equal(t, new(2000), cfg.Start.RetryBaseInterval)
+				assert.Equal(t, new(1.5), cfg.Start.RetryMultiplier)
+				assert.Equal(t, new(3), cfg.Start.RetryMaxAttempts)
+				assert.Equal(t, new(true), cfg.Start.IgnoreRecordError)
 				assert.True(t, cfg.Start.Async)
 				assert.Equal(t, 3600, cfg.Start.ExtraTTL)
-			},
-		},
-		{
-			name:    "prepare reads the prepare section",
-			command: ServerRestoreCommandPrepare,
-			assert: func(t *testing.T, cfg *ServerRestoreServiceConfig) {
-				t.Helper()
-
-				require.NotNil(t, cfg.Prepare)
-				assert.Nil(t, cfg.Start)
-				assert.Nil(t, cfg.Progress)
-				assert.Nil(t, cfg.Abort)
-
-				assert.Equal(t, "test", cfg.Prepare.Namespace)
-				assert.Equal(t, testServerRestoreJobID, cfg.Prepare.JobID)
-				assert.False(t, cfg.Prepare.HydrateReplica)
 			},
 		},
 		{
@@ -744,7 +733,6 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				require.NotNil(t, cfg.Progress)
 				assert.Nil(t, cfg.Start)
-				assert.Nil(t, cfg.Prepare)
 				assert.Nil(t, cfg.Abort)
 
 				assert.Equal(t, "test", cfg.Progress.Namespace)
@@ -760,7 +748,6 @@ func TestDecodeServerRestoreServiceConfig(t *testing.T) {
 
 				require.NotNil(t, cfg.Abort)
 				assert.Nil(t, cfg.Start)
-				assert.Nil(t, cfg.Prepare)
 				assert.Nil(t, cfg.Progress)
 
 				assert.Equal(t, "test", cfg.Abort.Namespace)
@@ -900,4 +887,57 @@ func TestDecodeAppConfig(t *testing.T) {
 		require.Nil(t, app)
 		assert.Contains(t, err.Error(), "config path is empty")
 	})
+}
+
+// TestDecodeServerRestoreHydrateReplica pins down that hydrate-replica reaches the model
+// from the YAML as given, false included, and stays unset when the key is left out, so
+// that the validation can tell a setting of the other policy apart from an unset one.
+func TestDecodeServerRestoreHydrateReplica(t *testing.T) {
+	t.Parallel()
+
+	const restoreSection = `
+restore:
+  namespace: test
+  backup-ids:
+    - 261025T120000-ab12
+`
+
+	tests := []struct {
+		name       string
+		giveYAML   string
+		want       *bool
+		wantErrMsg string
+	}{
+		{name: "left out", giveYAML: restoreSection},
+		{name: "false", giveYAML: restoreSection + "  hydrate-replica: false\n", want: new(false)},
+		{name: "true", giveYAML: restoreSection + "  hydrate-replica: true\n", want: new(true)},
+		{
+			name:       "with the fuzzy policy",
+			giveYAML:   restoreSection + "  policy: fuzzy\n  hydrate-replica: true\n",
+			want:       new(true),
+			wantErrMsg: "hydrate-replica requires policy strict",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			filename := createTempFile(t, "server_restore.yaml", tt.giveYAML)
+
+			cfg, err := DecodeServerRestoreServiceConfig(t.Context(), filename, ServerRestoreCommandStart)
+			require.NoError(t, err)
+			require.NotNil(t, cfg.Start)
+
+			assert.Equal(t, tt.want, cfg.Start.HydrateReplica)
+
+			err = cfg.Start.Validate()
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
 }
