@@ -1,0 +1,66 @@
+name: Docker image checks
+# Guards the runtime image against the "*sshole" bug (https://sshhole.com):
+# on musl/Alpine, OpenSSH without PAM accepts any 257-1024 char password for
+# accounts whose shadow field is `*` (including root). Fixed in openssh 10.6p2.
+# The image is only affected if it ships sshd, so fail if openssh/sshd appear.
+#
+# Manual check:
+#   docker build -t absctl:test .
+#   docker run --rm --user root --entrypoint sh absctl:test -c \
+#     'apk info 2>/dev/null | grep -i openssh || echo none; command -v sshd || ls /usr/sbin/sshd 2>/dev/null || echo none; grep -E "^(root|abtuser):" /etc/shadow'
+#   Expected: `none` / `none`. A `*` or `!` in shadow is harmless without sshd.
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - Dockerfile
+      - go.mod
+      - go.sum
+      - Makefile
+      - .dockerignore
+      - .github/workflows/docker-image-checks.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - go.mod
+      - go.sum
+      - Makefile
+      - .dockerignore
+      - .github/workflows/docker-image-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  image-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Build image
+        run: docker build -t absctl:ci .
+
+      - name: Check image for openssh/sshd and binary ownership
+        run: |
+          docker run --rm --user root --entrypoint sh absctl:ci -c '
+            if apk info 2>/dev/null | grep -qi openssh; then echo "::error::openssh package in image"; exit 1; fi
+            if command -v sshd >/dev/null 2>&1 || [ -e /usr/sbin/sshd ]; then echo "::error::sshd binary in image"; exit 1; fi
+            owner="$(stat -c %u:%g /usr/bin/absctl)"
+            if [ "$owner" != "0:0" ]; then echo "::error::/usr/bin/absctl owned by $owner, expected 0:0 (root)"; exit 1; fi
+            echo "image checks passed"'
+
+      - name: Check runtime user can run but not modify the binary
+        run: |
+          docker run --rm --entrypoint sh absctl:ci -c '
+            if [ "$(id -u)" = 0 ]; then echo "::error::image runs as root"; exit 1; fi
+            if [ -w /usr/bin/absctl ]; then echo "::error::/usr/bin/absctl is writable by $(id -un)"; exit 1; fi
+            /usr/bin/absctl --version >/dev/null || { echo "::error::absctl fails to run as $(id -un)"; exit 1; }
+            echo "runtime user checks passed"'
