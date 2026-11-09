@@ -59,7 +59,7 @@ func TestNewRestoreCmdSubcommands(t *testing.T) {
 		wantFlags []string
 	}{
 		{giveUse: UseStart, wantFlags: []string{
-			flagNamespace, flagAsync, "backup-ids", "parallel-read", "hydrate-replica",
+			flagNamespace, flagAsync, "backup-ids", "parallel-download-threads", "hydrate-replica",
 		}},
 		{giveUse: UseProgress, wantFlags: []string{flagNamespace, flagJobID, "watch"}},
 		{giveUse: UseAbort, wantFlags: []string{flagNamespace, flagJobID}},

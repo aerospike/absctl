@@ -29,13 +29,13 @@ import (
 )
 
 const (
-	// testRestoreParallelRead differs from the default, so a value lost on the way to the
+	// testRestoreParallelDownloadThreads differs from the default, so a value lost on the way to the
 	// request is caught.
-	testRestoreParallelRead  = 32
-	testRestoreParallelWrite = 16
-	testRestoreRPS           = 1000
-	testRestoreExtraTTL      = 3600
-	testIncrementalPath      = "incr_dir"
+	testRestoreParallelDownloadThreads = 32
+	testRestoreParallelWriters         = 16
+	testRestoreRPS                     = 1000
+	testRestoreExtraTTL                = 3600
+	testIncrementalPath                = "incr_dir"
 )
 
 // TestServiceStartRestore covers what the start does around the request: the checks
@@ -194,9 +194,17 @@ func TestServiceStartRestore(t *testing.T) {
 				unstable:  tt.giveUnstable,
 				startErr:  tt.giveStartErr,
 				startSent: tt.giveStartSent,
+				// Set to the opposite of what a restore asks for, so that a check made
+				// without it is caught.
+				stableIgnoreMigrations: true,
 			}
 
 			err = svc.startRestore(t.Context(), client)
+
+			// A restore writes the whole namespace, so it must not start while
+			// migrations are in flight: the check never ignores them.
+			assert.Equal(t, 1, client.stableCalls)
+			assert.False(t, client.stableIgnoreMigrations)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -249,12 +257,12 @@ func TestServiceRestoreRequest(t *testing.T) {
 				FilterExp:        testRequestFilterExp,
 				NoIndexes:        true,
 				NoUDFs:           true,
-				ParallelWrite:    testRestoreParallelWrite,
+				ParallelWriters:  testRestoreParallelWriters,
 				RecordsPerSecond: testRestoreRPS,
 				ExtraTTL:         testRestoreExtraTTL,
 				HydrateReplica:   new(true),
 
-				ParallelRead: testRestoreParallelRead,
+				ParallelDownloadThreads: testRestoreParallelDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				common := testRequestCommon()
@@ -267,8 +275,8 @@ func TestServiceRestoreRequest(t *testing.T) {
 				return &infomodels.RequestRestore{
 					RequestCommon:          common,
 					BackupIDs:              testRequestBackupID,
-					RestoreWorkerThreads:   testRestoreParallelWrite,
-					RestoreDownloadThreads: testRestoreParallelRead,
+					RestoreWorkerThreads:   testRestoreParallelWriters,
+					RestoreDownloadThreads: testRestoreParallelDownloadThreads,
 					RestoreRPS:             testRestoreRPS,
 					ExtraTTL:               testRestoreExtraTTL,
 					HydrateReplica:         new(true),
@@ -281,7 +289,7 @@ func TestServiceRestoreRequest(t *testing.T) {
 				Namespace:         testRequestNamespace,
 				BackupIDs:         testRequestBackupID,
 				Policy:            string(infomodels.RestorePolicyFuzzy),
-				ParallelWrite:     testRestoreParallelWrite,
+				ParallelWriters:   testRestoreParallelWriters,
 				RecordsPerSecond:  testRestoreRPS,
 				MaxInflight:       new(500),
 				RetryBaseInterval: new(2000),
@@ -290,14 +298,14 @@ func TestServiceRestoreRequest(t *testing.T) {
 				IgnoreRecordError: new(true),
 				ApplyMetadataLast: new(true),
 
-				ParallelRead: testRestoreParallelRead,
+				ParallelDownloadThreads: testRestoreParallelDownloadThreads,
 			},
 			want: func() *infomodels.RequestRestore {
 				return &infomodels.RequestRestore{
 					RequestCommon:          testRequestCommon(),
 					BackupIDs:              testRequestBackupID,
-					RestoreWorkerThreads:   testRestoreParallelWrite,
-					RestoreDownloadThreads: testRestoreParallelRead,
+					RestoreWorkerThreads:   testRestoreParallelWriters,
+					RestoreDownloadThreads: testRestoreParallelDownloadThreads,
 					RestoreRPS:             testRestoreRPS,
 					Policy:                 infomodels.RestorePolicyFuzzy,
 					MaxInflight:            500,

@@ -95,8 +95,8 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultServerBackupNoConfig, result.NoConfig)
 	assert.Equal(t, models.DefaultServerBackupPolicy, result.Policy)
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
-	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
-	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
+	assert.Equal(t, models.DefaultServerBackupParallelReaders, result.ParallelReaders)
+	assert.Equal(t, models.DefaultServerBackupParallelUploadThreads, result.ParallelUploadThreads)
 }
 
 func TestServerBackup_NewFlagSet_Policy(t *testing.T) {
@@ -128,14 +128,14 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 	t.Parallel()
 
 	const (
-		testRecordsPerSecond = "5000"
-		testParallelRead     = "8"
-		testParallelWrite    = "4"
+		testRecordsPerSecond      = "5000"
+		testParallelReaders       = "8"
+		testParallelUploadThreads = "4"
 	)
 
 	commonArgs := []string{
-		"--parallel-read", testParallelRead,
-		"--parallel-write", testParallelWrite,
+		"--parallel-readers", testParallelReaders,
+		"--parallel-upload-threads", testParallelUploadThreads,
 	}
 
 	tests := []struct {
@@ -163,8 +163,8 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 			result := backup.GetServerBackup()
 
 			assert.Equal(t, 5000, result.RecordsPerSecond)
-			assert.Equal(t, 8, result.ParallelRead)
-			assert.Equal(t, 4, result.ParallelWrite)
+			assert.Equal(t, 8, result.ParallelReaders)
+			assert.Equal(t, 4, result.ParallelUploadThreads)
 		})
 	}
 }
@@ -181,14 +181,14 @@ func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
 	)
 
 	want := &models.ServerBackup{
-		Namespace:     testNamespace,
-		Path:          testPath,
-		SetList:       testSetList,
-		BinList:       testBinList,
-		FilterExp:     testFilterExp,
-		NoIndexes:     true,
-		ParallelRead:  models.DefaultServerBackupParallelRead,
-		ParallelWrite: models.DefaultServerBackupParallelWrite,
+		Namespace:             testNamespace,
+		Path:                  testPath,
+		SetList:               testSetList,
+		BinList:               testBinList,
+		FilterExp:             testFilterExp,
+		NoIndexes:             true,
+		ParallelReaders:       models.DefaultServerBackupParallelReaders,
+		ParallelUploadThreads: models.DefaultServerBackupParallelUploadThreads,
 	}
 
 	tests := []struct {
