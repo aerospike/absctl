@@ -92,7 +92,7 @@ func TestNewCmd_Subcommands(t *testing.T) {
 	assert.ElementsMatch(t,
 		[]string{
 			"backup", "restore",
-			//	"snapshot-backup", "snapshot-restore",
+			"snapshot-backup", "snapshot-restore",
 		},
 		subcommandNames(rootCmd),
 	)

@@ -128,7 +128,6 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nAvailable Commands:")
 		fmt.Println("  backup             Aerospike scan-based export")
 		fmt.Println("  restore            Aerospike scan-based import")
-
 		fmt.Println("  snapshot-backup    Manage server-integrated backups")
 		fmt.Println("  snapshot-restore   Manage server-integrated restores")
 
