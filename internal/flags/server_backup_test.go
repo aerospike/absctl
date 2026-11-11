@@ -37,6 +37,7 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 		"--namespace", "test-ns",
 		"--modified-after", "2023-09-02_12:00:00",
 		"--modified-before", "2023-09-03_12:00:00",
+		"--no-config",
 	}
 
 	err := flagSet.Parse(args)
@@ -47,6 +48,7 @@ func TestServerBackup_NewFlagSet(t *testing.T) {
 	assert.Equal(t, "test-ns", result.Namespace)
 	assert.Equal(t, "2023-09-02_12:00:00", result.ModifiedAfter)
 	assert.Equal(t, "2023-09-03_12:00:00", result.ModifiedBefore)
+	assert.True(t, result.NoConfig)
 }
 
 func TestServerBackup_NewFlagSet_ShortFlags(t *testing.T) {
@@ -90,10 +92,11 @@ func TestServerBackup_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.Equal(t, models.DefaultCommonNoIndexes, result.NoIndexes)
 	assert.Equal(t, models.DefaultCommonNoUDFs, result.NoUDFs)
 	assert.Equal(t, models.DefaultServerBackupAsync, result.Async)
+	assert.Equal(t, models.DefaultServerBackupNoConfig, result.NoConfig)
 	assert.Equal(t, models.DefaultServerBackupPolicy, result.Policy)
 	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, result.RecordsPerSecond)
-	assert.Equal(t, models.DefaultServerBackupParallelRead, result.ParallelRead)
-	assert.Equal(t, models.DefaultServerBackupParallelWrite, result.ParallelWrite)
+	assert.Equal(t, models.DefaultServerBackupParallelReaders, result.ParallelReaders)
+	assert.Equal(t, models.DefaultServerBackupParallelUploadThreads, result.ParallelUploadThreads)
 }
 
 func TestServerBackup_NewFlagSet_Policy(t *testing.T) {
@@ -125,14 +128,14 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 	t.Parallel()
 
 	const (
-		testRecordsPerSecond = "5000"
-		testParallelRead     = "8"
-		testParallelWrite    = "4"
+		testRecordsPerSecond      = "5000"
+		testParallelReaders       = "8"
+		testParallelUploadThreads = "4"
 	)
 
 	commonArgs := []string{
-		"--parallel-read", testParallelRead,
-		"--parallel-write", testParallelWrite,
+		"--parallel-readers", testParallelReaders,
+		"--parallel-upload-threads", testParallelUploadThreads,
 	}
 
 	tests := []struct {
@@ -160,8 +163,8 @@ func TestServerBackup_NewFlagSet_JobSettings(t *testing.T) {
 			result := backup.GetServerBackup()
 
 			assert.Equal(t, 5000, result.RecordsPerSecond)
-			assert.Equal(t, 8, result.ParallelRead)
-			assert.Equal(t, 4, result.ParallelWrite)
+			assert.Equal(t, 8, result.ParallelReaders)
+			assert.Equal(t, 4, result.ParallelUploadThreads)
 		})
 	}
 }
@@ -178,14 +181,14 @@ func TestServerBackup_NewFlagSet_RequestFields(t *testing.T) {
 	)
 
 	want := &models.ServerBackup{
-		Namespace:     testNamespace,
-		Path:          testPath,
-		SetList:       testSetList,
-		BinList:       testBinList,
-		FilterExp:     testFilterExp,
-		NoIndexes:     true,
-		ParallelRead:  models.DefaultServerBackupParallelRead,
-		ParallelWrite: models.DefaultServerBackupParallelWrite,
+		Namespace:             testNamespace,
+		Path:                  testPath,
+		SetList:               testSetList,
+		BinList:               testBinList,
+		FilterExp:             testFilterExp,
+		NoIndexes:             true,
+		ParallelReaders:       models.DefaultServerBackupParallelReaders,
+		ParallelUploadThreads: models.DefaultServerBackupParallelUploadThreads,
 	}
 
 	tests := []struct {

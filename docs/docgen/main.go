@@ -448,7 +448,6 @@ func buildServerSections(operation string) []docSection {
 	} else {
 		sections = append(sections,
 			docSection{FS: flags.NewServerRestore().NewFlagSet(), YAMLPrefix: "restore"},
-			docSection{FS: flags.NewServerRestorePrepare().NewFlagSet(), YAMLPrefix: "prepare"},
 			docSection{FS: flags.NewServerRestoreProgress().NewFlagSet(), YAMLPrefix: "progress"},
 			docSection{FS: flags.NewServerRestoreAbort().NewFlagSet(), YAMLPrefix: "abort"},
 			docSection{FS: flags.NewServerRestoreOpen().NewFlagSet(), YAMLPrefix: "open"},
@@ -534,11 +533,7 @@ func serverRestoreExampleDTO() *dto.ServerRestore {
 
 	r.Restore.Namespace = &ns
 	r.Restore.BackupIDs = []string{"backup-id-1", "backup-id-2"}
-	r.Restore.JobID = &jobID
 	r.Restore.Path = &path
-
-	r.Prepare.Namespace = &ns
-	r.Prepare.JobID = &jobID
 
 	r.Progress.Namespace = &ns
 	r.Progress.JobID = &jobID

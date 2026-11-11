@@ -31,20 +31,11 @@ const (
 func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
-			Namespace:         testServerNamespace,
-			BackupIDs:         testServerJobID,
-			ParallelWrite:     models.DefaultServerRestoreParallelWrite,
-			MaxInflight:       models.DefaultServerRestoreMaxInflight,
-			RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
-			RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
-			RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
+			Namespace:       testServerNamespace,
+			BackupIDs:       testServerJobID,
+			ParallelWriters: models.DefaultServerRestoreParallelWriters,
 
-			ParallelRead: models.DefaultServerRestoreParallelRead,
-		},
-		Prepare: &models.ServerRestorePrepare{
-			Namespace:      testServerNamespace,
-			JobID:          testServerJobID,
-			HydrateReplica: models.DefaultServerRestoreHydrateReplica,
+			ParallelDownloadThreads: models.DefaultServerRestoreParallelDownloadThreads,
 		},
 		App:          &models.App{},
 		ClientConfig: &client.AerospikeConfig{},
@@ -60,7 +51,6 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 
 	var (
 		restore      = &models.ServerRestore{}
-		prepare      = &models.ServerRestorePrepare{}
 		progress     = &models.ServerRestoreProgress{}
 		abort        = &models.ServerRestoreAbort{}
 		open         = &models.ServerRestoreOpen{}
@@ -75,7 +65,6 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 	tests := []struct {
 		name      string
 		restore   *models.ServerRestore
-		prepare   *models.ServerRestorePrepare
 		progress  *models.ServerRestoreProgress
 		abort     *models.ServerRestoreAbort
 		open      *models.ServerRestoreOpen
@@ -89,7 +78,6 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 		{
 			name:      "all fields set",
 			restore:   restore,
-			prepare:   prepare,
 			progress:  progress,
 			abort:     abort,
 			open:      open,
@@ -122,7 +110,6 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			got := NewServerRestoreServiceConfig(
 				ServerRestoreCommands{
 					Start:        tt.restore,
-					Prepare:      tt.prepare,
 					Progress:     tt.progress,
 					Abort:        tt.abort,
 					Open:         tt.open,
@@ -138,7 +125,6 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			require.NotNil(t, got)
 
 			assert.Same(t, tt.restore, got.Start)
-			assert.Same(t, tt.prepare, got.Prepare)
 			assert.Same(t, tt.progress, got.Progress)
 			assert.Same(t, tt.abort, got.Abort)
 			assert.Same(t, tt.open, got.Open)
@@ -200,6 +186,7 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Region = ""
 				return cfg
 			},
 			isBackup:   false,
@@ -230,16 +217,6 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "nil prepare skips prepare validation",
-			cfg: func() *ServerRestoreServiceConfig {
-				cfg := validServerRestoreServiceConfig()
-				cfg.Prepare = nil
-				return cfg
-			},
-			isBackup: false,
-			wantErr:  false,
-		},
-		{
 			name: "missing backup ids in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
@@ -251,10 +228,10 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "backup-ids is required",
 		},
 		{
-			name: "missing job id in prepare",
+			name: "missing job id in progress",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
-				cfg.Prepare.JobID = ""
+				cfg.Progress = &models.ServerRestoreProgress{Namespace: testServerNamespace}
 				return cfg
 			},
 			isBackup:   false,
@@ -307,28 +284,16 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 				return &ServerRestoreServiceConfig{
 					Open: &models.ServerRestoreOpen{
 						Namespace: testServerNamespace,
-						JobID:     testServerJobID,
 					},
 					App: &models.App{},
 				}
 			},
 		},
 		{
-			name: "missing open job id",
-			cfg: func() *ServerRestoreServiceConfig {
-				return &ServerRestoreServiceConfig{
-					Open: &models.ServerRestoreOpen{Namespace: testServerNamespace},
-					App:  &models.App{},
-				}
-			},
-			wantErr:    true,
-			wantErrMsg: testErrMsgJobIDRequired,
-		},
-		{
 			name: "missing open namespace",
 			cfg: func() *ServerRestoreServiceConfig {
 				return &ServerRestoreServiceConfig{
-					Open: &models.ServerRestoreOpen{JobID: testServerJobID},
+					Open: &models.ServerRestoreOpen{},
 					App:  &models.App{},
 				}
 			},

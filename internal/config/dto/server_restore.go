@@ -28,7 +28,6 @@ type ServerRestore struct {
 	App          App                         `yaml:"app"`
 	Cluster      Cluster                     `yaml:"cluster"`
 	Restore      ServerRestoreConfig         `yaml:"restore"`
-	Prepare      ServerRestorePrepareConfig  `yaml:"prepare"`
 	Progress     ServerRestoreProgressConfig `yaml:"progress"`
 	Abort        ServerRestoreAbortConfig    `yaml:"abort"`
 	Open         ServerRestoreOpenConfig     `yaml:"open"`
@@ -45,7 +44,6 @@ func DefaultServerRestore() *ServerRestore {
 		App:          defaultApp(),
 		Cluster:      defaultCluster(),
 		Restore:      defaultServerRestoreConfig(),
-		Prepare:      defaultServerRestorePrepareConfig(),
 		Progress:     defaultServerRestoreProgressConfig(),
 		Abort:        defaultServerRestoreAbortConfig(),
 		Open:         defaultServerRestoreOpenConfig(),
@@ -74,52 +72,47 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 // ServerRestoreConfig maps the "restore" section, used by
 // "snapshot-restore start".
 type ServerRestoreConfig struct {
-	Namespace         *string  `yaml:"namespace"`
-	BackupIDs         []string `yaml:"backup-ids"`
-	JobID             *string  `yaml:"job-id"`
-	Path              *string  `yaml:"path"`
-	IncrementalPath   *string  `yaml:"incremental-path"`
-	SetList           []string `yaml:"set-list"`
-	FilterExp         *string  `yaml:"filter-exp"`
-	NoIndexes         *bool    `yaml:"no-indexes"`
-	NoUDFs            *bool    `yaml:"no-udfs"`
-	Async             *bool    `yaml:"async"`
-	ParallelRead      *int     `yaml:"parallel-read"`
-	ParallelWrite     *int     `yaml:"parallel-write"`
-	RecordsPerSecond  *int     `yaml:"records-per-second"`
-	ExtraTTL          *int     `yaml:"extra-ttl"`
-	Policy            *string  `yaml:"policy"`
-	MaxInflight       *int     `yaml:"max-inflight"`
-	RetryBaseInterval *int     `yaml:"retry-base-interval"`
-	RetryMultiplier   *float64 `yaml:"retry-multiplier"`
-	RetryMaxAttempts  *int     `yaml:"retry-max-attempts"`
-	IgnoreRecordError *bool    `yaml:"ignore-record-error"`
-	ApplyMetadataLast *bool    `yaml:"apply-metadata-last"`
+	Namespace               *string  `yaml:"namespace"`
+	BackupIDs               []string `yaml:"backup-ids"`
+	Path                    *string  `yaml:"path"`
+	IncrementalPath         *string  `yaml:"incremental-path"`
+	SetList                 []string `yaml:"set-list"`
+	FilterExp               *string  `yaml:"filter-exp"`
+	NoIndexes               *bool    `yaml:"no-indexes"`
+	NoUDFs                  *bool    `yaml:"no-udfs"`
+	Async                   *bool    `yaml:"async"`
+	ParallelDownloadThreads *int     `yaml:"parallel-download-threads"`
+	ParallelWriters         *int     `yaml:"parallel-writers"`
+	RecordsPerSecond        *int     `yaml:"records-per-second"`
+	ExtraTTL                *int     `yaml:"extra-ttl"`
+	Policy                  *string  `yaml:"policy"`
+	HydrateReplica          *bool    `yaml:"hydrate-replica"`
+	MaxInflight             *int     `yaml:"max-inflight"`
+	RetryBaseInterval       *int     `yaml:"retry-base-interval"`
+	RetryMultiplier         *float64 `yaml:"retry-multiplier"`
+	RetryMaxAttempts        *int     `yaml:"retry-max-attempts"`
+	IgnoreRecordError       *bool    `yaml:"ignore-record-error"`
+	ApplyMetadataLast       *bool    `yaml:"apply-metadata-last"`
 }
 
 func defaultServerRestoreConfig() ServerRestoreConfig {
 	return ServerRestoreConfig{
-		Namespace:         new(models.DefaultCommonNamespace),
-		BackupIDs:         []string{},
-		JobID:             new(models.DefaultServerRestoreJobID),
-		Path:              new(models.DefaultServerBackupPath),
-		IncrementalPath:   new(models.DefaultServerRestoreIncrementalPath),
-		SetList:           []string{},
-		FilterExp:         new(models.DefaultServerFilterExp),
-		NoIndexes:         new(models.DefaultCommonNoIndexes),
-		NoUDFs:            new(models.DefaultCommonNoUDFs),
-		Async:             new(models.DefaultServerRestoreAsync),
-		ParallelRead:      new(models.DefaultServerRestoreParallelRead),
-		ParallelWrite:     new(models.DefaultServerRestoreParallelWrite),
-		RecordsPerSecond:  new(models.DefaultServerRestoreRecordsPerSecond),
-		ExtraTTL:          new(models.DefaultServerRestoreExtraTTL),
-		Policy:            new(models.DefaultServerRestorePolicy),
-		MaxInflight:       new(models.DefaultServerRestoreMaxInflight),
-		RetryBaseInterval: new(models.DefaultServerRestoreRetryBaseInterval),
-		RetryMultiplier:   new(models.DefaultServerRestoreRetryMultiplier),
-		RetryMaxAttempts:  new(models.DefaultServerRestoreRetryMaxAttempts),
-		IgnoreRecordError: new(models.DefaultServerRestoreIgnoreRecordError),
-		ApplyMetadataLast: new(models.DefaultServerRestoreApplyMetadataLast),
+		Namespace:               new(models.DefaultCommonNamespace),
+		BackupIDs:               []string{},
+		Path:                    new(models.DefaultServerBackupPath),
+		IncrementalPath:         new(models.DefaultServerRestoreIncrementalPath),
+		SetList:                 []string{},
+		FilterExp:               new(models.DefaultServerFilterExp),
+		NoIndexes:               new(models.DefaultCommonNoIndexes),
+		NoUDFs:                  new(models.DefaultCommonNoUDFs),
+		Async:                   new(models.DefaultServerRestoreAsync),
+		ParallelDownloadThreads: new(models.DefaultServerRestoreParallelDownloadThreads),
+		ParallelWriters:         new(models.DefaultServerRestoreParallelWriters),
+		RecordsPerSecond:        new(models.DefaultServerRestoreRecordsPerSecond),
+		ExtraTTL:                new(models.DefaultServerRestoreExtraTTL),
+		Policy:                  new(models.DefaultServerRestorePolicy),
+		// The settings of a single policy have no default here: an unset one is not sent,
+		// and the server applies its default.
 	}
 }
 
@@ -130,59 +123,27 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 	}
 
 	return &models.ServerRestore{
-		Namespace:         derefString(r.Restore.Namespace),
-		BackupIDs:         strings.Join(r.Restore.BackupIDs, ","),
-		JobID:             derefString(r.Restore.JobID),
-		Path:              derefString(r.Restore.Path),
-		IncrementalPath:   derefString(r.Restore.IncrementalPath),
-		SetList:           strings.Join(r.Restore.SetList, ","),
-		FilterExp:         derefString(r.Restore.FilterExp),
-		NoIndexes:         derefBool(r.Restore.NoIndexes),
-		NoUDFs:            derefBool(r.Restore.NoUDFs),
-		Async:             derefBool(r.Restore.Async),
-		ParallelRead:      derefOr(r.Restore.ParallelRead, models.DefaultServerRestoreParallelRead),
-		ParallelWrite:     derefOr(r.Restore.ParallelWrite, models.DefaultServerRestoreParallelWrite),
-		RecordsPerSecond:  derefInt(r.Restore.RecordsPerSecond),
-		ExtraTTL:          derefInt(r.Restore.ExtraTTL),
-		Policy:            derefString(r.Restore.Policy),
-		MaxInflight:       derefOr(r.Restore.MaxInflight, models.DefaultServerRestoreMaxInflight),
-		RetryBaseInterval: derefOr(r.Restore.RetryBaseInterval, models.DefaultServerRestoreRetryBaseInterval),
-		RetryMultiplier:   derefOr(r.Restore.RetryMultiplier, models.DefaultServerRestoreRetryMultiplier),
-		RetryMaxAttempts:  derefOr(r.Restore.RetryMaxAttempts, models.DefaultServerRestoreRetryMaxAttempts),
-		IgnoreRecordError: derefBool(r.Restore.IgnoreRecordError),
-		ApplyMetadataLast: derefBool(r.Restore.ApplyMetadataLast),
-	}
-}
-
-// ServerRestorePrepareConfig maps the "prepare" section, used by
-// "snapshot-restore prepare".
-type ServerRestorePrepareConfig struct {
-	Namespace      *string `yaml:"namespace"`
-	JobID          *string `yaml:"job-id"`
-	HydrateReplica *bool   `yaml:"hydrate-replica"`
-	Async          *bool   `yaml:"async"`
-}
-
-func defaultServerRestorePrepareConfig() ServerRestorePrepareConfig {
-	return ServerRestorePrepareConfig{
-		Namespace:      new(models.DefaultCommonNamespace),
-		JobID:          new(models.DefaultServerRestoreJobID),
-		HydrateReplica: new(models.DefaultServerRestoreHydrateReplica),
-		Async:          new(models.DefaultServerRestoreAsync),
-	}
-}
-
-// ToModelServerRestorePrepare maps the "prepare" section onto its model.
-func (r *ServerRestore) ToModelServerRestorePrepare() *models.ServerRestorePrepare {
-	if r == nil {
-		return nil
-	}
-
-	return &models.ServerRestorePrepare{
-		Namespace:      derefString(r.Prepare.Namespace),
-		JobID:          derefString(r.Prepare.JobID),
-		HydrateReplica: derefOr(r.Prepare.HydrateReplica, models.DefaultServerRestoreHydrateReplica),
-		Async:          derefBool(r.Prepare.Async),
+		Namespace:               derefString(r.Restore.Namespace),
+		BackupIDs:               strings.Join(r.Restore.BackupIDs, ","),
+		Path:                    derefString(r.Restore.Path),
+		IncrementalPath:         derefString(r.Restore.IncrementalPath),
+		SetList:                 strings.Join(r.Restore.SetList, ","),
+		FilterExp:               derefString(r.Restore.FilterExp),
+		NoIndexes:               derefBool(r.Restore.NoIndexes),
+		NoUDFs:                  derefBool(r.Restore.NoUDFs),
+		Async:                   derefBool(r.Restore.Async),
+		ParallelDownloadThreads: derefInt(r.Restore.ParallelDownloadThreads),
+		ParallelWriters:         derefInt(r.Restore.ParallelWriters),
+		RecordsPerSecond:        derefInt(r.Restore.RecordsPerSecond),
+		ExtraTTL:                derefInt(r.Restore.ExtraTTL),
+		Policy:                  derefString(r.Restore.Policy),
+		HydrateReplica:          cloneValue(r.Restore.HydrateReplica),
+		MaxInflight:             cloneValue(r.Restore.MaxInflight),
+		RetryBaseInterval:       cloneValue(r.Restore.RetryBaseInterval),
+		RetryMultiplier:         cloneValue(r.Restore.RetryMultiplier),
+		RetryMaxAttempts:        cloneValue(r.Restore.RetryMaxAttempts),
+		IgnoreRecordError:       cloneValue(r.Restore.IgnoreRecordError),
+		ApplyMetadataLast:       cloneValue(r.Restore.ApplyMetadataLast),
 	}
 }
 

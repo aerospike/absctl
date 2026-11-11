@@ -194,9 +194,11 @@ Server-integrated commands trigger backup and restore operations that run inside
 
 | Subcommand | Description |
 |------------|-------------|
-| `prepare` | Prepare a server-integrated restore on the Aerospike cluster |
 | `start` | Start a server-integrated restore on the Aerospike cluster |
 | `progress` | Show the progress of a running restore |
+| `clear-storage` | Clear the namespace storage for a cold restore |
+| `abort` | Abort a server-integrated restore |
+| `open` | Release the namespace of a failed or aborted cold restore |
 
 ### Features
 
@@ -204,7 +206,6 @@ Server-integrated commands trigger backup and restore operations that run inside
 - **Backup list**: Inspect available backups in object storage
 - **Backup progress**: Monitor an in-progress backup
 - **Backup validate**: Check backup integrity in object storage
-- **Restore prepare**: Prepare the cluster for a server-integrated restore
 - **Restore start**: Restore a namespace from a backup ID
 - **Restore progress**: Monitor an in-progress restore
 - **Object storage**: AWS S3 (including MinIO via `--s3-endpoint-override`)
@@ -219,7 +220,8 @@ Server-integrated commands trigger backup and restore operations that run inside
 absctl snapshot-backup start \
   -h 127.0.0.1:3000 \
   --namespace test \
-  --s3-bucket-name my-backup-bucket
+  --s3-bucket-name my-backup-bucket \
+  --s3-region us-east-1
 ```
 
 **List backups:**
@@ -233,24 +235,36 @@ absctl snapshot-backup list \
 
 ```bash
 absctl snapshot-backup progress \
-  -h 127.0.0.1:3000
+  -h 127.0.0.1:3000 \
+  --backup-id <backup-id> \
+  --s3-bucket-name my-backup-bucket
 ```
 
 **Restore from a backup:**
 
 ```bash
-# Optional: prepare the cluster before restore
-absctl snapshot-restore prepare \
-  -h 127.0.0.1:3000 \
-  --namespace test \
-  --backup-id <backup-id>
-
-# Start the restore
+# Start the restore. A strict (cold) restore closes the namespace and starts once its
+# storage is empty on every node. The restore job id is generated and logged; the other
+# restore commands take it with --job-id.
 absctl snapshot-restore start \
   -h 127.0.0.1:3000 \
   --namespace test \
-  --backup-id <backup-id> \
-  --s3-bucket-name my-backup-bucket
+  --backup-ids <backup-id> \
+  --s3-bucket-name my-backup-bucket \
+  --s3-region us-east-1
+
+# If the command reports that the storage must be cleared first, clear it and
+# follow the restore the cluster then starts on its own.
+absctl snapshot-restore clear-storage \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --job-id <restore-job-id>
+
+absctl snapshot-restore progress \
+  -h 127.0.0.1:3000 \
+  --namespace test \
+  --job-id <restore-job-id> \
+  --watch
 ```
 
 For the full flag reference and configuration file schema, see:
