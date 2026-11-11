@@ -34,7 +34,7 @@ type ServerBackup struct {
 	Abort       ServerBackupAbortConfig    `yaml:"abort"`
 	SecretAgent SecretAgent                `yaml:"secret-agent"`
 	Aws         struct {
-		S3 ObjectStorageS3 `yaml:"s3"`
+		S3 SnapshotS3 `yaml:"s3"`
 	} `yaml:"aws"`
 }
 
@@ -50,8 +50,8 @@ func DefaultServerBackup() *ServerBackup {
 		Abort:       defaultServerBackupAbortConfig(),
 		SecretAgent: defaultSecretAgent(),
 		Aws: struct {
-			S3 ObjectStorageS3 `yaml:"s3"`
-		}{S3: defaultObjectStorageS3()},
+			S3 SnapshotS3 `yaml:"s3"`
+		}{S3: defaultSnapshotS3()},
 	}
 }
 
@@ -64,35 +64,48 @@ func (b *ServerBackup) LoadSecrets(ctx context.Context) error {
 		return nil
 	}
 
-	fields := collectServerSecretableFields(&b.Cluster, &b.Aws.S3)
+	fields := collectServerSecretableFields(&b.Cluster, &b.Aws.S3.AwsS3Common)
 
 	return resolveSecretFields(ctx, saCfg, fields...)
 }
 
 // ServerBackupConfig maps the "backup" section, used by "snapshot-backup start".
 type ServerBackupConfig struct {
-	Namespace          *string  `yaml:"namespace"`
-	StorageType        *string  `yaml:"object-storage-type"`
-	ModifiedAfter      *string  `yaml:"modified-after"`
-	ModifiedBefore     *string  `yaml:"modified-before"`
-	SetList            []string `yaml:"set-list"`
-	NoIndexes          *bool    `yaml:"no-indexes"`
-	NoUDFs             *bool    `yaml:"no-udfs"`
-	EnableChangeStream *bool    `yaml:"enable-change-stream"`
-	Async              *bool    `yaml:"async"`
+	Namespace      *string  `yaml:"namespace"`
+	Path           *string  `yaml:"path"`
+	ModifiedAfter  *string  `yaml:"modified-after"`
+	ModifiedBefore *string  `yaml:"modified-before"`
+	SetList        []string `yaml:"set-list"`
+	BinList        []string `yaml:"bin-list"`
+	FilterExp      *string  `yaml:"filter-exp"`
+	NoIndexes      *bool    `yaml:"no-indexes"`
+	NoUDFs         *bool    `yaml:"no-udfs"`
+	NoConfig       *bool    `yaml:"no-config"`
+	Policy         *string  `yaml:"policy"`
+	Async          *bool    `yaml:"async"`
+
+	RecordsPerSecond      *int `yaml:"records-per-second"`
+	ParallelReaders       *int `yaml:"parallel-readers"`
+	ParallelUploadThreads *int `yaml:"parallel-upload-threads"`
 }
 
 func defaultServerBackupConfig() ServerBackupConfig {
 	return ServerBackupConfig{
-		Namespace:          new(models.DefaultCommonNamespace),
-		StorageType:        new(models.DefaultServerBackupObjectStorageType),
-		ModifiedAfter:      new(models.DefaultBackupModifiedAfter),
-		ModifiedBefore:     new(models.DefaultBackupModifiedBefore),
-		SetList:            []string{},
-		NoIndexes:          new(models.DefaultCommonNoIndexes),
-		NoUDFs:             new(models.DefaultCommonNoUDFs),
-		EnableChangeStream: new(models.DefaultBackupEnableChangeStream),
-		Async:              new(models.DefaultServerBackupAsync),
+		Namespace:             new(models.DefaultCommonNamespace),
+		Path:                  new(models.DefaultServerBackupPath),
+		ModifiedAfter:         new(models.DefaultBackupModifiedAfter),
+		ModifiedBefore:        new(models.DefaultBackupModifiedBefore),
+		SetList:               []string{},
+		BinList:               []string{},
+		FilterExp:             new(models.DefaultServerFilterExp),
+		NoIndexes:             new(models.DefaultCommonNoIndexes),
+		NoUDFs:                new(models.DefaultCommonNoUDFs),
+		NoConfig:              new(models.DefaultServerBackupNoConfig),
+		Policy:                new(models.DefaultServerBackupPolicy),
+		Async:                 new(models.DefaultServerBackupAsync),
+		RecordsPerSecond:      new(models.DefaultServerBackupRecordsPerSecond),
+		ParallelReaders:       new(models.DefaultServerBackupParallelReaders),
+		ParallelUploadThreads: new(models.DefaultServerBackupParallelUploadThreads),
 	}
 }
 
@@ -103,15 +116,22 @@ func (b *ServerBackup) ToModelServerBackup() *models.ServerBackup {
 	}
 
 	return &models.ServerBackup{
-		Namespace:          derefString(b.Backup.Namespace),
-		StorageType:        derefString(b.Backup.StorageType),
-		ModifiedAfter:      derefString(b.Backup.ModifiedAfter),
-		ModifiedBefore:     derefString(b.Backup.ModifiedBefore),
-		SetList:            strings.Join(b.Backup.SetList, ","),
-		NoIndexes:          derefBool(b.Backup.NoIndexes),
-		NoUDFs:             derefBool(b.Backup.NoUDFs),
-		EnableChangeStream: derefBool(b.Backup.EnableChangeStream),
-		Async:              derefBool(b.Backup.Async),
+		Namespace:      derefString(b.Backup.Namespace),
+		Path:           derefString(b.Backup.Path),
+		ModifiedAfter:  derefString(b.Backup.ModifiedAfter),
+		ModifiedBefore: derefString(b.Backup.ModifiedBefore),
+		SetList:        strings.Join(b.Backup.SetList, ","),
+		BinList:        strings.Join(b.Backup.BinList, ","),
+		FilterExp:      derefString(b.Backup.FilterExp),
+		NoIndexes:      derefBool(b.Backup.NoIndexes),
+		NoUDFs:         derefBool(b.Backup.NoUDFs),
+		NoConfig:       derefBool(b.Backup.NoConfig),
+		Policy:         derefString(b.Backup.Policy),
+		Async:          derefBool(b.Backup.Async),
+
+		RecordsPerSecond:      derefInt(b.Backup.RecordsPerSecond),
+		ParallelReaders:       derefInt(b.Backup.ParallelReaders),
+		ParallelUploadThreads: derefInt(b.Backup.ParallelUploadThreads),
 	}
 }
 
@@ -141,12 +161,14 @@ func (b *ServerBackup) ToModelServerBackupList() *models.ServerBackupList {
 // "snapshot-backup validate".
 type ServerBackupValidateConfig struct {
 	JobID      *string `yaml:"backup-id"`
+	Path       *string `yaml:"path"`
 	SampleSize *int    `yaml:"sample-size"`
 }
 
 func defaultServerBackupValidateConfig() ServerBackupValidateConfig {
 	return ServerBackupValidateConfig{
 		JobID:      new(models.DefaultServerBackupJobID),
+		Path:       new(models.DefaultServerBackupPath),
 		SampleSize: new(models.DefaultServerBackupValidateSampleSize),
 	}
 }
@@ -159,6 +181,7 @@ func (b *ServerBackup) ToModelServerBackupValidate() *models.ServerBackupValidat
 
 	return &models.ServerBackupValidate{
 		JobID:      derefString(b.Validate.JobID),
+		Path:       derefString(b.Validate.Path),
 		SampleSize: derefInt(b.Validate.SampleSize),
 	}
 }
@@ -167,12 +190,14 @@ func (b *ServerBackup) ToModelServerBackupValidate() *models.ServerBackupValidat
 // "snapshot-backup progress".
 type ServerBackupProgressConfig struct {
 	JobID *string `yaml:"backup-id"`
+	Path  *string `yaml:"path"`
 	Watch *bool   `yaml:"watch"`
 }
 
 func defaultServerBackupProgressConfig() ServerBackupProgressConfig {
 	return ServerBackupProgressConfig{
 		JobID: new(models.DefaultServerBackupJobID),
+		Path:  new(models.DefaultServerBackupPath),
 		Watch: new(models.DefaultServerBackupProgressWatch),
 	}
 }
@@ -185,6 +210,7 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 
 	return &models.ServerBackupProgress{
 		JobID: derefString(b.Progress.JobID),
+		Path:  derefString(b.Progress.Path),
 		Watch: derefBool(b.Progress.Watch),
 	}
 }
@@ -192,11 +218,13 @@ func (b *ServerBackup) ToModelServerBackupProgress() *models.ServerBackupProgres
 // ServerBackupAbortConfig maps the "abort" section, used by "snapshot-backup abort".
 type ServerBackupAbortConfig struct {
 	JobID *string `yaml:"backup-id"`
+	Async *bool   `yaml:"async"`
 }
 
 func defaultServerBackupAbortConfig() ServerBackupAbortConfig {
 	return ServerBackupAbortConfig{
 		JobID: new(models.DefaultServerBackupJobID),
+		Async: new(models.DefaultServerBackupAsync),
 	}
 }
 
@@ -208,5 +236,6 @@ func (b *ServerBackup) ToModelServerBackupAbort() *models.ServerBackupAbort {
 
 	return &models.ServerBackupAbort{
 		JobID: derefString(b.Abort.JobID),
+		Async: derefBool(b.Abort.Async),
 	}
 }

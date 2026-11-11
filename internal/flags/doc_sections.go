@@ -26,15 +26,17 @@ const (
 	SectionTextUsageBackupServer  = "\nUsage:\n  absctl snapshot-backup <command> [flags]"
 	SectionTextUsageRestoreServer = "\nUsage:\n  absctl snapshot-restore <command> [flags]"
 
-	SectionTextUsageBackupStart     = "\nUsage:\n  absctl snapshot-backup start [flags]"
-	SectionTextUsageBackupList      = "\nUsage:\n  absctl snapshot-backup list [flags]"
-	SectionTextUsageValidate        = "\nUsage:\n  absctl snapshot-backup validate [flags]"
+	SectionTextUsageBackupStart = "\nUsage:\n  absctl snapshot-backup start [flags]"
+	SectionTextUsageBackupList  = "\nUsage:\n  absctl snapshot-backup list [flags]"
+	SectionTextUsageValidate    = "\nUsage:\n  absctl snapshot-backup validate [flags]" +
+		"\n\nValidation is done by the absctl tool; nothing is sent to the server."
 	SectionTextUsageBackupAbort     = "\nUsage:\n  absctl snapshot-backup abort [flags]"
 	SectionTextUsageBackupProgress  = "\nUsage:\n  absctl snapshot-backup progress [flags]"
-	SectionTextUsageRestorePrepare  = "\nUsage:\n  absctl snapshot-restore prepare [flags]"
 	SectionTextUsageRestoreProgress = "\nUsage:\n  absctl snapshot-restore progress [flags]"
 	SectionTextUsageRestoreStart    = "\nUsage:\n  absctl snapshot-restore start [flags]"
 	SectionTextUsageRestoreAbort    = "\nUsage:\n  absctl snapshot-restore abort [flags]"
+	SectionTextUsageRestoreOpen     = "\nUsage:\n  absctl snapshot-restore open [flags]"
+	SectionTextUsageRestoreClear    = "\nUsage:\n  absctl snapshot-restore clear-storage [flags]"
 
 	SectionAvailableCommands = "\nAvailable Commands:"
 

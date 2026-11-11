@@ -25,16 +25,19 @@ import (
 
 const (
 	testServerNamespace = "test-ns"
-	testServerJobID     = "backup-job-1"
+	testServerJobID     = "261025T120000-ab12"
 	testServerListPath  = "/backups"
-	testServerStorage   = models.StorageTypeAwsS3
 )
+
+// testServerRegion is the region the server is sent with the bucket.
+const testServerRegion = "us-east-1"
 
 // validServerObjectStorage returns the S3 section a server-integrated command
 // needs to pass validation in both backup and restore mode.
 func validServerObjectStorage() *models.AwsS3 {
 	return &models.AwsS3{
 		BucketName:          testBucket,
+		Region:              testServerRegion,
 		RestorePollDuration: 1,
 		ChunkSize:           5,
 		RetryReadBackoff:    100,
@@ -45,8 +48,7 @@ func validServerObjectStorage() *models.AwsS3 {
 func validServerBackupServiceConfig() *ServerBackupServiceConfig {
 	return &ServerBackupServiceConfig{
 		Start: &models.ServerBackup{
-			Namespace:   testServerNamespace,
-			StorageType: testServerStorage,
+			Namespace: testServerNamespace,
 		},
 		List: &models.ServerBackupList{
 			Path: testServerListPath,
@@ -76,7 +78,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
 		secretAgent  = &models.SecretAgent{}
-		awsS3        = &models.AwsS3{}
+		s3           = &models.SnapshotS3{BucketName: testBucket, Throughput: 10}
 	)
 
 	tests := []struct {
@@ -90,7 +92,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 		clientCfg  *client.AerospikeConfig
 		clientPol  *models.ClientPolicy
 		secret     *models.SecretAgent
-		awsS3      *models.AwsS3
+		s3         *models.SnapshotS3
 	}{
 		{
 			name:       "all fields set",
@@ -103,7 +105,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			clientCfg:  clientCfg,
 			clientPol:  clientPolicy,
 			secret:     secretAgent,
-			awsS3:      awsS3,
+			s3:         s3,
 		},
 		{
 			name: "all fields nil",
@@ -115,8 +117,8 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			clientCfg: clientCfg,
 		},
 		{
-			name:  "only cloud storage fields set",
-			awsS3: awsS3,
+			name: "only cloud storage fields set",
+			s3:   s3,
 		},
 	}
 
@@ -134,7 +136,7 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 				tt.clientCfg,
 				tt.clientPol,
 				tt.secret,
-				tt.awsS3,
+				tt.s3,
 			)
 
 			require.NotNil(t, got)
@@ -148,7 +150,16 @@ func TestNewServerBackupServiceConfig(t *testing.T) {
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)
 			assert.Same(t, tt.secret, got.SecretAgent)
-			assert.Same(t, tt.awsS3, got.AwsS3)
+			// The local S3 client configuration and the throughput are taken from
+			// the snapshot one.
+			assert.Equal(t, tt.s3.ToAwsS3(), got.AwsS3)
+
+			var wantThroughput int
+			if tt.s3 != nil {
+				wantThroughput = tt.s3.Throughput
+			}
+
+			assert.Equal(t, wantThroughput, got.S3Throughput)
 		})
 	}
 }
@@ -186,17 +197,6 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing storage type",
-			cfg: func() *ServerBackupServiceConfig {
-				cfg := validServerBackupServiceConfig()
-				cfg.Start.StorageType = ""
-				return cfg
-			},
-			isBackup:   true,
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "nil list skips list validation",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
@@ -228,15 +228,28 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
-			name: "missing bucket name",
+			name: "empty object storage",
 			cfg: func() *ServerBackupServiceConfig {
 				cfg := validServerBackupServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Region = ""
 				return cfg
 			},
 			isBackup:   true,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgStorageNotConfigured,
+		},
+		{
+			name: "missing bucket name",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: testErrMsgBucketRequired,
 		},
 		{
 			name: "nil object storage",
@@ -247,7 +260,7 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   true,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 		{
 			name: "valid abort config without object storage",
@@ -275,6 +288,37 @@ func TestServerBackupServiceConfig_Validate(t *testing.T) {
 			isBackup:   true,
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name: "s3 throughput at the limit",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.S3Throughput = 400
+				return cfg
+			},
+			isBackup: true,
+		},
+		{
+			name: "s3 throughput above range",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.S3Throughput = 401
+				return cfg
+			},
+			isBackup:   true,
+			wantErr:    true,
+			wantErrMsg: "s3-throughput must be between 0 and 400, got 401",
+		},
+		{
+			// Only start sends the throughput to the server.
+			name: "s3 throughput above range without start",
+			cfg: func() *ServerBackupServiceConfig {
+				cfg := validServerBackupServiceConfig()
+				cfg.Start = nil
+				cfg.S3Throughput = 401
+				return cfg
+			},
+			isBackup: true,
 		},
 		{
 			name: "multiple cloud providers configured",

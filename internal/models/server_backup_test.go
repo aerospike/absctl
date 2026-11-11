@@ -15,24 +15,33 @@
 package models
 
 import (
+	"math"
 	"testing"
 
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	testServerNamespace    = "test-ns"
-	testServerJobID        = "backup-job-1"
+	testServerNamespace = "test-ns"
+	testServerJobID     = "261025T120000-ab12"
+	// testNotBackupID is an id that does not have the form of a backup id.
+	testNotBackupID        = "backup-job-1"
+	errMsgNotBackupID      = "is not a backup id"
 	testServerListPath     = "/backups"
-	testServerStorage      = StorageTypeAwsS3
-	testUnsupportedStorage = "gcp-storage"
+	testServerFilterExp    = "kwGTUQKkYmluMQE="
+	testInvalidFilterExp   = "not-base64!"
+	errMsgInvalidFilterExp = "invalid filter-exp: must be a base64-encoded filter expression"
+	testServerPath         = "backups/daily"
+	testParentPath         = "backups/../other"
+	errMsgParentPath       = `invalid path "backups/../other": must not contain '..'`
+	testUnknownPolicy      = "eventual"
 )
 
 func validServerBackup() *ServerBackup {
 	return &ServerBackup{
-		Namespace:   testServerNamespace,
-		StorageType: testServerStorage,
+		Namespace: testServerNamespace,
 	}
 }
 
@@ -58,16 +67,6 @@ func TestServerBackup_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing storage type",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.StorageType = ""
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "missing namespace",
 			backup: func() *ServerBackup {
 				backup := validServerBackup()
@@ -76,16 +75,6 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
-		},
-		{
-			name: "unsupported storage type",
-			backup: func() *ServerBackup {
-				backup := validServerBackup()
-				backup.StorageType = testUnsupportedStorage
-				return backup
-			},
-			wantErr:    true,
-			wantErrMsg: "unsupported storage-type",
 		},
 		{
 			name: "invalid modified after",
@@ -128,6 +117,146 @@ func TestServerBackup_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "valid filter expression",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.FilterExp = testServerFilterExp
+				return backup
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid filter expression",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.FilterExp = testInvalidFilterExp
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgInvalidFilterExp,
+		},
+		{
+			name: "valid path",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.Path = testServerPath
+				return backup
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.Path = testParentPath
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
+		},
+		{
+			name: "job settings at the limits",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = math.MaxUint32
+				backup.ParallelReaders = maxServerBackupParallel
+				backup.ParallelUploadThreads = maxServerBackupParallel
+				return backup
+			},
+		},
+		{
+			// The server checks the rate against its own number of scan threads, 4.
+			name: "records per second below the minimum without parallel readers",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = 0
+				backup.RecordsPerSecond = 1
+				return backup
+			},
+			wantErr: true,
+			wantErrMsg: "records-per-second must be 0 or at least 20 for the 4 scan threads " +
+				"the server uses when parallel-readers is 0, got 1",
+		},
+		{
+			name: "records per second at the minimum without parallel readers",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = 0
+				backup.RecordsPerSecond = serverDefaultBackupParallelReaders * minServerBackupRPSPerReader
+				return backup
+			},
+		},
+		{
+			name: "records per second at the minimum for parallel readers",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = 4
+				backup.RecordsPerSecond = 4 * minServerBackupRPSPerReader
+				return backup
+			},
+		},
+		{
+			name: "records per second below the minimum for parallel readers",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = 4
+				backup.RecordsPerSecond = 4*minServerBackupRPSPerReader - 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be 0 or at least 20 for 4 parallel-readers, got 19",
+		},
+		{
+			name: "negative records per second",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = -1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got -1",
+		},
+		{
+			name: "records per second above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.RecordsPerSecond = math.MaxUint32 + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got 4294967296",
+		},
+		{
+			name: "parallel readers above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = maxServerBackupParallel + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-readers must be between 0 and 128, got 129",
+		},
+		{
+			name: "negative parallel readers",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelReaders = -1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-readers must be between 0 and 128, got -1",
+		},
+		{
+			name: "parallel upload threads above range",
+			backup: func() *ServerBackup {
+				backup := validServerBackup()
+				backup.ParallelUploadThreads = maxServerBackupParallel + 1
+				return backup
+			},
+			wantErr:    true,
+			wantErrMsg: "parallel-upload-threads must be between 0 and 128, got 129",
+		},
 	}
 
 	for _, tt := range tests {
@@ -144,6 +273,75 @@ func TestServerBackup_Validate(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestServerBackup_ValidatePolicy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		testUpperCasePolicy = "STRICT"
+		testMixedCasePolicy = "Best-Effort"
+		// errMsgBackupPolicy is the common part of the unknown backup policy errors.
+		errMsgBackupPolicy = `policy must be strict, best-effort or fuzzy, got "`
+	)
+
+	tests := []struct {
+		name       string
+		givePolicy string
+		want       infomodels.BackupPolicy
+		wantErrMsg string
+	}{
+		{name: "empty uses the server default"},
+		{
+			name:       "strict",
+			givePolicy: string(infomodels.BackupPolicyStrict),
+			want:       infomodels.BackupPolicyStrict,
+		},
+		{
+			name:       "best effort",
+			givePolicy: string(infomodels.BackupPolicyBestEffort),
+			want:       infomodels.BackupPolicyBestEffort,
+		},
+		{
+			name:       "fuzzy",
+			givePolicy: string(infomodels.BackupPolicyFuzzy),
+			want:       infomodels.BackupPolicyFuzzy,
+		},
+		{
+			name:       "unknown",
+			givePolicy: testUnknownPolicy,
+			wantErrMsg: errMsgBackupPolicy + testUnknownPolicy,
+		},
+		{
+			// Policies are accepted in any case and sent in lower case.
+			name:       "upper case",
+			givePolicy: testUpperCasePolicy,
+			want:       infomodels.BackupPolicyStrict,
+		},
+		{
+			name:       "mixed case",
+			givePolicy: testMixedCasePolicy,
+			want:       infomodels.BackupPolicyBestEffort,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			backup := validServerBackup()
+			backup.Policy = tt.givePolicy
+
+			err := backup.Validate()
+
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, backup.BackupPolicy())
 		})
 	}
 }
@@ -168,6 +366,14 @@ func TestServerBackupList_Validate(t *testing.T) {
 			name:    "nil list",
 			list:    nil,
 			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			list: &ServerBackupList{
+				Path: testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 
@@ -217,12 +423,35 @@ func TestServerBackupProgress_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
+			name:       "backup id of another form",
+			progress:   &ServerBackupProgress{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
+		},
+		{
 			name: "watch enabled",
 			progress: &ServerBackupProgress{
 				JobID: testServerJobID,
 				Watch: true,
 			},
 			wantErr: false,
+		},
+		{
+			name: "valid path",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+				Path:  testServerPath,
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			progress: &ServerBackupProgress{
+				JobID: testServerJobID,
+				Path:  testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 
@@ -270,6 +499,12 @@ func TestServerBackupAbort_Validate(t *testing.T) {
 			abort:      &ServerBackupAbort{},
 			wantErr:    true,
 			wantErrMsg: "backup-id is required",
+		},
+		{
+			name:       "backup id of another form",
+			abort:      &ServerBackupAbort{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
 		},
 	}
 
@@ -319,6 +554,12 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			wantErrMsg: "backup-id is required",
 		},
 		{
+			name:       "backup id of another form",
+			validation: &ServerBackupValidate{JobID: testNotBackupID},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
+		},
+		{
 			name: "zero sample size validates all segments",
 			validation: &ServerBackupValidate{
 				JobID:      testServerJobID,
@@ -334,6 +575,23 @@ func TestServerBackupValidate_Validate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "sample-size must be non-negative",
+		},
+		{
+			name: "valid path",
+			validation: &ServerBackupValidate{
+				JobID: testServerJobID,
+				Path:  testServerPath,
+			},
+			wantErr: false,
+		},
+		{
+			name: "path with parent segment",
+			validation: &ServerBackupValidate{
+				JobID: testServerJobID,
+				Path:  testParentPath,
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
 		},
 	}
 

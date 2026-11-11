@@ -26,14 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testJobID     = "527069025"
-	testNamespace = "source-ns1"
-
-	// logBackupProgress is the message every progress line is logged under.
-	logBackupProgress = "backup progress"
-)
-
 func TestProgressPrinterShouldPrint(t *testing.T) {
 	t.Parallel()
 
@@ -58,7 +50,7 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 		{
 			name: "stage transition prints",
 			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
+				stage:       string(infomodels.BackupStateBaseScanActive),
 				lastRatio:   0.5,
 				lastPrinted: now.Add(-time.Second),
 			},
@@ -70,7 +62,7 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 		{
 			name: "stalled progress prints on heartbeat",
 			printer: &progressPrinter{
-				state:       infomodels.BackupStateIncrScanActive,
+				stage:       string(infomodels.BackupStateIncrScanActive),
 				lastRatio:   0.95,
 				lastPrinted: now.Add(-heartbeatInterval),
 			},
@@ -82,7 +74,7 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 		{
 			name: "stalled progress stays silent before heartbeat",
 			printer: &progressPrinter{
-				state:       infomodels.BackupStateIncrScanActive,
+				stage:       string(infomodels.BackupStateIncrScanActive),
 				lastRatio:   0.95,
 				lastPrinted: now.Add(-heartbeatInterval + time.Second),
 			},
@@ -96,7 +88,7 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 			// delta = 0.5 - 0.4997 = 3e-4, below the threshold.
 			name: "delta below threshold stays silent",
 			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
+				stage:       string(infomodels.BackupStateBaseScanActive),
 				lastRatio:   0.4997,
 				lastPrinted: now.Add(-time.Second),
 			},
@@ -109,7 +101,7 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 			// Same projection as above, but delta = 0.01 is well above the threshold.
 			name: "delta above threshold prints",
 			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
+				stage:       string(infomodels.BackupStateBaseScanActive),
 				lastRatio:   0.49,
 				lastPrinted: now.Add(-time.Second),
 			},
@@ -124,115 +116,83 @@ func TestProgressPrinterShouldPrint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			status := &infomodels.ResponseBackupState{JobID: testJobID, State: tt.state}
-
-			assert.Equal(t, tt.want, tt.printer.shouldPrint(status, tt.ratio, tt.elapsed, now))
+			assert.Equal(t, tt.want, tt.printer.shouldPrint(string(tt.state), tt.ratio, tt.elapsed, now))
 		})
 	}
 }
 
-func TestProgressPrinterSample(t *testing.T) {
+func TestProgressSnapshotProjectedRatio(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
-
 	tests := []struct {
-		name       string
-		printer    *progressPrinter
-		state      infomodels.BackupState
-		recs       uint64
-		sampleTime time.Time
-		want       float64
+		name           string
+		giveRatio      float64
+		giveStartRatio float64
+		want           float64
 	}{
-		{
-			name:       "first sample only seeds the baseline",
-			printer:    &progressPrinter{},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       1000,
-			sampleTime: now,
-			want:       0,
-		},
-		{
-			name: "second sample takes the instant rate",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       200,
-		},
-		{
-			name: "later samples are smoothed",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       130,
-		},
-		{
-			name: "stage transition restarts the measurement",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateIncrScanActive,
-			recs:       50,
-			sampleTime: now,
-			want:       0,
-		},
-		{
-			// RecsBackedUp sums the base, incremental and change lines, so it is not
-			// monotonic. Unsigned arithmetic would wrap a drop into a huge rate.
-			name: "counter going backwards is read as no progress",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 3000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       1000,
-			sampleTime: now,
-			want:       70,
-		},
-		{
-			name: "repeated sample at the same instant is ignored",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now,
-				sampledRecs: 1000,
-				recsPerSec:  100,
-			},
-			state:      infomodels.BackupStateBaseScanActive,
-			recs:       3000,
-			sampleTime: now,
-			want:       100,
-		},
+		{name: "projected from the job start", giveRatio: 0.25, want: 0.25},
+		{name: "half of what was left", giveRatio: 0.75, giveStartRatio: 0.5, want: 0.5},
+		{name: "nothing done since the start point", giveRatio: 0.5, giveStartRatio: 0.5},
+		{name: "below the start point", giveRatio: 0.25, giveStartRatio: 0.5},
+		{name: "nothing was left at the start point", giveRatio: 1, giveStartRatio: 1, want: 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			status := &infomodels.ResponseBackupState{
-				JobID:        testJobID,
-				State:        tt.state,
-				RecsBackedUp: tt.recs,
-			}
+			snap := &progressSnapshot{ratio: tt.giveRatio, startRatio: tt.giveStartRatio}
 
-			tt.printer.sample(status, tt.sampleTime)
+			assert.InDelta(t, tt.want, snap.projectedRatio(), 1e-9)
+		})
+	}
+}
 
-			assert.InDelta(t, tt.want, tt.printer.recsPerSec, 1e-9)
+// TestProgressPrinterProjectsFromStartRatio checks that the time left is projected at the
+// rate seen since the start point, over the work left: 25% in an hour since 50% leaves
+// 25%, another hour.
+func TestProgressPrinterProjectsFromStartRatio(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	now := time.Now()
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	printer := newProgressPrinter(logger, msgRestoreProgress)
+
+	require.True(t, printer.Print(t.Context(), &progressSnapshot{
+		stage:      stateRestoring,
+		ratio:      0.75,
+		startTime:  now.Add(-time.Hour),
+		startRatio: 0.5,
+	}, now))
+	assert.Contains(t, buf.String(), "remaining=1h0m0s")
+}
+
+func TestCompletionRatio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		give         float64
+		giveComplete bool
+		want         float64
+	}{
+		{name: "zero", give: 0, want: 0},
+		{name: "half", give: 50, want: 0.5},
+		{name: "two decimals", give: 61.2, want: 0.612},
+		{name: "complete", give: 100, want: 1},
+		{name: "above complete is clamped", give: 100.5, want: 1},
+		{name: "negative is clamped", give: -1, want: 0},
+		{name: "complete job without a percentage", give: 0, giveComplete: true, want: 1},
+		{name: "complete job below 100", give: 95, giveComplete: true, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.InDelta(t, tt.want, completionRatio(tt.give, tt.giveComplete), 1e-9)
 		})
 	}
 }
@@ -300,107 +260,8 @@ func TestNextPoll(t *testing.T) {
 				StartTime:   tt.startTime,
 			}
 
-			assert.InDelta(t, float64(tt.want), float64(nextPoll(status, now)), float64(time.Millisecond))
-		})
-	}
-}
-
-// TestProgressPrinterPrint pins down the progress line itself. It carries the same
-// fields as the client side backup progress - completion, estimate and speed - so that a
-// server side backup reads the same way.
-func TestProgressPrinterPrint(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-
-	tests := []struct {
-		name        string
-		printer     *progressPrinter
-		status      *infomodels.ResponseBackupState
-		wantLogs    []string
-		notWantLogs []string
-	}{
-		{
-			name: "reports the progress of a running backup",
-			status: &infomodels.ResponseBackupState{
-				JobID:        testJobID,
-				Namespace:    testNamespace,
-				State:        infomodels.BackupStateBaseScanActive,
-				ProgressPct:  50,
-				RecsBackedUp: 1000,
-				RecsBase:     1000,
-				StartTime:    now.Add(-time.Hour),
-			},
-			wantLogs: []string{
-				logBackupProgress,
-				"backup-id=" + testJobID,
-				"pct=50",
-				"rec/s=0",
-				"remaining=1h0m0s",
-			},
-		},
-		{
-			name: "rounds the percentage to two decimals",
-			status: &infomodels.ResponseBackupState{
-				JobID:       testJobID,
-				State:       infomodels.BackupStateBaseScanActive,
-				ProgressPct: 33.33333,
-				StartTime:   now.Add(-time.Hour),
-			},
-			wantLogs: []string{"pct=33.33"},
-		},
-		{
-			// Without a start time there is nothing to project the estimate from, and a
-			// made up one is worse than none.
-			name: "omits the estimate when the cluster reported no start time",
-			status: &infomodels.ResponseBackupState{
-				JobID:       testJobID,
-				State:       infomodels.BackupStateInit,
-				ProgressPct: 0,
-			},
-			wantLogs:    []string{logBackupProgress},
-			notWantLogs: []string{"remaining="},
-		},
-		{
-			name: "reports the speed measured since the previous sample",
-			printer: &progressPrinter{
-				state:       infomodels.BackupStateBaseScanActive,
-				sampledAt:   now.Add(-10 * time.Second),
-				sampledRecs: 1000,
-			},
-			status: &infomodels.ResponseBackupState{
-				JobID:        testJobID,
-				State:        infomodels.BackupStateBaseScanActive,
-				ProgressPct:  50,
-				RecsBackedUp: 3000,
-				StartTime:    now.Add(-time.Hour),
-			},
-			wantLogs: []string{"rec/s=200"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			var buf bytes.Buffer
-
-			printer := tt.printer
-			if printer == nil {
-				printer = &progressPrinter{}
-			}
-
-			printer.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
-			require.True(t, printer.Print(tt.status, now))
-
-			for _, want := range tt.wantLogs {
-				assert.Contains(t, buf.String(), want)
-			}
-
-			for _, notWant := range tt.notWantLogs {
-				assert.NotContains(t, buf.String(), notWant)
-			}
+			assert.InDelta(t, float64(tt.want), float64(nextPoll(backupSnapshot(status), now)),
+				float64(time.Millisecond))
 		})
 	}
 }
@@ -414,7 +275,7 @@ func TestProgressPrinterPrintSkipsRepeatedStatus(t *testing.T) {
 	var buf bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	printer := newProgressPrinter(logger)
+	printer := newProgressPrinter(logger, msgBackupProgress)
 
 	now := time.Now()
 
@@ -427,15 +288,15 @@ func TestProgressPrinterPrintSkipsRepeatedStatus(t *testing.T) {
 		StartTime:    now.Add(-time.Hour),
 	}
 
-	require.True(t, printer.Print(status, now))
+	require.True(t, printer.Print(t.Context(), backupSnapshot(status), now))
 
 	buf.Reset()
 
-	assert.False(t, printer.Print(status, now.Add(time.Second)))
+	assert.False(t, printer.Print(t.Context(), backupSnapshot(status), now.Add(time.Second)))
 	assert.Empty(t, buf.String())
 }
 
-func TestBackupDuration(t *testing.T) {
+func TestJobDuration(t *testing.T) {
 	t.Parallel()
 
 	start := time.Date(2026, 9, 22, 10, 36, 53, 0, time.UTC)
@@ -479,16 +340,65 @@ func TestBackupDuration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			status := &infomodels.ResponseBackupState{
-				JobID:      testJobID,
-				StartTime:  tt.startTime,
-				FinishTime: tt.finishTime,
-			}
-
-			got, ok := backupDuration(status)
+			got, ok := jobDuration(tt.startTime, tt.finishTime)
 
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestProgressPrinterDebugAttrs pins down that the full state is printed at the debug
+// level only, after the short label every level prints.
+func TestProgressPrinterDebugAttrs(t *testing.T) {
+	t.Parallel()
+
+	const (
+		logLabel       = "state=incremental-scan"
+		logDescription = "description="
+		logServerState = "server-state=INCR_SCAN_ACTIVE"
+	)
+
+	tests := []struct {
+		name        string
+		giveLevel   slog.Level
+		wantLogs    []string
+		notWantLogs []string
+	}{
+		{
+			name:        "info",
+			giveLevel:   slog.LevelInfo,
+			wantLogs:    []string{logLabel},
+			notWantLogs: []string{logDescription, logServerState},
+		},
+		{
+			name:      "debug",
+			giveLevel: slog.LevelDebug,
+			wantLogs:  []string{logLabel, logDescription, logServerState},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: tt.giveLevel}))
+			printer := newProgressPrinter(logger, msgBackupProgress)
+
+			require.True(t, printer.Print(t.Context(), backupSnapshot(&infomodels.ResponseBackupState{
+				JobID: testJobID,
+				State: infomodels.BackupStateIncrScanActive,
+			}), time.Now()))
+
+			for _, want := range tt.wantLogs {
+				assert.Contains(t, buf.String(), want)
+			}
+
+			for _, notWant := range tt.notWantLogs {
+				assert.NotContains(t, buf.String(), notWant)
+			}
 		})
 	}
 }

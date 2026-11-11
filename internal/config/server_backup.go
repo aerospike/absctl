@@ -15,8 +15,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 )
@@ -28,6 +26,10 @@ type ServerBackupServiceConfig struct {
 	Validation *models.ServerBackupValidate
 	Progress   *models.ServerBackupProgress
 	Abort      *models.ServerBackupAbort
+
+	// S3Throughput is the target throughput of the server S3 client per node, in
+	// Gbit/s. Only Start uses it.
+	S3Throughput int
 
 	ServiceConfigCommon
 }
@@ -44,9 +46,9 @@ func NewServerBackupServiceConfig(
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
 	secretAgent *models.SecretAgent,
-	awsS3 *models.AwsS3,
+	s3 *models.SnapshotS3,
 ) *ServerBackupServiceConfig {
-	return &ServerBackupServiceConfig{
+	cfg := &ServerBackupServiceConfig{
 		Start:        start,
 		List:         list,
 		Validation:   validation,
@@ -56,8 +58,14 @@ func NewServerBackupServiceConfig(
 		ClientConfig: clientConfig,
 		ClientPolicy: clientPolicy,
 		SecretAgent:  secretAgent,
-		AwsS3:        awsS3,
+		AwsS3:        s3.ToAwsS3(),
 	}
+
+	if s3 != nil {
+		cfg.S3Throughput = s3.Throughput
+	}
+
+	return cfg
 }
 
 // Validate checks if the ServerBackupServiceConfig and its embedded ServiceConfigCommon are correctly configured.
@@ -84,7 +92,19 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 
 	// Abort talks only to the cluster; the other subcommands need object storage.
 	if s.needsObjectStorage() {
-		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+		if _, err := s.ObjectStorageType(); err != nil {
+			return err
+		}
+	}
+
+	// The cluster writes the backup itself, with the S3 settings Start sends it, the
+	// throughput included, so the other subcommands ignore them.
+	if s.Start != nil {
+		if err := models.ValidateS3Throughput(s.S3Throughput); err != nil {
+			return err
+		}
+
+		if err := models.ValidateServerS3(s.AwsS3); err != nil {
 			return err
 		}
 	}
@@ -98,16 +118,4 @@ func (s *ServerBackupServiceConfig) Validate(isBackup bool) error {
 
 func (s *ServerBackupServiceConfig) needsObjectStorage() bool {
 	return s.Start != nil || s.List != nil || s.Validation != nil || s.Progress != nil
-}
-
-// validateServerObjectStorage makes sure the object storage of a
-// server-integrated command is addressable. An empty S3 section would otherwise
-// pass silently: AwsS3.IsConfigured reports false, validateStorages skips it,
-// and the command only fails later against an empty bucket name.
-func validateServerObjectStorage(awsS3 *models.AwsS3) error {
-	if awsS3 == nil || awsS3.BucketName == "" {
-		return fmt.Errorf("s3-bucket-name is required")
-	}
-
-	return nil
 }

@@ -76,14 +76,14 @@ func NewCmd(appVersion, commitHash, buildTime string) (*cobra.Command, *Cmd) {
 	scanBackupCmd, _ := scan.NewExportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	scanRestoreCmd, _ := scan.NewImportCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
-	// Unreleased features:
+	//nolint:gocritic // Unreleased code.
 	// serverBackupCmd := server.NewBackupCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 	// serverRestoreCmd := server.NewRestoreCmd(c.flagsRoot, appVersion, commitHash, buildTime)
 
 	rootCmd.AddCommand(scanBackupCmd)
 	rootCmd.AddCommand(scanRestoreCmd)
 
-	// Unreleased features:
+	//nolint:gocritic // Unreleased code.
 	// rootCmd.AddCommand(serverBackupCmd)
 	// rootCmd.AddCommand(serverRestoreCmd)
 
@@ -129,8 +129,9 @@ func newHelpFunction(flagSet *pflag.FlagSet) func() {
 		fmt.Println("\nAvailable Commands:")
 		fmt.Println("  backup             Aerospike scan-based export")
 		fmt.Println("  restore            Aerospike scan-based import")
-		fmt.Println("  snapshot-backup    Manage server-integrated backups")
-		fmt.Println("  snapshot-restore   Manage server-integrated restores")
+		//nolint:gocritic // Unreleased code.
+		// fmt.Println("  snapshot-backup    Manage server-integrated backups")
+		// fmt.Println("  snapshot-restore   Manage server-integrated restores")
 
 		fmt.Println("\nFlags:")
 		flagSet.PrintDefaults()

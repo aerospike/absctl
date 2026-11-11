@@ -16,6 +16,7 @@ package dto
 
 import (
 	"context"
+	"strings"
 
 	"github.com/aerospike/absctl/internal/models"
 )
@@ -24,31 +25,33 @@ import (
 // tree. A single file describes every subcommand: the section matching the
 // invoked subcommand is read, the rest are ignored.
 type ServerRestore struct {
-	App         App                         `yaml:"app"`
-	Cluster     Cluster                     `yaml:"cluster"`
-	Restore     ServerRestoreConfig         `yaml:"restore"`
-	Prepare     ServerRestorePrepareConfig  `yaml:"prepare"`
-	Progress    ServerRestoreProgressConfig `yaml:"progress"`
-	Abort       ServerRestoreAbortConfig    `yaml:"abort"`
-	SecretAgent SecretAgent                 `yaml:"secret-agent"`
-	Aws         struct {
-		S3 ObjectStorageS3 `yaml:"s3"`
+	App          App                         `yaml:"app"`
+	Cluster      Cluster                     `yaml:"cluster"`
+	Restore      ServerRestoreConfig         `yaml:"restore"`
+	Progress     ServerRestoreProgressConfig `yaml:"progress"`
+	Abort        ServerRestoreAbortConfig    `yaml:"abort"`
+	Open         ServerRestoreOpenConfig     `yaml:"open"`
+	ClearStorage ServerRestoreClearConfig    `yaml:"clear-storage"`
+	SecretAgent  SecretAgent                 `yaml:"secret-agent"`
+	Aws          struct {
+		S3 SnapshotRestoreS3 `yaml:"s3"`
 	} `yaml:"aws"`
 }
 
 // DefaultServerRestore returns a ServerRestore with default values.
 func DefaultServerRestore() *ServerRestore {
 	return &ServerRestore{
-		App:         defaultApp(),
-		Cluster:     defaultCluster(),
-		Restore:     defaultServerRestoreConfig(),
-		Prepare:     defaultServerRestorePrepareConfig(),
-		Progress:    defaultServerRestoreProgressConfig(),
-		Abort:       defaultServerRestoreAbortConfig(),
-		SecretAgent: defaultSecretAgent(),
+		App:          defaultApp(),
+		Cluster:      defaultCluster(),
+		Restore:      defaultServerRestoreConfig(),
+		Progress:     defaultServerRestoreProgressConfig(),
+		Abort:        defaultServerRestoreAbortConfig(),
+		Open:         defaultServerRestoreOpenConfig(),
+		ClearStorage: defaultServerRestoreClearConfig(),
+		SecretAgent:  defaultSecretAgent(),
 		Aws: struct {
-			S3 ObjectStorageS3 `yaml:"s3"`
-		}{S3: defaultObjectStorageS3()},
+			S3 SnapshotRestoreS3 `yaml:"s3"`
+		}{S3: defaultSnapshotRestoreS3()},
 	}
 }
 
@@ -61,7 +64,7 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 		return nil
 	}
 
-	fields := collectServerSecretableFields(&r.Cluster, &r.Aws.S3)
+	fields := collectServerSecretableFields(&r.Cluster, &r.Aws.S3.AwsS3Common)
 
 	return resolveSecretFields(ctx, saCfg, fields...)
 }
@@ -69,20 +72,47 @@ func (r *ServerRestore) LoadSecrets(ctx context.Context) error {
 // ServerRestoreConfig maps the "restore" section, used by
 // "snapshot-restore start".
 type ServerRestoreConfig struct {
-	Namespace    *string `yaml:"namespace"`
-	StorageType  *string `yaml:"object-storage-type"`
-	JobID        *string `yaml:"backup-id"`
-	Path         *string `yaml:"path"`
-	FuzzyRestore *bool   `yaml:"fuzzy-restore"`
+	Namespace               *string  `yaml:"namespace"`
+	BackupIDs               []string `yaml:"backup-ids"`
+	Path                    *string  `yaml:"path"`
+	IncrementalPath         *string  `yaml:"incremental-path"`
+	SetList                 []string `yaml:"set-list"`
+	FilterExp               *string  `yaml:"filter-exp"`
+	NoIndexes               *bool    `yaml:"no-indexes"`
+	NoUDFs                  *bool    `yaml:"no-udfs"`
+	Async                   *bool    `yaml:"async"`
+	ParallelDownloadThreads *int     `yaml:"parallel-download-threads"`
+	ParallelWriters         *int     `yaml:"parallel-writers"`
+	RecordsPerSecond        *int     `yaml:"records-per-second"`
+	ExtraTTL                *int     `yaml:"extra-ttl"`
+	Policy                  *string  `yaml:"policy"`
+	HydrateReplica          *bool    `yaml:"hydrate-replica"`
+	MaxInflight             *int     `yaml:"max-inflight"`
+	RetryBaseInterval       *int     `yaml:"retry-base-interval"`
+	RetryMultiplier         *float64 `yaml:"retry-multiplier"`
+	RetryMaxAttempts        *int     `yaml:"retry-max-attempts"`
+	IgnoreRecordError       *bool    `yaml:"ignore-record-error"`
+	ApplyMetadataLast       *bool    `yaml:"apply-metadata-last"`
 }
 
 func defaultServerRestoreConfig() ServerRestoreConfig {
 	return ServerRestoreConfig{
-		Namespace:    new(models.DefaultCommonNamespace),
-		StorageType:  new(models.DefaultServerBackupObjectStorageType),
-		JobID:        new(models.DefaultServerBackupJobID),
-		Path:         new(models.DefaultServerBackupPath),
-		FuzzyRestore: new(models.DefaultServerRestoreFuzzyRestore),
+		Namespace:               new(models.DefaultCommonNamespace),
+		BackupIDs:               []string{},
+		Path:                    new(models.DefaultServerBackupPath),
+		IncrementalPath:         new(models.DefaultServerRestoreIncrementalPath),
+		SetList:                 []string{},
+		FilterExp:               new(models.DefaultServerFilterExp),
+		NoIndexes:               new(models.DefaultCommonNoIndexes),
+		NoUDFs:                  new(models.DefaultCommonNoUDFs),
+		Async:                   new(models.DefaultServerRestoreAsync),
+		ParallelDownloadThreads: new(models.DefaultServerRestoreParallelDownloadThreads),
+		ParallelWriters:         new(models.DefaultServerRestoreParallelWriters),
+		RecordsPerSecond:        new(models.DefaultServerRestoreRecordsPerSecond),
+		ExtraTTL:                new(models.DefaultServerRestoreExtraTTL),
+		Policy:                  new(models.DefaultServerRestorePolicy),
+		// The settings of a single policy have no default here: an unset one is not sent,
+		// and the server applies its default.
 	}
 }
 
@@ -93,37 +123,27 @@ func (r *ServerRestore) ToModelServerRestore() *models.ServerRestore {
 	}
 
 	return &models.ServerRestore{
-		Namespace:    derefString(r.Restore.Namespace),
-		StorageType:  derefString(r.Restore.StorageType),
-		JobID:        derefString(r.Restore.JobID),
-		Path:         derefString(r.Restore.Path),
-		FuzzyRestore: derefBool(r.Restore.FuzzyRestore),
-	}
-}
-
-// ServerRestorePrepareConfig maps the "prepare" section, used by
-// "snapshot-restore prepare".
-type ServerRestorePrepareConfig struct {
-	Namespace *string `yaml:"namespace"`
-	JobID     *string `yaml:"backup-id"`
-}
-
-func defaultServerRestorePrepareConfig() ServerRestorePrepareConfig {
-	return ServerRestorePrepareConfig{
-		Namespace: new(models.DefaultCommonNamespace),
-		JobID:     new(models.DefaultServerBackupJobID),
-	}
-}
-
-// ToModelServerRestorePrepare maps the "prepare" section onto its model.
-func (r *ServerRestore) ToModelServerRestorePrepare() *models.ServerRestorePrepare {
-	if r == nil {
-		return nil
-	}
-
-	return &models.ServerRestorePrepare{
-		Namespace: derefString(r.Prepare.Namespace),
-		JobID:     derefString(r.Prepare.JobID),
+		Namespace:               derefString(r.Restore.Namespace),
+		BackupIDs:               strings.Join(r.Restore.BackupIDs, ","),
+		Path:                    derefString(r.Restore.Path),
+		IncrementalPath:         derefString(r.Restore.IncrementalPath),
+		SetList:                 strings.Join(r.Restore.SetList, ","),
+		FilterExp:               derefString(r.Restore.FilterExp),
+		NoIndexes:               derefBool(r.Restore.NoIndexes),
+		NoUDFs:                  derefBool(r.Restore.NoUDFs),
+		Async:                   derefBool(r.Restore.Async),
+		ParallelDownloadThreads: derefInt(r.Restore.ParallelDownloadThreads),
+		ParallelWriters:         derefInt(r.Restore.ParallelWriters),
+		RecordsPerSecond:        derefInt(r.Restore.RecordsPerSecond),
+		ExtraTTL:                derefInt(r.Restore.ExtraTTL),
+		Policy:                  derefString(r.Restore.Policy),
+		HydrateReplica:          cloneValue(r.Restore.HydrateReplica),
+		MaxInflight:             cloneValue(r.Restore.MaxInflight),
+		RetryBaseInterval:       cloneValue(r.Restore.RetryBaseInterval),
+		RetryMultiplier:         cloneValue(r.Restore.RetryMultiplier),
+		RetryMaxAttempts:        cloneValue(r.Restore.RetryMaxAttempts),
+		IgnoreRecordError:       cloneValue(r.Restore.IgnoreRecordError),
+		ApplyMetadataLast:       cloneValue(r.Restore.ApplyMetadataLast),
 	}
 }
 
@@ -131,11 +151,15 @@ func (r *ServerRestore) ToModelServerRestorePrepare() *models.ServerRestorePrepa
 // "snapshot-restore progress".
 type ServerRestoreProgressConfig struct {
 	Namespace *string `yaml:"namespace"`
+	JobID     *string `yaml:"job-id"`
+	Watch     *bool   `yaml:"watch"`
 }
 
 func defaultServerRestoreProgressConfig() ServerRestoreProgressConfig {
 	return ServerRestoreProgressConfig{
 		Namespace: new(models.DefaultCommonNamespace),
+		JobID:     new(models.DefaultServerRestoreJobID),
+		Watch:     new(models.DefaultServerRestoreProgressWatch),
 	}
 }
 
@@ -147,6 +171,8 @@ func (r *ServerRestore) ToModelServerRestoreProgress() *models.ServerRestoreProg
 
 	return &models.ServerRestoreProgress{
 		Namespace: derefString(r.Progress.Namespace),
+		JobID:     derefString(r.Progress.JobID),
+		Watch:     derefBool(r.Progress.Watch),
 	}
 }
 
@@ -154,13 +180,15 @@ func (r *ServerRestore) ToModelServerRestoreProgress() *models.ServerRestoreProg
 // "snapshot-restore abort".
 type ServerRestoreAbortConfig struct {
 	Namespace *string `yaml:"namespace"`
-	JobID     *string `yaml:"backup-id"`
+	JobID     *string `yaml:"job-id"`
+	Async     *bool   `yaml:"async"`
 }
 
 func defaultServerRestoreAbortConfig() ServerRestoreAbortConfig {
 	return ServerRestoreAbortConfig{
 		Namespace: new(models.DefaultCommonNamespace),
-		JobID:     new(models.DefaultServerBackupJobID),
+		JobID:     new(models.DefaultServerRestoreJobID),
+		Async:     new(models.DefaultServerRestoreAsync),
 	}
 }
 
@@ -173,5 +201,63 @@ func (r *ServerRestore) ToModelServerRestoreAbort() *models.ServerRestoreAbort {
 	return &models.ServerRestoreAbort{
 		Namespace: derefString(r.Abort.Namespace),
 		JobID:     derefString(r.Abort.JobID),
+		Async:     derefBool(r.Abort.Async),
+	}
+}
+
+// ServerRestoreOpenConfig maps the "open" section, used by "snapshot-restore open".
+type ServerRestoreOpenConfig struct {
+	Namespace *string `yaml:"namespace"`
+	JobID     *string `yaml:"job-id"`
+	Async     *bool   `yaml:"async"`
+}
+
+func defaultServerRestoreOpenConfig() ServerRestoreOpenConfig {
+	return ServerRestoreOpenConfig{
+		Namespace: new(models.DefaultCommonNamespace),
+		JobID:     new(models.DefaultServerRestoreJobID),
+		Async:     new(models.DefaultServerRestoreAsync),
+	}
+}
+
+// ToModelServerRestoreOpen maps the "open" section onto its model.
+func (r *ServerRestore) ToModelServerRestoreOpen() *models.ServerRestoreOpen {
+	if r == nil {
+		return nil
+	}
+
+	return &models.ServerRestoreOpen{
+		Namespace: derefString(r.Open.Namespace),
+		JobID:     derefString(r.Open.JobID),
+		Async:     derefBool(r.Open.Async),
+	}
+}
+
+// ServerRestoreClearConfig maps the "clear-storage" section, used by
+// "snapshot-restore clear-storage".
+type ServerRestoreClearConfig struct {
+	Namespace *string `yaml:"namespace"`
+	JobID     *string `yaml:"job-id"`
+	Async     *bool   `yaml:"async"`
+}
+
+func defaultServerRestoreClearConfig() ServerRestoreClearConfig {
+	return ServerRestoreClearConfig{
+		Namespace: new(models.DefaultCommonNamespace),
+		JobID:     new(models.DefaultServerRestoreJobID),
+		Async:     new(models.DefaultServerRestoreAsync),
+	}
+}
+
+// ToModelServerRestoreClearStorage maps the "clear-storage" section onto its model.
+func (r *ServerRestore) ToModelServerRestoreClearStorage() *models.ServerRestoreClearStorage {
+	if r == nil {
+		return nil
+	}
+
+	return &models.ServerRestoreClearStorage{
+		Namespace: derefString(r.ClearStorage.Namespace),
+		JobID:     derefString(r.ClearStorage.JobID),
+		Async:     derefBool(r.ClearStorage.Async),
 	}
 }

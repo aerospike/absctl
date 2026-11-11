@@ -15,6 +15,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/aerospike/absctl/internal/models"
@@ -141,4 +142,16 @@ func validateStorages(
 	}
 
 	return nil
+}
+
+// ObjectStorageType returns the type of the object storage the server-integrated commands
+// are configured with. It is derived from the configured storage section, so that no
+// separate flag has to repeat it. The settings of that section, such as the bucket name,
+// are checked by its own Validate.
+func (r *ServiceConfigCommon) ObjectStorageType() (string, error) {
+	if r.AwsS3.IsConfigured() {
+		return models.StorageTypeAwsS3, nil
+	}
+
+	return "", errors.New("object storage is not configured")
 }

@@ -19,6 +19,15 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// descSetListServerBackup differs from descSetListBackup: a server-integrated backup
+// accepts a filter expression together with several sets.
+const descSetListServerBackup = "The set(s) to be backed up. Accepts comma-separated values with no spaces: " +
+	"'set1,set2,set3'\nIf empty, include all sets."
+
+// descPathServerBackupWritten describes --path of the commands that read a backup back.
+const descPathServerBackupWritten = "Key prefix in the bucket the backup was written under.\n" +
+	"Must match the --path the backup was started with."
+
 // ServerBackup holds flags for the server backup create command.
 type ServerBackup struct {
 	models.ServerBackup
@@ -31,13 +40,12 @@ func NewServerBackup() *ServerBackup {
 func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.StringVar(&f.Namespace, "namespace",
+	flagSet.StringVarP(&f.Namespace, "namespace", "n",
 		models.DefaultCommonNamespace,
 		"The namespace to be backed up.")
-	flagSet.StringVar(&f.StorageType, "object-storage-type",
-		models.DefaultServerBackupObjectStorageType,
-		"Type of object storage. "+
-			"Example: aws-s3")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		"Key prefix in the bucket to write the backup under.")
 	flagSet.StringVarP(&f.ModifiedAfter, "modified-after", "a",
 		models.DefaultBackupModifiedAfter,
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
@@ -45,30 +53,60 @@ func (f *ServerBackup) NewFlagSet() *pflag.FlagSet {
 			"that changed after the given date and time. The system's \n"+
 			"local timezone applies. If only HH:MM:SS is specified, then\n"+
 			"today's date is assumed as the date. If only YYYY-MM-DD is \n"+
-			"specified, then 00:00:00 (midnight) is assumed as the time.\n")
+			"specified, then 00:00:00 (midnight) is assumed as the time.\n"+
+			"Must be after 2010-01-01 and not in the future.\n")
 
 	flagSet.StringVarP(&f.ModifiedBefore, "modified-before", "b",
 		models.DefaultBackupModifiedBefore,
 		"<YYYY-MM-DD_HH:MM:SS>\n"+
 			"Only include records that last changed before the given\n"+
-			"date and time. May combined with --modified-after to specify a range.")
+			"date and time. May be combined with --modified-after to specify a range.\n"+
+			"Must be after 2010-01-01.")
 	flagSet.StringVarP(&f.SetList, "set-list", "s",
 		models.DefaultCommonSetList,
-		descSetListBackup)
-	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "i",
+		descSetListServerBackup)
+	flagSet.StringVarP(&f.BinList, "bin-list", "B",
+		models.DefaultCommonBinList,
+		descBinListBackup)
+	flagSet.StringVarP(&f.FilterExp, "filter-exp", "f",
+		models.DefaultServerFilterExp,
+		"Base64 encoded filter expression. Only live records are filtered,\n"+
+			"tombstones are always backed up.")
+	flagSet.BoolVarP(&f.NoIndexes, "no-indexes", "I",
 		models.DefaultCommonNoIndexes,
 		"Exclude indexes from the backup.")
 	flagSet.BoolVarP(&f.NoUDFs, "no-udfs", "u",
 		models.DefaultCommonNoUDFs,
 		"Exclude user-defined functions from the backup.")
-	flagSet.BoolVar(&f.EnableChangeStream, "enable-change-stream",
-		models.DefaultBackupEnableChangeStream,
-		"Enable backup of change stream.")
+	flagSet.BoolVar(&f.NoConfig, "no-config",
+		models.DefaultServerBackupNoConfig,
+		"Do not upload the config file of each node with the backup.")
+	flagSet.StringVar(&f.Policy, "policy",
+		models.DefaultServerBackupPolicy,
+		"Backup policy: strict, best-effort or fuzzy. strict aborts the backup\n"+
+			"on any failure. best-effort commits the backup as fuzzy instead of\n"+
+			"aborting it on a failure after the base scan is durable cluster-wide.\n"+
+			"fuzzy runs the base scan only, without the change stream.\n"+
+			"The value is case-insensitive. If empty, the server default is used.")
 	flagSet.BoolVar(&f.Async, "async",
 		models.DefaultServerBackupAsync,
 		"Return as soon as the cluster accepts the backup, without\n"+
 			"following its progress. Use the progress command to follow\n"+
 			"the backup later.")
+	flagSet.IntVarP(&f.RecordsPerSecond, "records-per-second", "L",
+		models.DefaultServerBackupRecordsPerSecond,
+		"Limit the records per second of each scan on each node.\n"+
+			"A non-zero value must be at least 5 x --parallel-readers, or 20 when\n"+
+			"--parallel-readers is 0 and the server uses its default of 4 threads.\n"+
+			"If 0, the server default is used, which is no limit.")
+	flagSet.IntVar(&f.ParallelReaders, "parallel-readers",
+		models.DefaultServerBackupParallelReaders,
+		"Number of scan threads per node, from 1 to 128.\n"+
+			"If 0, the server default is used.")
+	flagSet.IntVar(&f.ParallelUploadThreads, "parallel-upload-threads",
+		models.DefaultServerBackupParallelUploadThreads,
+		"Number of upload threads per node, from 1 to 128.\n"+
+			"If 0, the server default is used.")
 
 	return flagSet
 }
@@ -116,6 +154,9 @@ func (f *ServerBackupValidate) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		descPathServerBackupWritten)
 
 	return flagSet
 }
@@ -139,6 +180,9 @@ func (f *ServerBackupProgress) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.StringVar(&f.Path, "path",
+		models.DefaultServerBackupPath,
+		descPathServerBackupWritten)
 	flagSet.BoolVar(&f.Watch, "watch",
 		models.DefaultServerBackupProgressWatch,
 		"Watch the progress of the backup.")
@@ -165,6 +209,10 @@ func (f *ServerBackupAbort) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.JobID, "backup-id",
 		models.DefaultServerBackupJobID,
 		"Backup id")
+	flagSet.BoolVar(&f.Async, "async",
+		models.DefaultServerBackupAsync,
+		"Return as soon as the cluster accepts the abort, without\n"+
+			"waiting for the backup to stop.")
 
 	return flagSet
 }

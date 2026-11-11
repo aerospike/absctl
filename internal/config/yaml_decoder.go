@@ -159,17 +159,20 @@ func dtoToServerBackupServiceConfig(
 		return nil, fmt.Errorf("failed to map to aerospike config: %w", err)
 	}
 
+	s3 := dtoBackup.Aws.S3.ToModelSnapshotS3()
+
 	cfg := &ServerBackupServiceConfig{
 		App:          dtoBackup.App.ToModelApp(),
 		ClientConfig: asConfig,
 		ClientPolicy: dtoBackup.Cluster.ToModelClientPolicy(),
 		SecretAgent:  dtoBackup.SecretAgent.ToModelSecretAgent(),
-		AwsS3:        dtoBackup.Aws.S3.ToModelAwsS3(),
+		AwsS3:        s3.ToAwsS3(),
 	}
 
 	switch command {
 	case ServerBackupCommandStart:
 		cfg.Start = dtoBackup.ToModelServerBackup()
+		cfg.S3Throughput = s3.Throughput
 	case ServerBackupCommandList:
 		cfg.List = dtoBackup.ToModelServerBackupList()
 	case ServerBackupCommandValidate:
@@ -191,9 +194,10 @@ type ServerRestoreCommand int
 
 const (
 	ServerRestoreCommandStart ServerRestoreCommand = iota
-	ServerRestoreCommandPrepare
 	ServerRestoreCommandProgress
 	ServerRestoreCommandAbort
+	ServerRestoreCommandOpen
+	ServerRestoreCommandClearStorage
 )
 
 // DecodeServerRestoreServiceConfig reads a snapshot-restore configuration file and
@@ -231,18 +235,20 @@ func dtoToServerRestoreServiceConfig(
 		ClientConfig: asConfig,
 		ClientPolicy: dtoRestore.Cluster.ToModelClientPolicy(),
 		SecretAgent:  dtoRestore.SecretAgent.ToModelSecretAgent(),
-		AwsS3:        dtoRestore.Aws.S3.ToModelAwsS3(),
+		AwsS3:        dtoRestore.Aws.S3.ToModelSnapshotS3().ToAwsS3(),
 	}
 
 	switch command {
 	case ServerRestoreCommandStart:
 		cfg.Start = dtoRestore.ToModelServerRestore()
-	case ServerRestoreCommandPrepare:
-		cfg.Prepare = dtoRestore.ToModelServerRestorePrepare()
 	case ServerRestoreCommandProgress:
 		cfg.Progress = dtoRestore.ToModelServerRestoreProgress()
 	case ServerRestoreCommandAbort:
 		cfg.Abort = dtoRestore.ToModelServerRestoreAbort()
+	case ServerRestoreCommandOpen:
+		cfg.Open = dtoRestore.ToModelServerRestoreOpen()
+	case ServerRestoreCommandClearStorage:
+		cfg.ClearStorage = dtoRestore.ToModelServerRestoreClearStorage()
 	default:
 		return nil, fmt.Errorf("unknown snapshot-restore command %d", command)
 	}

@@ -29,13 +29,12 @@ var errSegmentUnreadable = errors.New("bad record magic")
 // newSampleValidationReport builds a report of a backup that validated clean.
 func newSampleValidationReport() *sModels.ValidationReport {
 	return &sModels.ValidationReport{
-		BackupID:          "519118324",
-		TotalSegments:     1000,
-		CheckedSegments:   100,
-		ValidSegments:     100,
-		TotalRecords:      4200,
-		TotalBytes:        5000000,
-		SkippedCompressed: 7,
+		BackupID:        "519118324",
+		TotalSegments:   1000,
+		CheckedSegments: 100,
+		ValidSegments:   100,
+		TotalRecords:    4200,
+		TotalBytes:      5000000,
 	}
 }
 
@@ -58,7 +57,6 @@ func TestPrintServerValidationReport(t *testing.T) {
 	assert.Contains(t, output, "4200")
 	assert.Contains(t, output, "Bytes Parsed")
 	assert.Contains(t, output, "5000000")
-	assert.Contains(t, output, "Skipped Compressed Records")
 	assert.NotContains(t, output, segmentParseHeader)
 }
 
@@ -135,7 +133,6 @@ func TestLogServerValidationReport(t *testing.T) {
 	assert.Contains(t, logOutput, "valid-segments=100")
 	assert.Contains(t, logOutput, "records-read=4200")
 	assert.Contains(t, logOutput, "bytes-parsed=5000000")
-	assert.Contains(t, logOutput, "skipped-compressed=7")
 	assert.NotContains(t, logOutput, "unreadable segment")
 }
 
@@ -354,24 +351,203 @@ func TestServerValidationReportFieldsAgree(t *testing.T) {
 	// Printed label paired with the log attribute that must carry the same
 	// field of the report.
 	fields := map[string]string{
-		"Backup ID":                  "backup-id",
-		"Total Segments":             "total-segments",
-		"Checked Segments":           "checked-segments",
-		"Valid Segments":             "valid-segments",
-		"Unreadable Segments":        "unreadable-segments",
-		"Records Read":               "records-read",
-		"Bytes Parsed":               "bytes-parsed",
-		"Skipped Compressed Records": "skipped-compressed",
-		"Total Manifests":            "total-manifests",
-		"Checked Manifests":          "checked-manifests",
-		"Checked Segment Records":    "checked-segment-records",
-		"Missing Segments":           "missing-segments",
-		"Unrecorded Segments":        "unrecorded-segments",
-		"Manifest Problems":          "manifest-problems",
+		"Backup ID":               "backup-id",
+		"Total Segments":          "total-segments",
+		"Checked Segments":        "checked-segments",
+		"Valid Segments":          "valid-segments",
+		"Unreadable Segments":     "unreadable-segments",
+		"Records Read":            "records-read",
+		"Bytes Parsed":            "bytes-parsed",
+		"Total Manifests":         "total-manifests",
+		"Checked Manifests":       "checked-manifests",
+		"Checked Segment Records": "checked-segment-records",
+		"Missing Segments":        "missing-segments",
+		"Unrecorded Segments":     "unrecorded-segments",
+		"Manifest Problems":       "manifest-problems",
+		"Superseded Manifests":    "superseded-manifests",
+		"Empty Namespaces":        "empty-namespaces",
+		"Commit Record":           "commit-record",
+		"Commit State":            "commit-state",
+		"Backup Status":           "backup-status",
+		"Backup Policy":           "backup-policy",
+		"Achieved Consistency":    "achieved-consistency",
+		"Fallback Reason":         "fallback-reason",
+		"Backup Namespace":        "backup-namespace",
+		"Backup Type":             "backup-type",
+		"Validated For Restore":   "validated-for-restore",
+		"Change Stream Skipped":   "change-stream-skipped",
 	}
 
 	for label, attr := range fields {
 		assert.Contains(t, output, label, "printed report is missing a field")
 		assert.Contains(t, logOutput, attr+"=", "logged report is missing a field")
+	}
+}
+
+const (
+	testCommitPath      = "519118324/metadata.json"
+	testEmptyNamespace  = "source-ns2"
+	testBackupPolicy    = "best-effort"
+	testFallbackReason  = "change stream lagged"
+	testRefusalAttr     = "restore-refusal="
+	testValidatedForKey = "validated-for-restore="
+)
+
+var errRestoreRefused = errors.New("backup was aborted")
+
+// newCommitReport builds the commit record report of a strict backup a restore
+// accepts.
+func newCommitReport() sModels.CommitReport {
+	return sModels.CommitReport{
+		Path:                testCommitPath,
+		State:               "present",
+		Status:              "complete",
+		BackupPolicy:        testBackupPolicy,
+		AchievedConsistency: "strict",
+		Namespace:           "source-ns1",
+		BackupType:          "full",
+		Strict:              true,
+	}
+}
+
+// commitReportCase is a report of a backup with the given commit record and
+// empty namespaces, and what each renderer must say about it.
+type commitReportCase struct {
+	name           string
+	give           func() sModels.CommitReport
+	giveEmpty      []string
+	wantPrinted    []string
+	wantLogged     []string
+	wantNotPrinted []string
+	wantNotLogged  []string
+}
+
+// report builds the validation report the case describes.
+func (c *commitReportCase) report() *sModels.ValidationReport {
+	r := newSampleValidationReport()
+	r.Commit = c.give()
+	r.EmptyNamespaces = c.giveEmpty
+
+	return r
+}
+
+// commitReportCases are the reports both renderers are checked against.
+func commitReportCases() []commitReportCase {
+	return []commitReportCase{
+		{
+			name: "strict backup a restore accepts",
+			give: newCommitReport,
+			wantPrinted: []string{
+				"Result:", resultPassed, testCommitPath, testBackupPolicy, "Validated For Restore:",
+			},
+			wantLogged: []string{
+				"backup dry run passed",
+				"commit-record=" + testCommitPath,
+				"commit-state=present",
+				"backup-status=complete",
+				"backup-policy=" + testBackupPolicy,
+				"achieved-consistency=strict",
+				"backup-namespace=source-ns1",
+				"backup-type=full",
+				testValidatedForKey + restoreStrict,
+				"change-stream-skipped=false",
+			},
+			wantNotPrinted: []string{refusalHeader},
+			wantNotLogged:  []string{testRefusalAttr},
+		},
+		{
+			// A fuzzy backup is restored from its query stream alone.
+			name: "fuzzy backup skips the change stream",
+			give: func() sModels.CommitReport {
+				c := newCommitReport()
+				c.AchievedConsistency = restoreFuzzy
+				c.FallbackReason = testFallbackReason
+				c.Strict = false
+				c.ChangeStreamSkipped = true
+
+				return c
+			},
+			wantPrinted: []string{testFallbackReason, "true"},
+			wantLogged: []string{
+				testValidatedForKey + restoreFuzzy,
+				"change-stream-skipped=true",
+				`fallback-reason="` + testFallbackReason + `"`,
+			},
+		},
+		{
+			// Every segment reads back, and the backup still fails.
+			name: "restore would refuse the backup",
+			give: func() sModels.CommitReport {
+				c := newCommitReport()
+				c.Status = "aborted"
+				c.Refusal = errRestoreRefused
+
+				return c
+			},
+			wantPrinted: []string{refusalHeader, errRestoreRefused.Error(), resultFailed},
+			wantLogged: []string{
+				"backup dry run failed",
+				testRefusalAttr + `"` + errRestoreRefused.Error() + `"`,
+			},
+		},
+		{
+			// A record that was not read decides no restore.
+			name: "commit record not read",
+			give: func() sModels.CommitReport {
+				return sModels.CommitReport{}
+			},
+			wantLogged:    []string{testValidatedForKey + `""`},
+			wantNotLogged: []string{testValidatedForKey + restoreFuzzy},
+		},
+		{
+			name:        "empty namespaces",
+			give:        newCommitReport,
+			giveEmpty:   []string{testEmptyNamespace},
+			wantPrinted: []string{testEmptyNamespace},
+			wantLogged:  []string{"empty-namespaces=[" + testEmptyNamespace + "]"},
+		},
+	}
+}
+
+func TestLogServerValidationReportCommit(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range commitReportCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			logServerValidationReport(tt.report(), slog.New(slog.NewTextHandler(&buf, nil)))
+			logOutput := buf.String()
+
+			for _, want := range tt.wantLogged {
+				assert.Contains(t, logOutput, want)
+			}
+
+			for _, notWant := range tt.wantNotLogged {
+				assert.NotContains(t, logOutput, notWant)
+			}
+		})
+	}
+}
+
+// TestPrintServerValidationReportCommit is not parallel: the printer writes to
+// a package level writer that captureOutput swaps.
+func TestPrintServerValidationReportCommit(t *testing.T) {
+	for _, tt := range commitReportCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			output := captureOutput(t, func() {
+				printServerValidationReport(tt.report())
+			})
+
+			for _, want := range tt.wantPrinted {
+				assert.Contains(t, output, want)
+			}
+
+			for _, notWant := range tt.wantNotPrinted {
+				assert.NotContains(t, output, notWant)
+			}
+		})
 	}
 }

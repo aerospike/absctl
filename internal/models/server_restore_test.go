@@ -15,31 +15,523 @@
 package models
 
 import (
+	"fmt"
+	"math"
+	"strings"
 	"testing"
 
+	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testServerRestoreJobID = "restore-job-1"
+	testServerSecondJobID  = "261025T130000-cd34"
+	// testServerBackupIDs is the list form a multi-backup restore is given.
+	testServerBackupIDs  = testServerJobID + "," + testServerSecondJobID
+	errMsgJobIDRequired  = "job-id is required"
+	errMsgRequiresFuzzy  = "requires policy fuzzy"
+	errMsgRequiresStrict = "hydrate-replica requires policy strict"
+	// errMsgRestorePolicy is the common part of the unknown restore policy errors.
+	errMsgRestorePolicy = `policy must be strict or fuzzy, got "`
+	// errMsgParallelDownloadThreads is the common part of the parallel download threads
+	// range errors.
+	errMsgParallelDownloadThreads = "parallel-download-threads must be between 0 and 128, got "
+	// errMsgParallelWriters is the common part of the parallel writers range errors.
+	errMsgParallelWriters = "parallel-writers must be between 0 and 128, got "
+)
+
+// validServerRestore returns a cold restore with every setting at its default, as the
+// flags and the YAML config produce it: the settings of a single policy are left unset.
 func validServerRestore() *ServerRestore {
 	return &ServerRestore{
-		Namespace:   testServerNamespace,
-		StorageType: testServerStorage,
-		JobID:       testServerJobID,
+		Namespace:               testServerNamespace,
+		BackupIDs:               testServerJobID,
+		ParallelDownloadThreads: DefaultServerRestoreParallelDownloadThreads,
+		ParallelWriters:         DefaultServerRestoreParallelWriters,
+		RecordsPerSecond:        DefaultServerRestoreRecordsPerSecond,
 	}
 }
 
-func validServerRestorePrepare() *ServerRestorePrepare {
-	return &ServerRestorePrepare{
-		Namespace: testServerNamespace,
-		JobID:     testServerJobID,
-	}
+func validServerFuzzyRestore() *ServerRestore {
+	restore := validServerRestore()
+	restore.Policy = string(infomodels.RestorePolicyFuzzy)
+
+	return restore
 }
 
 func validServerRestoreAbort() *ServerRestoreAbort {
 	return &ServerRestoreAbort{
 		Namespace: testServerNamespace,
-		JobID:     testServerJobID,
+		JobID:     testServerRestoreJobID,
+	}
+}
+
+func TestServerRestore_BackupIDList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		giveBackupIDs string
+		want          []string
+	}{
+		{
+			name:          "single id",
+			giveBackupIDs: testServerJobID,
+			want:          []string{testServerJobID},
+		},
+		{
+			name:          "several ids",
+			giveBackupIDs: testServerBackupIDs,
+			want:          []string{testServerJobID, testServerSecondJobID},
+		},
+		{
+			name: "empty",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			restore := &ServerRestore{BackupIDs: tt.giveBackupIDs}
+
+			assert.Equal(t, tt.want, restore.BackupIDList())
+		})
+	}
+}
+
+func TestServerRestore_ValidateRestoreMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		restore    func() *ServerRestore
+		wantErrMsg string
+	}{
+		{
+			name:    "valid fuzzy restore with defaults",
+			restore: validServerFuzzyRestore,
+		},
+		{
+			name: "valid fuzzy restore at the limits",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ParallelWriters = maxServerRestoreParallelWriters
+				restore.MaxInflight = new(maxServerRestoreMaxInflight)
+				restore.RetryMultiplier = new(minServerRestoreRetryMultiplier)
+				restore.RetryMaxAttempts = new(1)
+				restore.IgnoreRecordError = new(true)
+				return restore
+			},
+		},
+		{
+			name: "valid cold restore with filter expression",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.FilterExp = testServerFilterExp
+				return restore
+			},
+		},
+		{
+			name: "invalid filter expression",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.FilterExp = testInvalidFilterExp
+				return restore
+			},
+			wantErrMsg: errMsgInvalidFilterExp,
+		},
+		{
+			name: "valid path",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Path = testServerPath
+				return restore
+			},
+		},
+		{
+			name: "path with parent segment",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Path = testParentPath
+				return restore
+			},
+			wantErrMsg: errMsgParentPath,
+		},
+		{
+			// A fuzzy setting given for a cold restore is refused even at its default.
+			name: "fuzzy setting given with its default on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RetryMultiplier = new(DefaultServerRestoreRetryMultiplier)
+				return restore
+			},
+			wantErrMsg: "retry-multiplier " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "fuzzy flag given as false on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.IgnoreRecordError = new(false)
+				return restore
+			},
+			wantErrMsg: "ignore-record-error " + errMsgRequiresFuzzy,
+		},
+		{
+			// A strict setting given for a fuzzy restore is refused even at its default.
+			name: "hydrate replica given with its default on a fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.HydrateReplica = new(DefaultServerRestoreHydrateReplica)
+				return restore
+			},
+			wantErrMsg: errMsgRequiresStrict,
+		},
+		{
+			name: "policy in upper case",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = "FUZZY"
+				restore.MaxInflight = new(DefaultServerRestoreMaxInflight)
+				return restore
+			},
+		},
+		{
+			name: "filter expression with fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.FilterExp = testServerFilterExp
+				return restore
+			},
+		},
+		{
+			name: "several backup ids with fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.BackupIDs = testServerBackupIDs
+				return restore
+			},
+		},
+		{
+			name: "valid strict restore with several backup ids and filter expression",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = string(infomodels.RestorePolicyStrict)
+				restore.BackupIDs = testServerBackupIDs
+				restore.FilterExp = testServerFilterExp
+				return restore
+			},
+		},
+		{
+			name: "unknown policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = testUnknownPolicy
+				return restore
+			},
+			wantErrMsg: errMsgRestorePolicy + testUnknownPolicy + `"`,
+		},
+		{
+			// The backup policy best-effort is not a restore policy.
+			name: "backup only policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.Policy = string(infomodels.BackupPolicyBestEffort)
+				return restore
+			},
+			wantErrMsg: errMsgRestorePolicy + string(infomodels.BackupPolicyBestEffort),
+		},
+		{
+			name: "negative parallel writers",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ParallelWriters = -1
+				return restore
+			},
+			wantErrMsg: errMsgParallelWriters + "-1",
+		},
+		{
+			name: "parallel writers above range",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ParallelWriters = maxServerRestoreParallelWriters + 1
+				return restore
+			},
+			wantErrMsg: errMsgParallelWriters + "129",
+		},
+		{
+			name: "negative records per second",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RecordsPerSecond = -1
+				return restore
+			},
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got -1",
+		},
+		{
+			name: "max inflight below range",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.MaxInflight = new(0)
+				return restore
+			},
+			wantErrMsg: "max-inflight must be between 1 and 100000, got 0",
+		},
+		{
+			name: "max inflight above range",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.MaxInflight = new(maxServerRestoreMaxInflight + 1)
+				return restore
+			},
+			wantErrMsg: "max-inflight must be between 1 and 100000, got 100001",
+		},
+		{
+			// Zero retries a failed record at once.
+			name: "zero retry base interval",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RetryBaseInterval = new(0)
+				return restore
+			},
+		},
+		{
+			name: "negative retry base interval",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RetryBaseInterval = new(-1)
+				return restore
+			},
+			wantErrMsg: "retry-base-interval must be between 0 and 4294967295, got -1",
+		},
+		{
+			name: "apply metadata last with fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ApplyMetadataLast = new(true)
+				return restore
+			},
+		},
+		{
+			// The server refuses apply-metadata-last for a restore with no metadata.
+			name: "apply metadata last with neither indexes nor udfs",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ApplyMetadataLast = new(true)
+				restore.NoIndexes = true
+				restore.NoUDFs = true
+				return restore
+			},
+			wantErrMsg: "apply-metadata-last has nothing to apply",
+		},
+		{
+			name: "apply metadata last with indexes only",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ApplyMetadataLast = new(true)
+				restore.NoUDFs = true
+				return restore
+			},
+		},
+		{
+			name: "retry multiplier below one",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RetryMultiplier = new(0.5)
+				return restore
+			},
+			wantErrMsg: "retry-multiplier must be at least 1.0, got 0.5",
+		},
+		{
+			// Zero disables the retries, which the server accepts.
+			name: "zero retry max attempts",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RetryMaxAttempts = new(0)
+				return restore
+			},
+		},
+		{
+			name: "negative retry max attempts",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.RetryMaxAttempts = new(-1)
+				return restore
+			},
+			wantErrMsg: "retry-max-attempts must be between 0 and 4294967295, got -1",
+		},
+		{
+			name: "master only hydration on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.HydrateReplica = new(false)
+				return restore
+			},
+		},
+		{
+			name: "master only hydration with fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.HydrateReplica = new(false)
+				return restore
+			},
+			wantErrMsg: errMsgRequiresStrict,
+		},
+		{
+			// The worker threads and the rate limit apply to both kinds of restore.
+			name: "parallel writers and records per second on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ParallelWriters = 16
+				restore.RecordsPerSecond = 100
+				return restore
+			},
+		},
+		{
+			name: "parallel writers out of range on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ParallelWriters = maxServerRestoreParallelWriters + 1
+				return restore
+			},
+			wantErrMsg: errMsgParallelWriters + "129",
+		},
+		{
+			name: "records per second above range",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RecordsPerSecond = math.MaxUint32 + 1
+				return restore
+			},
+			wantErrMsg: "records-per-second must be between 0 and 4294967295, got 4294967296",
+		},
+		{
+			name: "extra ttl at the limit",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ExtraTTL = maxServerRestoreExtraTTL
+				return restore
+			},
+		},
+		{
+			name: "negative extra ttl",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ExtraTTL = -1
+				return restore
+			},
+			wantErrMsg: "extra-ttl must be between 0 and 315360000, got -1",
+		},
+		{
+			name: "extra ttl above range",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ExtraTTL = maxServerRestoreExtraTTL + 1
+				return restore
+			},
+			wantErrMsg: "extra-ttl must be between 0 and 315360000, got 315360001",
+		},
+		{
+			name: "incremental path with several backups",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs
+				restore.IncrementalPath = testServerPath
+				return restore
+			},
+		},
+		{
+			// The first backup is always read from under the path, so an incremental path
+			// means nothing to a restore of a single backup.
+			name: "incremental path with a single backup",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.IncrementalPath = testServerPath
+				return restore
+			},
+			wantErrMsg: "incremental-path requires more than one backup id",
+		},
+		{
+			name: "incremental path with parent segment",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs
+				restore.IncrementalPath = testParentPath
+				return restore
+			},
+			wantErrMsg: errMsgParentPath,
+		},
+		{
+			name: "apply metadata last without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ApplyMetadataLast = new(true)
+				return restore
+			},
+			wantErrMsg: "apply-metadata-last " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "max inflight without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.MaxInflight = new(100)
+				return restore
+			},
+			wantErrMsg: "max-inflight " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "retry base interval without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RetryBaseInterval = new(100)
+				return restore
+			},
+			wantErrMsg: "retry-base-interval " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "retry multiplier without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RetryMultiplier = new(2.0)
+				return restore
+			},
+			wantErrMsg: "retry-multiplier " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "retry max attempts without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.RetryMaxAttempts = new(1)
+				return restore
+			},
+			wantErrMsg: "retry-max-attempts " + errMsgRequiresFuzzy,
+		},
+		{
+			name: "ignore record error without fuzzy policy",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.IgnoreRecordError = new(true)
+				return restore
+			},
+			wantErrMsg: "ignore-record-error " + errMsgRequiresFuzzy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.restore().Validate()
+
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
+				return
+			}
+			require.NoError(t, err)
+		})
 	}
 }
 
@@ -65,26 +557,6 @@ func TestServerRestore_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing storage type",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.StorageType = ""
-				return restore
-			},
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
-			name: "unsupported storage type",
-			restore: func() *ServerRestore {
-				restore := validServerRestore()
-				restore.StorageType = testUnsupportedStorage
-				return restore
-			},
-			wantErr:    true,
-			wantErrMsg: "unsupported storage-type",
-		},
-		{
 			name: "missing namespace",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
@@ -95,14 +567,120 @@ func TestServerRestore_Validate(t *testing.T) {
 			wantErrMsg: "namespace is required",
 		},
 		{
-			name: "missing backup id",
+			name: "missing backup ids",
 			restore: func() *ServerRestore {
 				restore := validServerRestore()
-				restore.JobID = ""
+				restore.BackupIDs = ""
 				return restore
 			},
 			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			wantErrMsg: "backup-ids is required",
+		},
+		{
+			name: "empty id inside the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerJobID + ",," + testServerSecondJobID
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-ids must not contain an empty id",
+		},
+		{
+			name: "backup id of another form in the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerJobID + "," + testNotBackupID
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgNotBackupID,
+		},
+		{
+			name: "trailing separator in the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs + ","
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-ids must not contain an empty id",
+		},
+		{
+			name: "repeated id in the backup id list",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs + "," + testServerJobID
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: `backup-ids must not repeat an id, got "` + testServerJobID + `" twice`,
+		},
+		{
+			name: "maximum number of backup ids",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testBackupIDList(maxServerRestoreBackupIDs)
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "too many backup ids",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testBackupIDList(maxServerRestoreBackupIDs + 1)
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: "backup-ids takes at most 32 ids, got 33",
+		},
+		{
+			name: "several backup ids",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.BackupIDs = testServerBackupIDs
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "parallel download threads at the lower limit on a cold restore",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ParallelDownloadThreads = 1
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "parallel download threads at the upper limit on a fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ParallelDownloadThreads = maxServerRestoreParallelDownloadThreads
+				return restore
+			},
+			wantErr: false,
+		},
+		{
+			name: "negative parallel download threads",
+			restore: func() *ServerRestore {
+				restore := validServerRestore()
+				restore.ParallelDownloadThreads = -1
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParallelDownloadThreads + "-1",
+		},
+		{
+			name: "parallel download threads above range on a fuzzy restore",
+			restore: func() *ServerRestore {
+				restore := validServerFuzzyRestore()
+				restore.ParallelDownloadThreads = maxServerRestoreParallelDownloadThreads + 1
+				return restore
+			},
+			wantErr:    true,
+			wantErrMsg: errMsgParallelDownloadThreads + "129",
 		},
 	}
 
@@ -127,10 +705,7 @@ func TestServerRestore_Validate(t *testing.T) {
 func TestServerRestoreAbort_Validate(t *testing.T) {
 	t.Parallel()
 
-	const (
-		errMsgBackupIDRequired  = "backup-id is required"
-		errMsgNamespaceRequired = "namespace is required"
-	)
+	const errMsgNamespaceRequired = "namespace is required"
 
 	tests := []struct {
 		name       string
@@ -151,14 +726,14 @@ func TestServerRestoreAbort_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing backup id",
+			name: "missing job id",
 			abort: func() *ServerRestoreAbort {
 				abort := validServerRestoreAbort()
 				abort.JobID = ""
 				return abort
 			},
 			wantErr:    true,
-			wantErrMsg: errMsgBackupIDRequired,
+			wantErrMsg: errMsgJobIDRequired,
 		},
 		{
 			name: "missing namespace",
@@ -172,12 +747,12 @@ func TestServerRestoreAbort_Validate(t *testing.T) {
 		},
 		{
 			// Both fields name the job, and the missing id is reported first.
-			name: "missing namespace and backup id",
+			name: "missing namespace and job id",
 			abort: func() *ServerRestoreAbort {
 				return &ServerRestoreAbort{}
 			},
 			wantErr:    true,
-			wantErrMsg: errMsgBackupIDRequired,
+			wantErrMsg: errMsgJobIDRequired,
 		},
 	}
 
@@ -199,46 +774,106 @@ func TestServerRestoreAbort_Validate(t *testing.T) {
 	}
 }
 
-func TestServerRestorePrepare_Validate(t *testing.T) {
+// TestServerRestoreJob_Validate covers the commands that name a running restore job,
+// which all check the job the same way.
+func TestServerRestoreJob_Validate(t *testing.T) {
 	t.Parallel()
+
+	const errMsgNamespaceRequired = "namespace is required"
+
+	type validator interface{ Validate() error }
+
+	commands := []struct {
+		name string
+		make func(namespace, jobID string) validator
+		zero validator
+	}{
+		{
+			name: "progress",
+			make: func(namespace, jobID string) validator {
+				return &ServerRestoreProgress{Namespace: namespace, JobID: jobID, Watch: true}
+			},
+			zero: (*ServerRestoreProgress)(nil),
+		},
+		{
+			name: "clear storage",
+			make: func(namespace, jobID string) validator {
+				return &ServerRestoreClearStorage{Namespace: namespace, JobID: jobID, Async: true}
+			},
+			zero: (*ServerRestoreClearStorage)(nil),
+		},
+	}
 
 	tests := []struct {
 		name       string
-		prepare    func() *ServerRestorePrepare
-		wantErr    bool
+		namespace  string
+		jobID      string
 		wantErrMsg string
 	}{
+		{name: "valid", namespace: testServerNamespace, jobID: testServerRestoreJobID},
+		{name: "missing job id", namespace: testServerNamespace, wantErrMsg: errMsgJobIDRequired},
+		{name: "missing namespace", jobID: testServerRestoreJobID, wantErrMsg: errMsgNamespaceRequired},
+		// Both fields name the job, and the missing id is reported first.
+		{name: "missing namespace and job id", wantErrMsg: errMsgJobIDRequired},
+	}
+
+	for _, cmd := range commands {
+		t.Run(cmd.name+"/nil", func(t *testing.T) {
+			t.Parallel()
+
+			require.NoError(t, cmd.zero.Validate())
+		})
+
+		for _, tt := range tests {
+			t.Run(cmd.name+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				err := cmd.make(tt.namespace, tt.jobID).Validate()
+
+				if tt.wantErrMsg != "" {
+					require.ErrorContains(t, err, tt.wantErrMsg)
+					return
+				}
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
+// TestServerRestoreOpen_Validate covers the open, which the cluster finds the restore
+// of by the namespace alone, so its job id is optional, but checked when given.
+func TestServerRestoreOpen_Validate(t *testing.T) {
+	t.Parallel()
+
+	const errMsgNamespaceRequired = "namespace is required"
+
+	tests := []struct {
+		name       string
+		give       *ServerRestoreOpen
+		wantErrMsg string
+	}{
+		{name: "nil", give: nil},
+		{name: "valid without job id", give: &ServerRestoreOpen{Namespace: testServerNamespace}},
 		{
-			name:    "valid prepare",
-			prepare: validServerRestorePrepare,
-			wantErr: false,
+			name: "valid with job id",
+			give: &ServerRestoreOpen{Namespace: testServerNamespace, JobID: testServerRestoreJobID, Async: true},
 		},
 		{
-			name: "nil prepare",
-			prepare: func() *ServerRestorePrepare {
-				return nil
-			},
-			wantErr: false,
+			name:       "job id with a separator",
+			give:       &ServerRestoreOpen{Namespace: testServerNamespace, JobID: "job:1"},
+			wantErrMsg: "job-id must not contain",
 		},
 		{
-			name: "missing namespace",
-			prepare: func() *ServerRestorePrepare {
-				prepare := validServerRestorePrepare()
-				prepare.Namespace = ""
-				return prepare
-			},
-			wantErr:    true,
-			wantErrMsg: "namespace is required",
+			// The namespace is required whether or not the job is named.
+			name:       "job id without namespace",
+			give:       &ServerRestoreOpen{JobID: testServerRestoreJobID},
+			wantErrMsg: errMsgNamespaceRequired,
 		},
+		{name: "missing namespace", give: &ServerRestoreOpen{}, wantErrMsg: errMsgNamespaceRequired},
 		{
-			name: "missing backup id",
-			prepare: func() *ServerRestorePrepare {
-				prepare := validServerRestorePrepare()
-				prepare.JobID = ""
-				return prepare
-			},
-			wantErr:    true,
-			wantErrMsg: "backup-id is required",
+			name:       "namespace with a control character",
+			give:       &ServerRestoreOpen{Namespace: "ns\x01"},
+			wantErrMsg: "namespace must be printable ASCII",
 		},
 	}
 
@@ -246,16 +881,49 @@ func TestServerRestorePrepare_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.prepare().Validate()
+			err := tt.give.Validate()
 
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.wantErrMsg != "" {
-					assert.Contains(t, err.Error(), tt.wantErrMsg)
-				}
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
 				return
 			}
 			require.NoError(t, err)
+		})
+	}
+}
+
+// testBackupIDList returns a comma separated list of n distinct backup ids.
+func testBackupIDList(n int) string {
+	ids := make([]string, n)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("261025T1200%02d-ab12", i)
+	}
+
+	return strings.Join(ids, ",")
+}
+
+func TestServerRestore_RestorePolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		givePolicy string
+		want       infomodels.RestorePolicy
+	}{
+		{name: "empty uses the server default"},
+		{name: "lower case", givePolicy: "fuzzy", want: infomodels.RestorePolicyFuzzy},
+		{name: "upper case", givePolicy: "STRICT", want: infomodels.RestorePolicyStrict},
+		{name: "mixed case", givePolicy: "Fuzzy", want: infomodels.RestorePolicyFuzzy},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			restore := &ServerRestore{}
+			restore.Policy = tt.givePolicy
+
+			assert.Equal(t, tt.want, restore.RestorePolicy())
 		})
 	}
 }

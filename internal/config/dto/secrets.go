@@ -79,7 +79,7 @@ func collectSecretableFields(
 // server-integrated (snapshot) config. These commands have no client-side
 // encryption and use the reduced S3 schema, so the set is narrower than
 // collectSecretableFields.
-func collectServerSecretableFields(cluster *Cluster, s3 *ObjectStorageS3) []*string {
+func collectServerSecretableFields(cluster *Cluster, s3 *AwsS3Common) []*string {
 	var fields []*string
 
 	if cluster != nil {
