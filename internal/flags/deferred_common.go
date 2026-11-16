@@ -15,13 +15,10 @@
 package flags
 
 import (
-	"strings"
-
 	asFlags "github.com/aerospike/tools-common-go/flags"
+	"github.com/aerospike/tools-common-go/secretagent"
 	"github.com/spf13/pflag"
 )
-
-const secretsPrefix = "secrets:"
 
 // Flags for Aerospike connection.
 const (
@@ -53,7 +50,7 @@ type deferredCertValue struct {
 }
 
 func (d *deferredCertValue) Set(val string) error {
-	if strings.HasPrefix(val, secretsPrefix) {
+	if secretagent.IsSecret(val) {
 		d.pendingSecret = true
 		d.raw = val
 
@@ -95,7 +92,7 @@ type deferredSecretValue struct {
 }
 
 func (d *deferredSecretValue) Set(val string) error {
-	if strings.HasPrefix(val, secretsPrefix) {
+	if secretagent.IsSecret(val) {
 		d.pendingSecret = true
 		d.raw = val
 
@@ -120,6 +117,15 @@ func (d *deferredSecretValue) String() string {
 
 func (d *deferredSecretValue) Type() string {
 	return d.original.Type()
+}
+
+// PrepareAerospikeFlags adapts the tools-common-go Aerospike connection flags
+// for absctl: it defers Secret Agent references (see WrapFlagsForSecrets) and
+// hides the unsupported EXTERNAL_INSECURE auth mode.
+// Must be called after NewFlagSet() and before the flagset is parsed by cobra.
+func PrepareAerospikeFlags(fs *pflag.FlagSet) {
+	WrapFlagsForSecrets(fs)
+	hideInsecureAuthMode(fs)
 }
 
 // WrapFlagsForSecrets replaces flag Values on Aerospike connection flags with

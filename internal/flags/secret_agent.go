@@ -44,7 +44,8 @@ func (f *SecretAgent) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.IntVar(&f.TimeoutMillisecond, "sa-timeout",
 		models.DefaultSecretAgentTimeoutMillisecond,
-		"Secret Agent connection and reading timeout.")
+		"Secret Agent request timeout in milliseconds. It bounds the whole request,\n"+
+			"from connecting to receiving the response.")
 
 	flagSet.StringVar(&f.CaFile, "sa-ca-file",
 		models.DefaultSecretAgentCaFile,
@@ -56,11 +57,13 @@ func (f *SecretAgent) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.StringVar(&f.CertFile, "sa-cert-file",
 		models.DefaultSecretAgentCertFile,
-		"Path to a client certificate file for mutual TLS authentication.")
+		"Path to a client certificate file for mutual TLS authentication.\n"+
+			"Requires --sa-key-file and --sa-ca-file.")
 
 	flagSet.StringVar(&f.KeyFile, "sa-key-file",
 		models.DefaultSecretAgentKeyFile,
-		"Path to a client private key file for mutual TLS authentication.")
+		"Path to a client private key file for mutual TLS authentication.\n"+
+			"Requires --sa-cert-file and --sa-ca-file.")
 
 	flagSet.BoolVar(&f.IsBase64, "sa-is-base64",
 		models.DefaultSecretAgentIsBase64,

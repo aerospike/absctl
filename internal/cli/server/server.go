@@ -141,7 +141,7 @@ func applyCommon(cmd *cobra.Command, rc *runCtx) commonFlagSets {
 		clientPolicy: rc.clientPolicy.NewFlagSet(),
 		secretAgent:  rc.secretAgent.NewFlagSet(),
 	}
-	flags.WrapFlagsForSecrets(fs.aerospike)
+	flags.PrepareAerospikeFlags(fs.aerospike)
 
 	cmd.Flags().SortFlags = false
 	cmd.Flags().AddFlagSet(fs.aerospike)

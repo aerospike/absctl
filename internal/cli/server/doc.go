@@ -42,7 +42,7 @@ func newCommonFlagSets(rc *runCtx) commonFlagSets {
 		clientPolicy: rc.clientPolicy.NewFlagSet(),
 		secretAgent:  rc.secretAgent.NewFlagSet(),
 	}
-	flags.WrapFlagsForSecrets(fs.aerospike)
+	flags.PrepareAerospikeFlags(fs.aerospike)
 
 	return fs
 }

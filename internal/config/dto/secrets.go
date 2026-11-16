@@ -17,12 +17,10 @@ package dto
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/aerospike/backup-go"
+	"github.com/aerospike/tools-common-go/secretagent"
 )
-
-const secretsPrefix = "secrets:"
 
 // collectSecretableFields gathers all string pointer fields that may contain
 // secret agent references across the various config sections.
@@ -108,7 +106,7 @@ func resolveSecretFields(ctx context.Context, saCfg *backup.SecretAgentConfig, f
 			continue
 		}
 
-		if !strings.HasPrefix(*field, secretsPrefix) {
+		if !secretagent.IsSecret(*field) {
 			continue
 		}
 
