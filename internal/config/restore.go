@@ -122,7 +122,7 @@ func NewRestoreConfig(config *RestoreServiceConfig, logger *slog.Logger) *backup
 	c.CompressionPolicy = config.Compression.Policy()
 	c.EncryptionPolicy = config.Encryption.Policy()
 	c.SecretAgentConfig = config.SecretAgent.Config()
-	c.RetryPolicy = config.Restore.RetryPolicy()
+	c.RetryPolicy = config.Restore.WriteRetryPolicy()
 	c.ValidateOnly = config.Restore.ValidateOnly
 	c.ApplyMetadataLast = config.Restore.ApplyMetadataLast
 
@@ -138,7 +138,7 @@ func logRestoreConfig(logger *slog.Logger, params *RestoreServiceConfig, restore
 		getNamespaceLog(restoreConfig),
 		getEncryptionLog(params.Encryption),
 		getCompressionLog(params.Compression),
-		slog.Duration("retry-bas-interval", restoreConfig.RetryPolicy.BaseTimeout),
+		slog.Duration("retry-base-interval", restoreConfig.RetryPolicy.BaseTimeout),
 		slog.Uint64("retry-max-attempts", uint64(restoreConfig.RetryPolicy.MaxRetries)),
 		slog.Float64("retry-multiplier", restoreConfig.RetryPolicy.Multiplier),
 		slog.Any("set-list", restoreConfig.SetList),

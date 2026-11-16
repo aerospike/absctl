@@ -71,31 +71,33 @@ General Flags:
       --config string      Path to YAML configuration file.
 
 Aerospike Client Flags:
-  -h, --host host[:tls-name][:port][,...]                                                           The Aerospike host. (default 127.0.0.1)
-  -p, --port int                                                                                    The default Aerospike port. (default 3000)
-  -U, --user string                                                                                 The Aerospike user for the connection to the Aerospike cluster.
-  -P, --password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"                   The Aerospike password for the connection to the Aerospike
-                                                                                                    cluster.
-      --auth INTERNAL,EXTERNAL,PKI                                                                  The authentication mode used by the Aerospike server. INTERNAL
-                                                                                                    uses standard user/pass. EXTERNAL uses external methods (like LDAP)
-                                                                                                    which are configured on the server. EXTERNAL requires TLS. PKI allows
-                                                                                                    TLS authentication and authorization based on a certificate. No
-                                                                                                    username needs to be configured. (default INTERNAL)
-      --tls-enable                                                                                  Enable TLS authentication with Aerospike. If false, other TLS
-                                                                                                    options are ignored.
-      --tls-name string                                                                             The server TLS context to use to authenticate the connection to
-                                                                                                    Aerospike.
-      --tls-cafile env-b64:<cert>,b64:<cert>,<cert-file-name>                                       The CA used when connecting to Aerospike.
-      --tls-capath <cert-path-name>                                                                 A path containing CAs for connecting to Aerospike.
-      --tls-certfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                     The certificate file for mutual TLS authentication with
-                                                                                                    Aerospike.
-      --tls-keyfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                      The key file used for mutual TLS authentication with Aerospike.
-      --tls-keyfile-password "env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"       The password used to decrypt the key file if encrypted.
-      --tls-protocols "[[+][-]all] [[+][-]TLSv1] [[+][-]TLSv1.1] [[+][-]TLSv1.2] [[+][-]TLSv1.3]"   Set the TLS protocol selection criteria. This format is the same
-                                                                                                    as Apache's SSLProtocol documented at
-                                                                                                    https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol (default +TLSv1.2)
-      --services-alternate                                                                          Determines if the client should use "services-alternate" instead
-                                                                                                    of "services" in info request during cluster tending.
+  -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
+  -p, --port int                                                                                              The default Aerospike port. (default 3000)
+  -U, --user string                                                                                           The Aerospike user for the connection to the Aerospike cluster.
+  -P, --password "env:<env-var>,env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"               The Aerospike password for the connection to the Aerospike
+                                                                                                              cluster.
+      --auth INTERNAL,EXTERNAL,EXTERNAL_INSECURE,PKI                                                          The authentication mode used by the Aerospike server. INTERNAL
+                                                                                                              uses standard user/pass. EXTERNAL uses external methods (like LDAP)
+                                                                                                              which are configured on the server. EXTERNAL requires TLS.
+                                                                                                              EXTERNAL_INSECURE is EXTERNAL without the TLS requirement: without TLS it sends the
+                                                                                                              password in clear, and some tools still refuse it without TLS. PKI
+                                                                                                              requires TLS, and allows TLS authentication and authorization based on a
+                                                                                                              certificate. No username needs to be configured. (default INTERNAL)
+      --tls-enable                                                                                            Enable TLS authentication with Aerospike. If false, other TLS
+                                                                                                              options are ignored.
+      --tls-name string                                                                                       The server TLS context to use to authenticate the connection to
+                                                                                                              Aerospike.
+      --tls-cafile env-b64:<cert>,b64:<cert>,<cert-file-name>                                                 The CA used when connecting to Aerospike.
+      --tls-capath <cert-path-name>                                                                           A path containing CAs for connecting to Aerospike.
+      --tls-certfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                               The certificate file for mutual TLS authentication with
+                                                                                                              Aerospike.
+      --tls-keyfile env-b64:<cert>,b64:<cert>,<cert-file-name>                                                The key file used for mutual TLS authentication with Aerospike.
+      --tls-keyfile-password "env:<env-var>,env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"   The password used to decrypt the key file if encrypted.
+      --tls-protocols "[[+][-]all] [[+][-]TLSv1] [[+][-]TLSv1.1] [[+][-]TLSv1.2] [[+][-]TLSv1.3]"             Set the TLS protocol selection criteria. This format is the same
+                                                                                                              as Apache's SSLProtocol documented at
+                                                                                                              https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslprotocol (default +TLSv1.2)
+      --services-alternate                                                                                    Determines if the client should use "services-alternate" instead
+                                                                                                              of "services" in info request during cluster tending.
       --client-timeout int         Initial host connection timeout duration. The timeout when opening a connection
                                    to the server host for the first time. (default 30000)
       --client-idle-timeout int    Idle timeout. Every time a connection is used, its idle
@@ -424,9 +426,11 @@ cluster:
   password: db_password
   # The authentication mode used by the Aerospike server. INTERNAL
   # uses standard user/pass. EXTERNAL uses external methods (like LDAP)
-  # which are configured on the server. EXTERNAL requires TLS. PKI allows
-  # TLS authentication and authorization based on a certificate. No
-  # username needs to be configured.
+  # which are configured on the server. EXTERNAL requires TLS.
+  # EXTERNAL_INSECURE is EXTERNAL without the TLS requirement: without TLS it sends the
+  # password in clear, and some tools still refuse it without TLS. PKI
+  # requires TLS, and allows TLS authentication and authorization based on a
+  # certificate. No username needs to be configured.
   auth: INTERNAL
   # Initial host connection timeout duration. The timeout when opening a connection
   # to the server host for the first time.

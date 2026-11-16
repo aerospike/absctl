@@ -19,6 +19,7 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
@@ -480,28 +481,36 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 		baseInterval   int64
 		multiplier     float64
 		maxRetries     uint
-		expectedNonNil bool
+		wantBase       time.Duration
+		wantMultiplier float64
+		wantMaxRetries uint
 	}{
 		{
 			name:           "default retry policy",
-			baseInterval:   0,
-			multiplier:     0,
-			maxRetries:     0,
-			expectedNonNil: true,
+			baseInterval:   models.DefaultRestoreRetryBaseInterval,
+			multiplier:     models.DefaultRestoreRetryMultiplier,
+			maxRetries:     models.DefaultRestoreRetryMaxAttempts,
+			wantBase:       time.Second,
+			wantMultiplier: 1,
+			wantMaxRetries: 3,
 		},
 		{
 			name:           "custom retry policy",
 			baseInterval:   100,
 			multiplier:     2.0,
 			maxRetries:     5,
-			expectedNonNil: true,
+			wantBase:       100 * time.Millisecond,
+			wantMultiplier: 2.0,
+			wantMaxRetries: 5,
 		},
 		{
 			name:           "high retry values",
-			baseInterval:   1000,
+			baseInterval:   5000,
 			multiplier:     3.0,
 			maxRetries:     10,
-			expectedNonNil: true,
+			wantBase:       5 * time.Second,
+			wantMultiplier: 3.0,
+			wantMaxRetries: 10,
 		},
 	}
 
@@ -512,9 +521,14 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			serviceConfig := &RestoreServiceConfig{
 				Restore: &models.Restore{
-					RetryBaseInterval: tt.baseInterval,
-					RetryMultiplier:   tt.multiplier,
-					RetryMaxAttempts:  tt.maxRetries,
+					// Info retry settings differ from write retry settings to make sure
+					// write retries do not use them.
+					InfoMaxRetries:                7,
+					InfoRetriesMultiplier:         1.5,
+					InfoRetryIntervalMilliseconds: 250,
+					RetryBaseInterval:             tt.baseInterval,
+					RetryMultiplier:               tt.multiplier,
+					RetryMaxAttempts:              tt.maxRetries,
 				},
 				Compression: &models.Compression{},
 				Encryption:  &models.Encryption{},
@@ -524,10 +538,10 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 			config := NewRestoreConfig(serviceConfig, logger)
 
 			require.NotNil(t, config)
-
-			if tt.expectedNonNil {
-				assert.NotNil(t, config.RetryPolicy)
-			}
+			require.NotNil(t, config.RetryPolicy)
+			assert.Equal(t, tt.wantBase, config.RetryPolicy.BaseTimeout)
+			assert.InDelta(t, tt.wantMultiplier, config.RetryPolicy.Multiplier, 0.0001)
+			assert.Equal(t, tt.wantMaxRetries, config.RetryPolicy.MaxRetries)
 		})
 	}
 }

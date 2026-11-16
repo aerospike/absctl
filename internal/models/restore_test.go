@@ -19,12 +19,15 @@ import (
 	"time"
 
 	"github.com/aerospike/aerospike-client-go/v8"
+	"github.com/aerospike/backup-go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValidateRestore(t *testing.T) {
 	t.Parallel()
+
+	const testRestoreDir = "restore-dir"
 
 	tests := []struct {
 		name    string
@@ -35,16 +38,18 @@ func TestValidateRestore(t *testing.T) {
 		{
 			name: "Valid restore configuration with input file",
 			restore: &Restore{
-				InputFile: "backup.asb",
-				Namespace: testNamespace,
+				InputFile:       "backup.asb",
+				Namespace:       testNamespace,
+				RetryMultiplier: DefaultRestoreRetryMultiplier,
 			},
 			wantErr: false,
 		},
 		{
 			name: "Valid restore configuration with directory",
 			restore: &Restore{
-				Directory: "restore-dir",
-				Namespace: "test",
+				Directory:       "restore-dir",
+				Namespace:       "test",
+				RetryMultiplier: DefaultRestoreRetryMultiplier,
 			},
 			wantErr: false,
 		},
@@ -54,6 +59,7 @@ func TestValidateRestore(t *testing.T) {
 				DirectoryList:   "dir1,dir2",
 				ParentDirectory: "parent",
 				Namespace:       "test",
+				RetryMultiplier: DefaultRestoreRetryMultiplier,
 			},
 			wantErr: false,
 		},
@@ -103,6 +109,37 @@ func TestValidateRestore(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "replace and unique are mutually exclusive",
+		},
+		{
+			name: "Negative retry base interval",
+			restore: &Restore{
+				Directory:         testRestoreDir,
+				Namespace:         testNamespace,
+				RetryBaseInterval: -1,
+				RetryMultiplier:   DefaultRestoreRetryMultiplier,
+			},
+			wantErr: true,
+			errMsg:  "retry-base-interval must be non-negative",
+		},
+		{
+			name: "Retry multiplier less than one",
+			restore: &Restore{
+				Directory:       testRestoreDir,
+				Namespace:       testNamespace,
+				RetryMultiplier: 0.5,
+			},
+			wantErr: true,
+			errMsg:  "retry-multiplier must be greater than or equal to 1",
+		},
+		{
+			name: "Retry settings are not validated in validate-only mode",
+			restore: &Restore{
+				Directory:       testRestoreDir,
+				Namespace:       testNamespace,
+				RetryMultiplier: 0.5,
+				ValidateOnly:    true,
+			},
+			wantErr: false,
 		},
 	}
 
@@ -214,6 +251,54 @@ func TestMapWritePolicy_ConfigurationCombinations(t *testing.T) {
 			assert.Equal(t, tt.wantAction, got.RecordExistsAction)
 			assert.Equal(t, tt.wantGenPolicy, got.GenerationPolicy)
 			assert.True(t, got.SendKey)
+		})
+	}
+}
+
+func TestRestore_RetryPolicies(t *testing.T) {
+	t.Parallel()
+
+	r := &Restore{
+		InfoMaxRetries:                4,
+		InfoRetriesMultiplier:         1.5,
+		InfoRetryIntervalMilliseconds: 250,
+		RetryBaseInterval:             5000,
+		RetryMultiplier:               2,
+		RetryMaxAttempts:              10,
+	}
+
+	tests := []struct {
+		name           string
+		give           func() *models.RetryPolicy
+		wantBase       time.Duration
+		wantMultiplier float64
+		wantMaxRetries uint
+	}{
+		{
+			name:           "write retry policy uses retry settings",
+			give:           r.WriteRetryPolicy,
+			wantBase:       5 * time.Second,
+			wantMultiplier: 2,
+			wantMaxRetries: 10,
+		},
+		{
+			name:           "info retry policy uses info retry settings",
+			give:           r.InfoRetryPolicy,
+			wantBase:       250 * time.Millisecond,
+			wantMultiplier: 1.5,
+			wantMaxRetries: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.give()
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantBase, got.BaseTimeout)
+			assert.InDelta(t, tt.wantMultiplier, got.Multiplier, 0.0001)
+			assert.Equal(t, tt.wantMaxRetries, got.MaxRetries)
 		})
 	}
 }
