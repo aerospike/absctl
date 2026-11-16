@@ -147,7 +147,7 @@ func BuildCommand(
 
 func NewSharedFlagSets(shared *SharedFlags) SharedFlagSets {
 	aerospikeFlagSet := shared.Aerospike.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapFlagsForSecrets(aerospikeFlagSet)
+	flags.PrepareAerospikeFlags(aerospikeFlagSet)
 
 	return SharedFlagSets{
 		App:          shared.App.NewFlagSet(),

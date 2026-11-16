@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	appflags "github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/tools-common-go/client"
 	"github.com/aerospike/tools-common-go/flags"
@@ -196,7 +197,7 @@ func (c *Cluster) applyAuthAndUser(f *flags.AerospikeFlags) error {
 	}
 
 	if c.Auth != nil && *c.Auth != "" {
-		if err := f.AuthMode.Set(*c.Auth); err != nil {
+		if err := appflags.SetAuthMode(&f.AuthMode, *c.Auth); err != nil {
 			return fmt.Errorf("failed to set auth mode: %w", err)
 		}
 	}

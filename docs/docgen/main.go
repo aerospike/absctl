@@ -252,7 +252,7 @@ func buildSections(operation string, opID flags.Operation) []docSection {
 	// 3. Aerospike Client Flags
 	aeroFlags := asFlags.NewDefaultAerospikeFlags()
 	aeroFS := aeroFlags.NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapFlagsForSecrets(aeroFS)
+	flags.PrepareAerospikeFlags(aeroFS)
 	sections = append(sections, docSection{
 		TextContent: flags.SectionTextAerospike,
 		FS:          aeroFS,
@@ -415,7 +415,7 @@ func buildServerSections(operation string) []docSection {
 
 	// Aerospike client flags.
 	aeroFS := asFlags.NewDefaultAerospikeFlags().NewFlagSet(asFlags.DefaultWrapHelpString)
-	flags.WrapFlagsForSecrets(aeroFS)
+	flags.PrepareAerospikeFlags(aeroFS)
 	sections = append(sections, docSection{
 		FS:         aeroFS,
 		YAMLPrefix: "cluster",

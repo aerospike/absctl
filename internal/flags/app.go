@@ -21,6 +21,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/backup-go"
+	"github.com/aerospike/tools-common-go/secretagent"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -110,7 +111,7 @@ func parseValueWithSecretAgent(ctx context.Context, fs *pflag.FlagSet, saCfg *ba
 		return nil
 	}
 	// Check if we need to parse secret.
-	if !strings.HasPrefix(curVal, secretsPrefix) {
+	if !secretagent.IsSecret(curVal) {
 		return nil
 	}
 

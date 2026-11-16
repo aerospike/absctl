@@ -325,6 +325,18 @@ func TestCluster_applyAuthAndUser(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to set auth mode")
 	})
 
+	t.Run("external insecure auth mode returns error", func(t *testing.T) {
+		c := &Cluster{
+			Auth: new("external_insecure"),
+		}
+		var f flags.AerospikeFlags
+
+		err := c.applyAuthAndUser(&f)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to set auth mode: unrecognized auth mode")
+	})
+
 	t.Run("nil values are handled", func(t *testing.T) {
 		c := &Cluster{
 			User:     nil,
