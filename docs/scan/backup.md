@@ -76,13 +76,11 @@ Aerospike Client Flags:
   -U, --user string                                                                                           The Aerospike user for the connection to the Aerospike cluster.
   -P, --password "env:<env-var>,env-b64:<env-var>,b64:<b64-pass>,file:<pass-file>,<clear-pass>"               The Aerospike password for the connection to the Aerospike
                                                                                                               cluster.
-      --auth INTERNAL,EXTERNAL,EXTERNAL_INSECURE,PKI                                                          The authentication mode used by the Aerospike server. INTERNAL
+      --auth INTERNAL,EXTERNAL,PKI                                                                            The authentication mode used by the Aerospike server. INTERNAL
                                                                                                               uses standard user/pass. EXTERNAL uses external methods (like LDAP)
-                                                                                                              which are configured on the server. EXTERNAL requires TLS.
-                                                                                                              EXTERNAL_INSECURE is EXTERNAL without the TLS requirement: without TLS it sends the
-                                                                                                              password in clear, and some tools still refuse it without TLS. PKI
-                                                                                                              requires TLS, and allows TLS authentication and authorization based on a
-                                                                                                              certificate. No username needs to be configured. (default INTERNAL)
+                                                                                                              which are configured on the server. EXTERNAL requires TLS. PKI allows
+                                                                                                              TLS authentication and authorization based on a certificate. No
+                                                                                                              username needs to be configured. (default INTERNAL)
       --tls-enable                                                                                            Enable TLS authentication with Aerospike. If false, other TLS
                                                                                                               options are ignored.
       --tls-name string                                                                                       The server TLS context to use to authenticate the connection to
@@ -250,18 +248,23 @@ Encryption Flags:
 Secret Agent Flags:
 Options pertaining to the Aerospike Secret Agent.
 See documentation here: https://aerospike.com/docs/tools/secret-agent.
-Both backup and restore commands support getting all the cloud configuration parameters
-from the Aerospike Secret Agent.
-To use a secret as an option, use this format: 'secrets:<resource_name>:<secret_name>'
+The Aerospike connection flags (--host, --port, --user, --password, --tls-name, --tls-cafile,
+--tls-capath, --tls-certfile, --tls-keyfile, --tls-keyfile-password, --tls-protocols),
+the encryption key flags (--encryption-key-file, --encryption-key-env) and all the cloud
+configuration parameters can be fetched from the Aerospike Secret Agent.
+To use a secret as an option, use this format: 'secrets:[<resource_name>:]<secret_name>'
 Example: absctl backup --azure-account-name secrets:resource1:azaccount
       --sa-connection-type string   Secret Agent connection type. Supported types: TCP, UNIX. (default "TCP")
       --sa-address string           Secret Agent host for TCP connection or socket file path for UDS connection.
       --sa-port int                 Secret Agent port (only for TCP connection).
-      --sa-timeout int              Secret Agent connection and reading timeout. (default 10000)
+      --sa-timeout int              Secret Agent request timeout in milliseconds. It bounds the whole request,
+                                    from connecting to receiving the response. (default 10000)
       --sa-ca-file string           Path to ca file for encrypted connections.
       --sa-tls-name string          TLS name (SNI) for encrypted connections.
       --sa-cert-file string         Path to a client certificate file for mutual TLS authentication.
+                                    Requires --sa-key-file and --sa-ca-file.
       --sa-key-file string          Path to a client private key file for mutual TLS authentication.
+                                    Requires --sa-cert-file and --sa-ca-file.
       --sa-is-base64                Whether Secret Agent responses are Base64 encoded.
 
 Local Storage Flags:
@@ -426,11 +429,9 @@ cluster:
   password: db_password
   # The authentication mode used by the Aerospike server. INTERNAL
   # uses standard user/pass. EXTERNAL uses external methods (like LDAP)
-  # which are configured on the server. EXTERNAL requires TLS.
-  # EXTERNAL_INSECURE is EXTERNAL without the TLS requirement: without TLS it sends the
-  # password in clear, and some tools still refuse it without TLS. PKI
-  # requires TLS, and allows TLS authentication and authorization based on a
-  # certificate. No username needs to be configured.
+  # which are configured on the server. EXTERNAL requires TLS. PKI allows
+  # TLS authentication and authorization based on a certificate. No
+  # username needs to be configured.
   auth: INTERNAL
   # Initial host connection timeout duration. The timeout when opening a connection
   # to the server host for the first time.
@@ -658,13 +659,16 @@ secret-agent:
   address: ""
   # Secret Agent port (only for TCP connection).
   port: 0
-  # Secret Agent connection and reading timeout.
+  # Secret Agent request timeout in milliseconds. It bounds the whole request,
+  # from connecting to receiving the response.
   timeout: 10000
   # Path to ca file for encrypted connections.
   ca-file: ""
   # Path to a client certificate file for mutual TLS authentication.
+  # Requires sa-key-file and sa-ca-file.
   cert-file: ""
   # Path to a client private key file for mutual TLS authentication.
+  # Requires sa-cert-file and sa-ca-file.
   key-file: ""
   # TLS name (SNI) for encrypted connections.
   tls-name: ""

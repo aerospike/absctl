@@ -119,6 +119,15 @@ func (d *deferredSecretValue) Type() string {
 	return d.original.Type()
 }
 
+// PrepareAerospikeFlags adapts the tools-common-go Aerospike connection flags
+// for absctl: it defers Secret Agent references (see WrapFlagsForSecrets) and
+// hides the unsupported EXTERNAL_INSECURE auth mode.
+// Must be called after NewFlagSet() and before the flagset is parsed by cobra.
+func PrepareAerospikeFlags(fs *pflag.FlagSet) {
+	WrapFlagsForSecrets(fs)
+	hideInsecureAuthMode(fs)
+}
+
 // WrapFlagsForSecrets replaces flag Values on Aerospike connection flags with
 // deferred wrappers that accept Secret Agent references (secrets:resource:key).
 // Must be called after NewFlagSet() and before the flagset is parsed by cobra.
