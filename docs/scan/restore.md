@@ -198,7 +198,7 @@ Restore Flags:
       --retry-multiplier float    Increases the delay between subsequent retry attempts for the errors listed under --retry-base-interval.
                                   The actual delay is calculated as: retry-base-interval * (retry-multiplier ^ attemptNumber) (default 1)
       --retry-max-attempts uint   Set the total number of write attempts (including the first one) for the errors listed under
-                                  --retry-base-interval. A value of 0 or 1 means a single attempt with no retries. (default 3)
+                                  --retry-base-interval. The minimum value is 1. (default 3)
       --validate                  Validate backup files without restoring.
       --apply-metadata-last       Defines when to restore metadata (secondary indexes and UDFs).
                                   If set to true, metadata from separate file will be restored after all records have been processed.
@@ -510,7 +510,7 @@ restore:
   # The actual delay is calculated as: retry-base-interval * (retry-multiplier ^ attemptNumber)
   retry-multiplier: 1
   # Set the total number of write attempts (including the first one) for the errors listed under
-  # retry-base-interval. A value of 0 or 1 means a single attempt with no retries.
+  # retry-base-interval. The minimum value is 1.
   retry-max-attempts: 3
   # Validate backup files without restoring.
   validate: false

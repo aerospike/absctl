@@ -104,6 +104,10 @@ func (r *Restore) Validate() error {
 		if r.RetryMultiplier < 1 {
 			return errors.New("retry-multiplier must be greater than or equal to 1")
 		}
+
+		if r.RetryMaxAttempts < 1 {
+			return errors.New("retry-max-attempts must be greater than or equal to 1")
+		}
 	}
 
 	return nil

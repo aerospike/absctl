@@ -305,7 +305,7 @@ func writeRejectedRecordBackup(t *testing.T, dir, set string) {
 		newRecord(keyBig, aerospike.BinMap{binName: strings.Repeat("x", bigBinSize)}),
 	}
 
-	encoder := asb.NewEncoder(asb.NewEncoderConfig(testNamespace, false, false, bgmodels.SIndexInfo{}))
+	encoder := asb.NewEncoder(asb.NewEncoderConfig(testNamespace, false, bgmodels.SIndexInfo{}))
 	data := encoder.GetHeader(true)
 
 	for _, r := range records {
