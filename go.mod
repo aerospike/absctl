@@ -136,5 +136,3 @@ require (
 	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
-
-replace github.com/aerospike/aerospike-client-go/v8 => /Users/dneeman/Development/aerospike-client-go-vector
