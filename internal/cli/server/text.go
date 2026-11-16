@@ -29,9 +29,10 @@ const (
 	UseStart           = "start"
 	UseList            = "list"
 	UseProgress        = "progress"
-	UsePrepare         = "prepare"
 	UseValidate        = "validate"
 	UseAbort           = "abort"
+	UseOpen            = "open"
+	UseClearStorage    = "clear-storage"
 )
 
 // Short descriptions (cobra "Short" values).
@@ -43,10 +44,11 @@ const (
 	ShortBackupValidate  = "Validate server-integrated backups"
 	ShortRestore         = "Manage server-integrated restores"
 	ShortRestoreStart    = "Start a server-integrated restore"
-	ShortRestorePrepare  = "Prepare a server-integrated restore"
 	ShortRestoreProgress = "Show the progress of a restore"
 	ShortBackupAbort     = "Abort a server-integrated backup"
 	ShortRestoreAbort    = "Abort a server-integrated restore"
+	ShortRestoreOpen     = "Release the namespace of a failed or aborted cold restore"
+	ShortRestoreClear    = "Clear the namespace storage for a cold restore"
 )
 
 // Long descriptions (cobra "Long" values).
@@ -56,16 +58,43 @@ const (
 		"stops the reporting only; use the abort command to stop the backup.\n" +
 		"With --async the command returns as soon as the cluster accepts\n" +
 		"the backup."
-	LongBackupList      = "List available server-integrated backups from the configured storage."
-	LongBackupProgress  = "Show the progress of a currently running server-integrated backup."
-	LongBackupValidate  = "Validate available server-integrated backups from the configured storage."
-	LongRestoreStart    = "Start a server-integrated restore on the Aerospike cluster."
-	LongRestorePrepare  = "Prepare a server-integrated restore on the Aerospike cluster."
-	LongRestoreProgress = "Show the status of a currently running server-integrated restore."
-	LongBackupAbort     = "Abort a server-integrated backup on the Aerospike cluster."
-	LongRestoreAbort    = "Abort a server-integrated restore on the Aerospike cluster.\n" +
-		"A restore job is identified by the namespace it restores into and\n" +
-		"by its backup id, so both are required. A restore that was only\n" +
-		"prepared blocks writes to the namespace until it ends; aborting it\n" +
-		"releases that block."
+	LongBackupList     = "List available server-integrated backups from the configured storage."
+	LongBackupProgress = "Show the progress of a currently running server-integrated backup."
+	LongBackupValidate = "Validate available server-integrated backups from the configured storage."
+	LongRestoreStart   = "Start a server-integrated restore on the Aerospike cluster and\n" +
+		"follow its progress until it completes. Interrupting the command\n" +
+		"stops the reporting only; use the abort command to stop the restore.\n" +
+		"A strict (cold) restore closes the namespace to clients and starts\n" +
+		"once it is empty on every node. If the storage of the namespace has\n" +
+		"to be cleared on some nodes first, the command says so and waits:\n" +
+		"run the clear-storage command from another session, and the restore\n" +
+		"starts and is followed once the storage is cleared. The command waits\n" +
+		"for the clear with no time limit; interrupting it stops the waiting\n" +
+		"only, and the restore starts once the storage is cleared anyway.\n" +
+		"With --async the command returns as soon as the cluster accepts the\n" +
+		"restore and does not wait for the clear."
+	LongRestoreProgress = "Show the progress of a server-integrated restore job.\n" +
+		"With --watch the progress is followed until the restore completes."
+	LongBackupAbort = "Abort a server-integrated backup on the Aerospike cluster and wait\n" +
+		"until it stops. With --async the command returns as soon as the\n" +
+		"cluster accepts the abort."
+	LongRestoreAbort = "Abort a server-integrated restore on the Aerospike cluster and wait\n" +
+		"until it stops. A restore job is identified by the namespace it\n" +
+		"restores into and by its job id, so both are required. An aborted\n" +
+		"cold restore keeps the namespace closed to clients until it is\n" +
+		"released with the open command. With --async the command returns as\n" +
+		"soon as the cluster accepts the abort."
+	LongRestoreOpen = "Release the namespace held by a failed or aborted cold restore, so that it\n" +
+		"opens to clients again. The cluster finds the restore by the namespace.\n" +
+		"The data the restore wrote so far stays in the namespace. The --job-id\n" +
+		"flag is optional: with it the command checks that the job is one of\n" +
+		"the namespace before the release, then follows the job and waits until\n" +
+		"the namespace opens; without it the command returns as soon as the\n" +
+		"cluster accepts the request. With --async the command returns as soon\n" +
+		"as the cluster accepts the request even when --job-id is set."
+	LongRestoreClear = "Clear the storage of the namespace a cold restore is preparing, on\n" +
+		"every node that asks for it, and wait until the namespace is ready\n" +
+		"for the restore, which the cluster then starts on its own. Clearing\n" +
+		"erases all data of the namespace on those nodes. With --async the\n" +
+		"command returns as soon as the nodes accept the request."
 )

@@ -23,24 +23,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testErrMsgJobIDRequired = "job-id is required"
+const (
+	testErrMsgJobIDRequired     = "job-id is required"
+	testErrMsgNamespaceRequired = "namespace is required"
+)
 
 func validServerRestoreServiceConfig() *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
 		Start: &models.ServerRestore{
-			Namespace:         testServerNamespace,
-			StorageType:       testServerStorage,
-			BackupIDs:         testServerJobID,
-			Parallel:          models.DefaultServerRestoreParallel,
-			MaxInflight:       models.DefaultServerRestoreMaxInflight,
-			RetryBaseInterval: models.DefaultServerRestoreRetryBaseInterval,
-			RetryMultiplier:   models.DefaultServerRestoreRetryMultiplier,
-			RetryMaxAttempts:  models.DefaultServerRestoreRetryMaxAttempts,
-		},
-		Prepare: &models.ServerRestorePrepare{
-			Namespace:      testServerNamespace,
-			JobID:          testServerJobID,
-			HydrateReplica: models.DefaultServerRestoreHydrateReplica,
+			Namespace:       testServerNamespace,
+			BackupIDs:       testServerJobID,
+			ParallelWriters: models.DefaultServerRestoreParallelWriters,
+
+			ParallelDownloadThreads: models.DefaultServerRestoreParallelDownloadThreads,
 		},
 		App:          &models.App{},
 		ClientConfig: &client.AerospikeConfig{},
@@ -56,9 +51,10 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 
 	var (
 		restore      = &models.ServerRestore{}
-		prepare      = &models.ServerRestorePrepare{}
 		progress     = &models.ServerRestoreProgress{}
 		abort        = &models.ServerRestoreAbort{}
+		open         = &models.ServerRestoreOpen{}
+		clearStorage = &models.ServerRestoreClearStorage{}
 		app          = &models.App{}
 		clientCfg    = &client.AerospikeConfig{}
 		clientPolicy = &models.ClientPolicy{}
@@ -69,9 +65,10 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 	tests := []struct {
 		name      string
 		restore   *models.ServerRestore
-		prepare   *models.ServerRestorePrepare
 		progress  *models.ServerRestoreProgress
 		abort     *models.ServerRestoreAbort
+		open      *models.ServerRestoreOpen
+		clear     *models.ServerRestoreClearStorage
 		app       *models.App
 		clientCfg *client.AerospikeConfig
 		clientPol *models.ClientPolicy
@@ -81,9 +78,10 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 		{
 			name:      "all fields set",
 			restore:   restore,
-			prepare:   prepare,
 			progress:  progress,
 			abort:     abort,
+			open:      open,
+			clear:     clearStorage,
 			app:       app,
 			clientCfg: clientCfg,
 			clientPol: clientPolicy,
@@ -110,10 +108,13 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			t.Parallel()
 
 			got := NewServerRestoreServiceConfig(
-				tt.restore,
-				tt.prepare,
-				tt.progress,
-				tt.abort,
+				ServerRestoreCommands{
+					Start:        tt.restore,
+					Progress:     tt.progress,
+					Abort:        tt.abort,
+					Open:         tt.open,
+					ClearStorage: tt.clear,
+				},
 				tt.app,
 				tt.clientCfg,
 				tt.clientPol,
@@ -124,9 +125,10 @@ func TestNewServerRestoreServiceConfig(t *testing.T) {
 			require.NotNil(t, got)
 
 			assert.Same(t, tt.restore, got.Start)
-			assert.Same(t, tt.prepare, got.Prepare)
 			assert.Same(t, tt.progress, got.Progress)
 			assert.Same(t, tt.abort, got.Abort)
+			assert.Same(t, tt.open, got.Open)
+			assert.Same(t, tt.clear, got.ClearStorage)
 			assert.Same(t, tt.app, got.App)
 			assert.Same(t, tt.clientCfg, got.ClientConfig)
 			assert.Same(t, tt.clientPol, got.ClientPolicy)
@@ -169,17 +171,6 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "missing storage type",
-			cfg: func() *ServerRestoreServiceConfig {
-				cfg := validServerRestoreServiceConfig()
-				cfg.Start.StorageType = ""
-				return cfg
-			},
-			isBackup:   false,
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
-		},
-		{
 			name: "missing namespace in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
@@ -188,18 +179,31 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "namespace is required",
+			wantErrMsg: testErrMsgNamespaceRequired,
+		},
+		{
+			name: "empty object storage in start",
+			cfg: func() *ServerRestoreServiceConfig {
+				cfg := validServerRestoreServiceConfig()
+				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Region = ""
+				return cfg
+			},
+			isBackup:   false,
+			wantErr:    true,
+			wantErrMsg: testErrMsgStorageNotConfigured,
 		},
 		{
 			name: "missing bucket name in start",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
 				cfg.AwsS3.BucketName = ""
+				cfg.AwsS3.Endpoint = testEndpoint
 				return cfg
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "s3-bucket-name is required",
+			wantErrMsg: testErrMsgBucketRequired,
 		},
 		{
 			name: "nil start skips object storage check",
@@ -207,16 +211,6 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 				cfg := validServerRestoreServiceConfig()
 				cfg.Start = nil
 				cfg.AwsS3 = nil
-				return cfg
-			},
-			isBackup: false,
-			wantErr:  false,
-		},
-		{
-			name: "nil prepare skips prepare validation",
-			cfg: func() *ServerRestoreServiceConfig {
-				cfg := validServerRestoreServiceConfig()
-				cfg.Prepare = nil
 				return cfg
 			},
 			isBackup: false,
@@ -234,10 +228,10 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			wantErrMsg: "backup-ids is required",
 		},
 		{
-			name: "missing job id in prepare",
+			name: "missing job id in progress",
 			cfg: func() *ServerRestoreServiceConfig {
 				cfg := validServerRestoreServiceConfig()
-				cfg.Prepare.JobID = ""
+				cfg.Progress = &models.ServerRestoreProgress{Namespace: testServerNamespace}
 				return cfg
 			},
 			isBackup:   false,
@@ -282,7 +276,63 @@ func TestServerRestoreServiceConfig_Validate(t *testing.T) {
 			},
 			isBackup:   false,
 			wantErr:    true,
-			wantErrMsg: "namespace is required",
+			wantErrMsg: testErrMsgNamespaceRequired,
+		},
+		{
+			name: "valid open config without object storage",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					Open: &models.ServerRestoreOpen{
+						Namespace: testServerNamespace,
+					},
+					App: &models.App{},
+				}
+			},
+		},
+		{
+			name: "missing open namespace",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					Open: &models.ServerRestoreOpen{},
+					App:  &models.App{},
+				}
+			},
+			wantErr:    true,
+			wantErrMsg: testErrMsgNamespaceRequired,
+		},
+		{
+			name: "valid clear storage config without object storage",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					ClearStorage: &models.ServerRestoreClearStorage{
+						Namespace: testServerNamespace,
+						JobID:     testServerJobID,
+					},
+					App: &models.App{},
+				}
+			},
+		},
+		{
+			name: "missing clear storage job id",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					ClearStorage: &models.ServerRestoreClearStorage{Namespace: testServerNamespace},
+					App:          &models.App{},
+				}
+			},
+			wantErr:    true,
+			wantErrMsg: testErrMsgJobIDRequired,
+		},
+		{
+			name: "missing clear storage namespace",
+			cfg: func() *ServerRestoreServiceConfig {
+				return &ServerRestoreServiceConfig{
+					ClearStorage: &models.ServerRestoreClearStorage{JobID: testServerJobID},
+					App:          &models.App{},
+				}
+			},
+			wantErr:    true,
+			wantErrMsg: testErrMsgNamespaceRequired,
 		},
 		{
 			name: "multiple cloud providers configured",

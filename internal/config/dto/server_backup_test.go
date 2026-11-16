@@ -40,7 +40,6 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	backup := defaultServerBackupConfig()
 
 	assert.Equal(t, models.DefaultCommonNamespace, derefString(backup.Namespace))
-	assert.Equal(t, models.DefaultServerBackupObjectStorageType, derefString(backup.StorageType))
 	assert.Equal(t, models.DefaultBackupModifiedAfter, derefString(backup.ModifiedAfter))
 	assert.Equal(t, models.DefaultBackupModifiedBefore, derefString(backup.ModifiedBefore))
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(backup.Path))
@@ -49,7 +48,12 @@ func TestDefaultServerBackupSections(t *testing.T) {
 	assert.Equal(t, models.DefaultServerFilterExp, derefString(backup.FilterExp))
 	assert.Equal(t, models.DefaultCommonNoIndexes, derefBool(backup.NoIndexes))
 	assert.Equal(t, models.DefaultCommonNoUDFs, derefBool(backup.NoUDFs))
+	assert.Equal(t, models.DefaultServerBackupNoConfig, derefBool(backup.NoConfig))
+	assert.Equal(t, models.DefaultServerBackupPolicy, derefString(backup.Policy))
 	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(backup.Async))
+	assert.Equal(t, models.DefaultServerBackupRecordsPerSecond, derefInt(backup.RecordsPerSecond))
+	assert.Equal(t, models.DefaultServerBackupParallelReaders, derefInt(backup.ParallelReaders))
+	assert.Equal(t, models.DefaultServerBackupParallelUploadThreads, derefInt(backup.ParallelUploadThreads))
 
 	list := defaultServerBackupListConfig()
 	assert.Equal(t, models.DefaultServerBackupPath, derefString(list.Path))
@@ -66,17 +70,19 @@ func TestDefaultServerBackupSections(t *testing.T) {
 
 	abort := defaultServerBackupAbortConfig()
 	assert.Equal(t, models.DefaultServerBackupJobID, derefString(abort.JobID))
+	assert.Equal(t, models.DefaultServerBackupAsync, derefBool(abort.Async))
 }
 
 func TestServerBackupToModels(t *testing.T) {
 	t.Parallel()
 
 	namespace := "ns1"
-	storageType := "aws-s3"
 	modifiedAfter := "2026-01-01_00:00:00"
 	modifiedBefore := "2026-02-01_00:00:00"
+	// The flags differ from each other, so a field mapped from its neighbor is caught.
 	noIndexes := true
-	noUDFs := true
+	noUDFs := false
+	noConfig := true
 	async := true
 	path := "some/prefix"
 	backupPath := "backups/daily"
@@ -84,11 +90,14 @@ func TestServerBackupToModels(t *testing.T) {
 	jobID := "bkp-1"
 	sampleSize := 500
 	watch := true
+	recordsPerSecond := 5000
+	parallelReaders := 8
+	parallelUploadThreads := 4
+	policy := "best-effort"
 
 	backup := &ServerBackup{
 		Backup: ServerBackupConfig{
 			Namespace:      &namespace,
-			StorageType:    &storageType,
 			Path:           &backupPath,
 			ModifiedAfter:  &modifiedAfter,
 			ModifiedBefore: &modifiedBefore,
@@ -97,18 +106,23 @@ func TestServerBackupToModels(t *testing.T) {
 			FilterExp:      &filterExp,
 			NoIndexes:      &noIndexes,
 			NoUDFs:         &noUDFs,
+			NoConfig:       &noConfig,
+			Policy:         &policy,
 			Async:          &async,
+
+			RecordsPerSecond:      &recordsPerSecond,
+			ParallelReaders:       &parallelReaders,
+			ParallelUploadThreads: &parallelUploadThreads,
 		},
 		List:     ServerBackupListConfig{Path: &path},
 		Validate: ServerBackupValidateConfig{JobID: &jobID, Path: &backupPath, SampleSize: &sampleSize},
 		Progress: ServerBackupProgressConfig{JobID: &jobID, Path: &backupPath, Watch: &watch},
-		Abort:    ServerBackupAbortConfig{JobID: &jobID},
+		Abort:    ServerBackupAbortConfig{JobID: &jobID, Async: &async},
 	}
 
 	start := backup.ToModelServerBackup()
 	require.NotNil(t, start)
 	assert.Equal(t, namespace, start.Namespace)
-	assert.Equal(t, storageType, start.StorageType)
 	assert.Equal(t, modifiedAfter, start.ModifiedAfter)
 	assert.Equal(t, modifiedBefore, start.ModifiedBefore)
 	// The model carries a comma separated list, the YAML a sequence.
@@ -117,8 +131,13 @@ func TestServerBackupToModels(t *testing.T) {
 	assert.Equal(t, backupPath, start.Path)
 	assert.Equal(t, filterExp, start.FilterExp)
 	assert.True(t, start.NoIndexes)
-	assert.True(t, start.NoUDFs)
+	assert.False(t, start.NoUDFs)
+	assert.True(t, start.NoConfig)
 	assert.True(t, start.Async)
+	assert.Equal(t, policy, start.Policy)
+	assert.Equal(t, recordsPerSecond, start.RecordsPerSecond)
+	assert.Equal(t, parallelReaders, start.ParallelReaders)
+	assert.Equal(t, parallelUploadThreads, start.ParallelUploadThreads)
 
 	list := backup.ToModelServerBackupList()
 	require.NotNil(t, list)
@@ -139,6 +158,7 @@ func TestServerBackupToModels(t *testing.T) {
 	abort := backup.ToModelServerBackupAbort()
 	require.NotNil(t, abort)
 	assert.Equal(t, jobID, abort.JobID)
+	assert.True(t, abort.Async)
 }
 
 func TestServerBackupToModelsNil(t *testing.T) {
@@ -165,10 +185,10 @@ func TestServerBackupLoadSecretsNoAgent(t *testing.T) {
 	assert.Equal(t, "secrets:resource:key", derefString(backup.Aws.S3.BucketName))
 }
 
-func TestDefaultObjectStorageS3(t *testing.T) {
+func TestDefaultSnapshotS3(t *testing.T) {
 	t.Parallel()
 
-	s3 := defaultObjectStorageS3()
+	s3 := defaultSnapshotS3()
 
 	assert.Equal(t, models.DefaultS3BucketName, derefString(s3.BucketName))
 	assert.Equal(t, models.DefaultS3Region, derefString(s3.Region))
@@ -176,9 +196,14 @@ func TestDefaultObjectStorageS3(t *testing.T) {
 	assert.Equal(t, models.DefaultS3Endpoint, derefString(s3.EndpointOverride))
 	assert.Equal(t, models.DefaultS3AccessKeyID, derefString(s3.AccessKeyID))
 	assert.Equal(t, models.DefaultS3SecretAccessKey, derefString(s3.SecretAccessKey))
+	assert.Equal(t, models.DefaultS3RetryMaxAttempts, derefInt(s3.RetryMaxAttempts))
+	assert.Equal(t, models.DefaultS3RetryMaxBackoff, derefInt(s3.RetryMaxBackoff))
+	assert.Equal(t, models.DefaultCloudMaxConnsPerHost, derefInt(s3.MaxConnsPerHost))
+	assert.Equal(t, models.DefaultCloudRequestTimeout, derefInt(s3.RequestTimeout))
+	assert.Equal(t, models.DefaultSnapshotS3Throughput, derefInt(s3.Throughput))
 }
 
-func TestObjectStorageS3ToModelAwsS3(t *testing.T) {
+func TestSnapshotS3ToModelSnapshotS3(t *testing.T) {
 	t.Parallel()
 
 	bucket := "my-bucket"
@@ -187,36 +212,42 @@ func TestObjectStorageS3ToModelAwsS3(t *testing.T) {
 	endpoint := "http://127.0.0.1:9000"
 	accessKey := "access"
 	secretKey := "secret"
+	retryMaxAttempts := 3
+	retryMaxBackoff := 1000
+	maxConnsPerHost := 16
+	requestTimeout := 5000
+	throughput := 10
 
-	s3 := &ObjectStorageS3{
+	s3 := &SnapshotS3{
 		BucketName:       &bucket,
 		Region:           &region,
 		Profile:          &profile,
 		EndpointOverride: &endpoint,
 		AccessKeyID:      &accessKey,
 		SecretAccessKey:  &secretKey,
+		RetryMaxAttempts: &retryMaxAttempts,
+		RetryMaxBackoff:  &retryMaxBackoff,
+		MaxConnsPerHost:  &maxConnsPerHost,
+		RequestTimeout:   &requestTimeout,
+		Throughput:       &throughput,
 	}
 
-	got := s3.ToModelAwsS3()
-	require.NotNil(t, got)
+	want := &models.SnapshotS3{
+		BucketName:       bucket,
+		Region:           region,
+		Profile:          profile,
+		Endpoint:         endpoint,
+		AccessKeyID:      accessKey,
+		SecretAccessKey:  secretKey,
+		RetryMaxAttempts: retryMaxAttempts,
+		RetryMaxBackoff:  retryMaxBackoff,
+		MaxConnsPerHost:  maxConnsPerHost,
+		RequestTimeout:   requestTimeout,
+		Throughput:       throughput,
+	}
 
-	assert.Equal(t, bucket, got.BucketName)
-	assert.Equal(t, region, got.Region)
-	assert.Equal(t, profile, got.Profile)
-	assert.Equal(t, endpoint, got.Endpoint)
-	assert.Equal(t, accessKey, got.AccessKeyID)
-	assert.Equal(t, secretKey, got.SecretAccessKey)
+	assert.Equal(t, want, s3.ToModelSnapshotS3())
 
-	// The client-side knobs have no flag on the snapshot commands, so they are
-	// filled with the defaults that keep models.AwsS3 validation happy.
-	assert.Equal(t, models.DefaultS3RestorePollDuration, got.RestorePollDuration)
-	assert.Equal(t, models.DefaultS3RetryMaxAttempts, got.RetryMaxAttempts)
-	assert.Equal(t, models.DefaultS3RetryMaxBackoff, got.RetryMaxBackoff)
-	assert.Equal(t, models.DefaultS3ChunkSize, got.ChunkSize)
-	assert.Equal(t, models.DefaultCloudRetryReadBackoff, got.RetryReadBackoff)
-	assert.InEpsilon(t, models.DefaultCloudRetryReadMultiplier, got.RetryReadMultiplier, 0.0)
-	assert.Equal(t, models.DefaultCloudRetryReadMaxAttempts, got.RetryReadMaxAttempts)
-
-	var nilS3 *ObjectStorageS3
-	assert.Nil(t, nilS3.ToModelAwsS3())
+	var nilS3 *SnapshotS3
+	assert.Nil(t, nilS3.ToModelSnapshotS3())
 }

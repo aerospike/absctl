@@ -21,20 +21,28 @@ import (
 
 // ServerRestoreServiceConfig holds the configuration for the server-integrated Start service.
 type ServerRestoreServiceConfig struct {
-	Start    *models.ServerRestore
-	Prepare  *models.ServerRestorePrepare
-	Progress *models.ServerRestoreProgress
-	Abort    *models.ServerRestoreAbort
+	Start        *models.ServerRestore
+	Progress     *models.ServerRestoreProgress
+	Abort        *models.ServerRestoreAbort
+	Open         *models.ServerRestoreOpen
+	ClearStorage *models.ServerRestoreClearStorage
 
 	ServiceConfigCommon
 }
 
+// ServerRestoreCommands holds the configurations of the snapshot-restore subcommands. A
+// command sets only its own one, so the others are left out by name.
+type ServerRestoreCommands struct {
+	Start        *models.ServerRestore
+	Progress     *models.ServerRestoreProgress
+	Abort        *models.ServerRestoreAbort
+	Open         *models.ServerRestoreOpen
+	ClearStorage *models.ServerRestoreClearStorage
+}
+
 // NewServerRestoreServiceConfig initializes a new ServerRestoreServiceConfig.
 func NewServerRestoreServiceConfig(
-	start *models.ServerRestore,
-	prepare *models.ServerRestorePrepare,
-	progress *models.ServerRestoreProgress,
-	abort *models.ServerRestoreAbort,
+	commands ServerRestoreCommands,
 	app *models.App,
 	clientConfig *client.AerospikeConfig,
 	clientPolicy *models.ClientPolicy,
@@ -42,10 +50,11 @@ func NewServerRestoreServiceConfig(
 	awsS3 *models.AwsS3,
 ) *ServerRestoreServiceConfig {
 	return &ServerRestoreServiceConfig{
-		Start:        start,
-		Prepare:      prepare,
-		Progress:     progress,
-		Abort:        abort,
+		Start:        commands.Start,
+		Progress:     commands.Progress,
+		Abort:        commands.Abort,
+		Open:         commands.Open,
+		ClearStorage: commands.ClearStorage,
 		App:          app,
 		ClientConfig: clientConfig,
 		ClientPolicy: clientPolicy,
@@ -60,10 +69,6 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
-	if err := s.Prepare.Validate(); err != nil {
-		return err
-	}
-
 	if err := s.Progress.Validate(); err != nil {
 		return err
 	}
@@ -72,10 +77,23 @@ func (s *ServerRestoreServiceConfig) Validate(isBackup bool) error {
 		return err
 	}
 
-	// Only "snapshot-restore start" talks to object storage; prepare, progress
-	// and abort are served by the cluster alone.
+	if err := s.Open.Validate(); err != nil {
+		return err
+	}
+
+	if err := s.ClearStorage.Validate(); err != nil {
+		return err
+	}
+
+	// Only "snapshot-restore start" talks to object storage; the other subcommands
+	// are served by the cluster alone.
 	if s.Start != nil {
-		if err := validateServerObjectStorage(s.AwsS3); err != nil {
+		if _, err := s.ObjectStorageType(); err != nil {
+			return err
+		}
+
+		// The cluster reads the backup itself, with the S3 settings it is sent.
+		if err := models.ValidateServerS3(s.AwsS3); err != nil {
 			return err
 		}
 	}

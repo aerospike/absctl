@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -72,7 +72,7 @@ jobs:
       docker_versions_override: ${{ steps.docker-tags.outputs.VERSIONS_OVERRIDE }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -286,12 +286,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@f67dd6dcfe5fab8d1ebd695c456631275009a39d # v5.2.0
+        uses: step-security/setup-jfrog-cli@9d5fe0e81fc593a6c0c39bf83ad9a7b45587eed0 # v5.3.1
         env:
           JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
           JF_PROJECT: ${{ vars.JF_PROJECT }}
@@ -301,7 +301,7 @@ jobs:
 
       - name: Delete existing DEV release bundle
         id: delete-bundle
-        uses: aerospike/shared-workflows/.github/actions/delete-release-bundle@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+        uses: aerospike/shared-workflows/.github/actions/delete-release-bundle@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
         with:
           bundle-name: absctl
           version: ${{ needs.prepare.outputs.package_version }}
@@ -331,7 +331,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: aerospike/shared-workflows/.github/workflows/reusable_execute-build.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_execute-build.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
     with:
       gh-workflows-ref: v5.0.0
       jf-project: ${{ vars.JF_PROJECT }}
@@ -430,7 +430,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -488,7 +488,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -530,7 +530,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-mac-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-mac-artifacts.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
     with:
       gh-workflows-ref: v5.0.0
       gh-unsigned-artifacts: packages-unsigned
@@ -560,7 +560,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_sign-artifacts.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
     with:
       gh-workflows-ref: v5.0.0
       gh-unsigned-artifacts: packages-unsigned
@@ -592,7 +592,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -728,7 +728,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -842,7 +842,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: aerospike/shared-workflows/.github/workflows/reusable_deploy-artifacts.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_deploy-artifacts.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
     with:
       gh-workflows-ref: v5.0.0
       jf-project: ${{ vars.JF_PROJECT }}
@@ -865,15 +865,11 @@ jobs:
       id-token: write
       packages: write
       attestations: write
-    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@308f37e0cd5c7a6386a99ea7afc379d5a4ea9256 # v5.1.0
     with:
       jf-project: ${{ vars.JF_PROJECT }}
-      jf-registry: ${{ vars.JF_ARTIFACTORY_REGISTRY_URL }}/${{ vars.JF_ARTIFACTORY_CONTAINER_DEV }}
-      # repo-scope defaults to "-docker-dev-local", but our actual repo naming convention
-      # (JF_ARTIFACTORY_CONTAINER_DEV) uses "-container-dev-local". Without this override, the
-      # image gets pushed to .../container-dev-local correctly, but the build-info creation
-      # step searches for it under .../docker-dev-local and fails with "Could not find docker
-      # image in Artifactory" since that's a different (likely nonexistent) repo.
+      # repo-scope defaults to "-docker-dev-local". Images go to JF_ARTIFACTORY_CONTAINER_DEV,
+      # which is <jf-project>-container-dev-local.
       repo-scope: -container-dev-local
       jf-build-name: absctl-container
       image-name: absctl
@@ -888,7 +884,7 @@ jobs:
         {"org.opencontainers.image.title":"Aerospike Backup CLI",
         "org.opencontainers.image.description":"Command-line tool for backing up and restoring Aerospike data",
         "org.opencontainers.image.documentation":"https://github.com/aerospike/absctl?tab=readme-ov-file#absctl",
-        "org.opencontainers.image.base.name":"docker.io/alpine:3.23",
+        "org.opencontainers.image.base.name":"docker.io/alpine:3.24",
         "org.opencontainers.image.vendor":"Aerospike",
         "org.opencontainers.image.licenses":"Apache-2.0"}
 
@@ -937,12 +933,12 @@ jobs:
       BUNDLE_VERSION: ${{ needs.prepare.outputs.package_version }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
       - name: Login to JFrog
-        uses: step-security/setup-jfrog-cli@f67dd6dcfe5fab8d1ebd695c456631275009a39d # v5.2.0
+        uses: step-security/setup-jfrog-cli@9d5fe0e81fc593a6c0c39bf83ad9a7b45587eed0 # v5.3.1
         env:
           JF_URL: ${{ vars.JF_ARTIFACTORY_URL }}
           JF_PROJECT: ${{ vars.JF_PROJECT }}

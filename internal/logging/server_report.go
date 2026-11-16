@@ -27,6 +27,13 @@ const (
 	segmentParseHeader  = "Failed to parse segment"
 	manifestIssueHeader = "Manifest does not match storage"
 	unrecordedHeader    = "Segments not named by any manifest"
+	refusalHeader       = "Restore would refuse the backup"
+
+	resultPassed = "passed"
+	resultFailed = "failed"
+
+	restoreStrict = "strict"
+	restoreFuzzy  = "fuzzy"
 )
 
 // PrintServerValidationReport logs or prints the dry-run validation report
@@ -45,6 +52,7 @@ func printServerValidationReport(r *sModels.ValidationReport) {
 	printToOutWriter(headerDryRunReport)
 	printToOutWriter(strings.Repeat("-", len(headerDryRunReport)))
 
+	printMetric("Result", validationResult(r))
 	printMetric("Backup ID", r.BackupID)
 	printMetric("Total Segments", r.TotalSegments)
 	printMetric("Checked Segments", r.CheckedSegments)
@@ -54,8 +62,10 @@ func printServerValidationReport(r *sModels.ValidationReport) {
 	printMetric("Bytes Parsed", r.TotalBytes)
 	printToOutWriter("")
 
-	printManifestMetrics(&r.Manifests)
+	printCommitMetrics(&r.Commit)
+	printManifestMetrics(r)
 	printUnrecordedSegments(&r.Manifests)
+	printCommitRefusal(&r.Commit)
 
 	// A run over a badly damaged backup reports more failures than it
 	// describes, so say which of the two the list below is.
@@ -81,17 +91,73 @@ func printServerValidationReport(r *sModels.ValidationReport) {
 	printManifestIssues(&r.Manifests)
 }
 
+// printCommitMetrics reports what the commit record of the backup says and
+// which restore the backup was validated for.
+func printCommitMetrics(c *sModels.CommitReport) {
+	printMetric("Commit Record", c.Path)
+	printMetric("Commit State", c.State)
+	printMetric("Backup Status", c.Status)
+	printMetric("Backup Policy", c.BackupPolicy)
+	printMetric("Achieved Consistency", c.AchievedConsistency)
+	printMetric("Fallback Reason", c.FallbackReason)
+	printMetric("Backup Namespace", c.Namespace)
+	printMetric("Backup Type", c.BackupType)
+	printMetric("Validated For Restore", validatedRestore(c))
+	printMetric("Change Stream Skipped", c.ChangeStreamSkipped)
+	printToOutWriter("")
+}
+
 // printManifestMetrics reports what comparing manifests against the storage
 // found. Only a manifest can tell that a segment is missing rather than merely
 // unreadable, so its numbers are worth their own block.
-func printManifestMetrics(m *sModels.ManifestReport) {
+func printManifestMetrics(r *sModels.ValidationReport) {
+	m := &r.Manifests
+
 	printMetric("Total Manifests", m.Total)
 	printMetric("Checked Manifests", m.Checked)
+	printMetric("Superseded Manifests", m.Superseded)
 	printMetric("Checked Segment Records", m.CheckedSegments)
 	printMetric("Missing Segments", m.MissingSegments)
 	printMetric("Unrecorded Segments", m.Unrecorded)
 	printMetric("Manifest Problems", m.Problems)
+	printMetric("Empty Namespaces", strings.Join(r.EmptyNamespaces, ", "))
 	printToOutWriter("")
+}
+
+// printCommitRefusal says why a restore would refuse to start from the backup,
+// which fails it even when every segment reads back.
+func printCommitRefusal(c *sModels.CommitReport) {
+	if c.Refusal == nil {
+		return
+	}
+
+	printToOutWriter(refusalHeader)
+	printToOutWriter(strings.Repeat("-", len(refusalHeader)))
+	printMetric("Commit Record", c.Path)
+	printMetric("Error", c.Refusal)
+	printToOutWriter("")
+}
+
+// validationResult is the verdict of the run in the words both renderers use.
+func validationResult(r *sModels.ValidationReport) string {
+	if r.Failed() {
+		return resultFailed
+	}
+
+	return resultPassed
+}
+
+// validatedRestore names the restore the backup was validated for, or nothing
+// when the commit record was not read and so decided nothing.
+func validatedRestore(c *sModels.CommitReport) string {
+	switch {
+	case c.State == "":
+		return ""
+	case c.Strict:
+		return restoreStrict
+	default:
+		return restoreFuzzy
+	}
 }
 
 // printUnrecordedSegments names the segments no manifest accounts for. A backup
@@ -148,12 +214,30 @@ func logServerValidationReport(r *sModels.ValidationReport, logger *slog.Logger)
 		slog.Int64("unreadable-segments", r.InvalidSegments),
 		slog.Int64("records-read", r.TotalRecords),
 		slog.Int64("bytes-parsed", r.TotalBytes),
+		slog.String("commit-record", r.Commit.Path),
+		slog.String("commit-state", r.Commit.State),
+		slog.String("backup-status", r.Commit.Status),
+		slog.String("backup-policy", r.Commit.BackupPolicy),
+		slog.String("achieved-consistency", r.Commit.AchievedConsistency),
+		slog.String("fallback-reason", r.Commit.FallbackReason),
+		slog.String("backup-namespace", r.Commit.Namespace),
+		slog.String("backup-type", r.Commit.BackupType),
+		slog.String("validated-for-restore", validatedRestore(&r.Commit)),
+		slog.Bool("change-stream-skipped", r.Commit.ChangeStreamSkipped),
 		slog.Int64("total-manifests", r.Manifests.Total),
 		slog.Int64("checked-manifests", r.Manifests.Checked),
+		slog.Int64("superseded-manifests", r.Manifests.Superseded),
 		slog.Int64("checked-segment-records", r.Manifests.CheckedSegments),
 		slog.Int64("missing-segments", r.Manifests.MissingSegments),
 		slog.Int64("unrecorded-segments", r.Manifests.Unrecorded),
 		slog.Int64("manifest-problems", r.Manifests.Problems),
+		slog.Any("empty-namespaces", r.EmptyNamespaces),
+	}
+
+	// The validator already logs a refusal as it finds it, so the reason rides on the
+	// summary line instead of a line of its own.
+	if r.Commit.Refusal != nil {
+		attrs = append(attrs, slog.String("restore-refusal", r.Commit.Refusal.Error()))
 	}
 
 	if r.Failed() {

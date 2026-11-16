@@ -102,20 +102,11 @@ func restoreStartHelpSections(startFS, objectStoreFS *pflag.FlagSet, common comm
 	}
 }
 
-func restorePrepareHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+func restoreProgressHelpSections(progressFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
 	return []HelpSection{
 		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
 		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
-		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
-		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
-	}
-}
-
-func restoreProgressHelpSections(prepareFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
-	return []HelpSection{
-		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
-		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
-		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{prepareFS}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{progressFS}},
 		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
 	}
 }
@@ -129,6 +120,24 @@ func restoreAbortHelpSections(abortFS *pflag.FlagSet, common commonFlagSets) []H
 	}
 }
 
+func restoreOpenHelpSections(openFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{openFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
+func restoreClearStorageHelpSections(clearFS *pflag.FlagSet, common commonFlagSets) []HelpSection {
+	return []HelpSection{
+		{Title: flags.SectionTextGeneral, FlagSets: []*pflag.FlagSet{common.app}},
+		{Title: flags.SectionTextAerospike, FlagSets: []*pflag.FlagSet{common.aerospike, common.clientPolicy}},
+		{Title: flags.SectionTextRestore, FlagSets: []*pflag.FlagSet{clearFS}},
+		{Title: flags.SectionTextSecretAgentSnapshotRestore, FlagSets: []*pflag.FlagSet{common.secretAgent}},
+	}
+}
+
 // BuildBackupSubcommandDocs returns documentation for every server backup subcommand.
 func BuildBackupSubcommandDocs() []SubcommandDoc {
 	rc := newRunCtx(flags.NewRoot(), "", "", "")
@@ -136,9 +145,10 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 	common := newCommonFlagSets(rc)
 
 	startFS := bc.start.NewFlagSet()
-	objectStoreFS := bc.objectStorageS3.NewFlagSet()
+	objectStoreFS := bc.s3Start.NewFlagSet()
 	listFS := bc.list.NewFlagSet()
-	awsFS := bc.aws.NewFlagSet()
+	awsFS := bc.s3Reader.NewFlagSet()
+	awsProgressFS := bc.s3Progress.NewFlagSet()
 	validationFS := bc.validate.NewFlagSet()
 	progressFS := bc.progress.NewFlagSet()
 	abortFS := bc.abort.NewFlagSet()
@@ -163,7 +173,7 @@ func BuildBackupSubcommandDocs() []SubcommandDoc {
 			Short:    ShortBackupProgress,
 			Long:     LongBackupProgress,
 			Usage:    flags.SectionTextUsageBackupProgress,
-			Sections: backupProgressHelpSections(common, progressFS, awsFS),
+			Sections: backupProgressHelpSections(common, progressFS, awsProgressFS),
 		},
 		{
 			Name:     UseValidate,
@@ -189,10 +199,11 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 	common := newCommonFlagSets(rc)
 
 	startFS := rf.start.NewFlagSet()
-	objectStoreFS := rf.objectStorageS3.NewFlagSet()
-	prepareFS := rf.prepare.NewFlagSet()
+	objectStoreFS := rf.s3Start.NewFlagSet()
 	progressFS := rf.progress.NewFlagSet()
 	abortFS := rf.abort.NewFlagSet()
+	openFS := rf.open.NewFlagSet()
+	clearFS := rf.clear.NewFlagSet()
 
 	return []SubcommandDoc{
 		{
@@ -201,13 +212,6 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestoreStart,
 			Usage:    flags.SectionTextUsageRestoreStart,
 			Sections: restoreStartHelpSections(startFS, objectStoreFS, common),
-		},
-		{
-			Name:     UsePrepare,
-			Short:    ShortRestorePrepare,
-			Long:     LongRestorePrepare,
-			Usage:    flags.SectionTextUsageRestorePrepare,
-			Sections: restorePrepareHelpSections(prepareFS, common),
 		},
 		{
 			Name:     UseProgress,
@@ -222,6 +226,20 @@ func BuildRestoreSubcommandDocs() []SubcommandDoc {
 			Long:     LongRestoreAbort,
 			Usage:    flags.SectionTextUsageRestoreAbort,
 			Sections: restoreAbortHelpSections(abortFS, common),
+		},
+		{
+			Name:     UseOpen,
+			Short:    ShortRestoreOpen,
+			Long:     LongRestoreOpen,
+			Usage:    flags.SectionTextUsageRestoreOpen,
+			Sections: restoreOpenHelpSections(openFS, common),
+		},
+		{
+			Name:     UseClearStorage,
+			Short:    ShortRestoreClear,
+			Long:     LongRestoreClear,
+			Usage:    flags.SectionTextUsageRestoreClear,
+			Sections: restoreClearStorageHelpSections(clearFS, common),
 		},
 	}
 }

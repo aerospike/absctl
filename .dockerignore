@@ -1,0 +1,5 @@
+# .git stays in the context: the Makefile stamps GIT_COMMIT from it.
+.github
+dist/
+*.deb
+*.rpm

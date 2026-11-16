@@ -15,11 +15,16 @@
 package models
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// errMsgRecordsPerSecond is the start of the error of a records per second limit out of
+// the uint32 range.
+const errMsgRecordsPerSecond = "records-per-second must be between 0 and 4294967295"
 
 func TestServerCommon_Validate(t *testing.T) {
 	t.Parallel()
@@ -31,37 +36,56 @@ func TestServerCommon_Validate(t *testing.T) {
 		wantErrMsg string
 	}{
 		{
-			name: "valid common fields",
-			common: ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testServerStorage,
-			},
+			name:    "valid common fields",
+			common:  ServerCommon{Namespace: testServerNamespace},
 			wantErr: false,
 		},
 		{
-			name: "missing namespace",
-			common: ServerCommon{
-				StorageType: testServerStorage,
-			},
+			name:       "missing namespace",
+			common:     ServerCommon{},
 			wantErr:    true,
 			wantErrMsg: "namespace is required",
 		},
 		{
-			name: "missing storage type",
+			name: "valid path and filter expression",
 			common: ServerCommon{
 				Namespace: testServerNamespace,
+				Path:      testServerPath,
+				FilterExp: testServerFilterExp,
 			},
-			wantErr:    true,
-			wantErrMsg: "storage-type is required",
+			wantErr: false,
 		},
 		{
-			name: "unsupported storage type",
+			name:       "path with parent segment",
+			common:     ServerCommon{Namespace: testServerNamespace, Path: testParentPath},
+			wantErr:    true,
+			wantErrMsg: errMsgParentPath,
+		},
+		{
+			name:       "invalid filter expression",
+			common:     ServerCommon{Namespace: testServerNamespace, FilterExp: testInvalidFilterExp},
+			wantErr:    true,
+			wantErrMsg: errMsgInvalidFilterExp,
+		},
+		{
+			name:    "max records per second",
+			common:  ServerCommon{Namespace: testServerNamespace, RecordsPerSecond: math.MaxUint32},
+			wantErr: false,
+		},
+		{
+			name:       "negative records per second",
+			common:     ServerCommon{Namespace: testServerNamespace, RecordsPerSecond: -1},
+			wantErr:    true,
+			wantErrMsg: errMsgRecordsPerSecond,
+		},
+		{
+			name: "records per second above uint32",
 			common: ServerCommon{
-				Namespace:   testServerNamespace,
-				StorageType: testUnsupportedStorage,
+				Namespace:        testServerNamespace,
+				RecordsPerSecond: math.MaxUint32 + 1,
 			},
 			wantErr:    true,
-			wantErrMsg: "unsupported storage-type",
+			wantErrMsg: errMsgRecordsPerSecond,
 		},
 	}
 
