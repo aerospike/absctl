@@ -539,7 +539,7 @@ Example: absctl snapshot-restore --azure-account-name secrets:resource1:azaccoun
 
 A single file describes the whole `absctl snapshot-restore` command tree. Pass it to any subcommand with `--config`:
 only the section named after that subcommand is read, the others are ignored.
-The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
+The file is the single source of truth: no other flags are allowed with `--config`, except `--version`, `--help`.
 
 ```bash
 absctl snapshot-restore start --config cfg.yaml
