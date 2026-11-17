@@ -100,7 +100,7 @@ func NewService(
 		metadataRetryPolicy: backupmodels.NewRetryPolicy(
 			metadataRetryBase,
 			metadataRetryMultiplier,
-			metadataRetryAttempts,
+			metadataMaxRetries,
 		),
 		vanishedPollInterval: vanishedJobPollInterval,
 		statePollInterval:    statePollInterval,

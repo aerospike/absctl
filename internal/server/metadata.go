@@ -36,7 +36,7 @@ const (
 	// a growing delay would end in a long blind gap for a file that is due in seconds.
 	metadataRetryBase       = 2 * time.Second
 	metadataRetryMultiplier = 1.0
-	metadataRetryAttempts   = 30
+	metadataMaxRetries      = 30
 )
 
 // s3API is the part of the S3 client that reading a backup manifest needs: the calls the

@@ -492,7 +492,7 @@ func TestNewRestoreConfig_RetryPolicy(t *testing.T) {
 			maxRetries:     models.DefaultRestoreRetryMaxAttempts,
 			wantBase:       time.Second,
 			wantMultiplier: 1,
-			wantMaxRetries: 3,
+			wantMaxRetries: 0,
 		},
 		{
 			name:           "custom retry policy",

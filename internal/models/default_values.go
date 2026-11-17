@@ -210,7 +210,7 @@ const (
 	DefaultRestoreNoGeneration       = false
 	DefaultRestoreRetryBaseInterval  = int64(1000)
 	DefaultRestoreRetryMultiplier    = 1.0
-	DefaultRestoreRetryMaxAttempts   = uint(3)
+	DefaultRestoreRetryMaxAttempts   = uint(0)
 
 	DefaultRestoreValidateOnly      = false
 	DefaultRestoreApplyMetadataLast = false

@@ -132,8 +132,8 @@ func (f *Restore) NewFlagSet() *pflag.FlagSet {
 
 	flagSet.UintVar(&f.RetryMaxAttempts, "retry-max-attempts",
 		models.DefaultRestoreRetryMaxAttempts,
-		"Set the total number of write attempts (including the first one) for the errors listed under\n"+
-			"--retry-base-interval. The minimum value is 1.")
+		"Set the maximum number of retry attempts for the errors listed under --retry-base-interval.\n"+
+			"The default is 0, indicating no retries will be performed")
 
 	// Disabled mode flag until .asbx support will be added.
 	// flagSet.StringVar(&f.Mode, "mode",

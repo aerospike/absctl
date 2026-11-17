@@ -195,8 +195,8 @@ Restore Flags:
                                   the timeout value between retry attempts. (default 1000)
       --retry-multiplier float    Increases the delay between subsequent retry attempts for the errors listed under --retry-base-interval.
                                   The actual delay is calculated as: retry-base-interval * (retry-multiplier ^ attemptNumber) (default 1)
-      --retry-max-attempts uint   Set the total number of write attempts (including the first one) for the errors listed under
-                                  --retry-base-interval. The minimum value is 1. (default 3)
+      --retry-max-attempts uint   Set the maximum number of retry attempts for the errors listed under --retry-base-interval.
+                                  The default is 0, indicating no retries will be performed
       --validate                  Validate backup files without restoring.
       --apply-metadata-last       Defines when to restore metadata (secondary indexes and UDFs).
                                   If set to true, metadata from separate file will be restored after all records have been processed.
@@ -510,9 +510,9 @@ restore:
   # Increases the delay between subsequent retry attempts for the errors listed under retry-base-interval.
   # The actual delay is calculated as: retry-base-interval * (retry-multiplier ^ attemptNumber)
   retry-multiplier: 1
-  # Set the total number of write attempts (including the first one) for the errors listed under
-  # retry-base-interval. The minimum value is 1.
-  retry-max-attempts: 3
+  # Set the maximum number of retry attempts for the errors listed under retry-base-interval.
+  # The default is 0, indicating no retries will be performed
+  retry-max-attempts: 0
   # Validate backup files without restoring.
   validate: false
   # Set the timeout (in ms) for asinfo commands sent from restore tool to the database.

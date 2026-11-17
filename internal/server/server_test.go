@@ -493,7 +493,7 @@ func newTestService(t *testing.T) (*Service, *bytes.Buffer) {
 			ClearStorage: &models.ServerRestoreClearStorage{Namespace: testNamespace, JobID: testJobID},
 		},
 		logger:               slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 3),
+		metadataRetryPolicy:  backupmodels.NewRetryPolicy(time.Millisecond, 1.0, 2),
 		vanishedPollInterval: time.Millisecond,
 		statePollInterval:    time.Millisecond,
 	}, buf
