@@ -320,6 +320,156 @@ func TestDecodeRestoreServiceConfig(t *testing.T) {
 	}
 }
 
+// nullDocDecoder pairs a config decoder with the config it must produce for a
+// null YAML document: the result of mapping the command's default DTO.
+type nullDocDecoder struct {
+	name     string
+	decode   func(ctx context.Context, filename string) (any, error)
+	defaults func() (any, error)
+}
+
+func nullDocDecoders() []nullDocDecoder {
+	decoders := []nullDocDecoder{
+		{
+			name: "backup",
+			decode: func(ctx context.Context, filename string) (any, error) {
+				return DecodeBackupServiceConfig(ctx, filename)
+			},
+			defaults: func() (any, error) {
+				return dtoToBackupServiceConfig(dto.DefaultBackup())
+			},
+		},
+		{
+			name: "restore",
+			decode: func(ctx context.Context, filename string) (any, error) {
+				return DecodeRestoreServiceConfig(ctx, filename)
+			},
+			defaults: func() (any, error) {
+				return dtoToRestoreServiceConfig(dto.DefaultRestore())
+			},
+		},
+	}
+
+	backupCommands := []struct {
+		name    string
+		command ServerBackupCommand
+	}{
+		{name: "start", command: ServerBackupCommandStart},
+		{name: "list", command: ServerBackupCommandList},
+		{name: "validate", command: ServerBackupCommandValidate},
+		{name: "progress", command: ServerBackupCommandProgress},
+		{name: "abort", command: ServerBackupCommandAbort},
+	}
+
+	for _, c := range backupCommands {
+		decoders = append(decoders, nullDocDecoder{
+			name: "snapshot-backup " + c.name,
+			decode: func(ctx context.Context, filename string) (any, error) {
+				return DecodeServerBackupServiceConfig(ctx, filename, c.command)
+			},
+			defaults: func() (any, error) {
+				return dtoToServerBackupServiceConfig(dto.DefaultServerBackup(), c.command)
+			},
+		})
+	}
+
+	restoreCommands := []struct {
+		name    string
+		command ServerRestoreCommand
+	}{
+		{name: "start", command: ServerRestoreCommandStart},
+		{name: "progress", command: ServerRestoreCommandProgress},
+		{name: "abort", command: ServerRestoreCommandAbort},
+		{name: "open", command: ServerRestoreCommandOpen},
+		{name: "clear-storage", command: ServerRestoreCommandClearStorage},
+	}
+
+	for _, c := range restoreCommands {
+		decoders = append(decoders, nullDocDecoder{
+			name: "snapshot-restore " + c.name,
+			decode: func(ctx context.Context, filename string) (any, error) {
+				return DecodeServerRestoreServiceConfig(ctx, filename, c.command)
+			},
+			defaults: func() (any, error) {
+				return dtoToServerRestoreServiceConfig(dto.DefaultServerRestore(), c.command)
+			},
+		})
+	}
+
+	return decoders
+}
+
+// nullDocuments are YAML documents that decode to null, e.g. a templated
+// config file rendered from an empty value.
+var nullDocuments = []struct {
+	name    string
+	content string
+}{
+	{name: "tilde", content: tildeDocument},
+	{name: "null keyword", content: "null\n"},
+	{name: "document marker with tilde", content: "---\n~\n"},
+	{name: "document marker only", content: "---\n"},
+	{name: "comment then tilde", content: "# rendered\n~\n"},
+}
+
+const (
+	nullDocFilename = "null_doc.yaml"
+	tildeDocument   = "~\n"
+)
+
+// TestDecodeServiceConfig_NullDocument checks that every config decoder treats
+// a null YAML document as an empty config and returns the defaults.
+func TestDecodeServiceConfig_NullDocument(t *testing.T) {
+	t.Parallel()
+
+	for _, doc := range nullDocuments {
+		t.Run(doc.name, func(t *testing.T) {
+			t.Parallel()
+
+			filename := createTempFile(t, nullDocFilename, doc.content)
+
+			for _, tt := range nullDocDecoders() {
+				t.Run(tt.name, func(t *testing.T) {
+					t.Parallel()
+
+					want, err := tt.defaults()
+					require.NoError(t, err)
+
+					var got any
+
+					require.NotPanics(t, func() {
+						got, err = tt.decode(t.Context(), filename)
+					})
+					require.NoError(t, err)
+					assert.Equal(t, want, got)
+				})
+			}
+		})
+	}
+}
+
+// TestDecodeBackupServiceConfig_NullDocumentFailsValidation pins the
+// user-visible outcome of a null backup config: a validation error instead of
+// a panic. Equivalence of all null documents to the defaults is covered by
+// TestDecodeServiceConfig_NullDocument, so one document is enough here.
+func TestDecodeBackupServiceConfig_NullDocumentFailsValidation(t *testing.T) {
+	t.Parallel()
+
+	filename := createTempFile(t, nullDocFilename, tildeDocument)
+
+	var (
+		config *BackupServiceConfig
+		err    error
+	)
+
+	require.NotPanics(t, func() {
+		config, err = DecodeBackupServiceConfig(t.Context(), filename)
+	})
+	require.NoError(t, err)
+	require.NotNil(t, config)
+	assert.ErrorContains(t, config.Validate(), "must specify either estimate, output-file or directory")
+}
+
 func TestDecodeFromFile(t *testing.T) {
 	t.Parallel()
 
