@@ -95,6 +95,17 @@ func (r *Restore) Validate() error {
 		return errors.New("replace and unique are mutually exclusive")
 	}
 
+	if !r.ValidateOnly {
+		// Write retry settings are not used in validate-only mode.
+		if r.RetryBaseInterval < 0 {
+			return errors.New("retry-base-interval must be non-negative")
+		}
+
+		if r.RetryMultiplier < 1 {
+			return errors.New("retry-multiplier must be greater than or equal to 1")
+		}
+	}
+
 	return nil
 }
 
@@ -147,13 +158,23 @@ func (r *Restore) InfoPolicy() *aerospike.InfoPolicy {
 	return p
 }
 
-// RetryPolicy maps restore configuration parameters to a retry policy,
-// including interval, multiplier, and max retries.
-func (r *Restore) RetryPolicy() *models.RetryPolicy {
+// InfoRetryPolicy maps the info retry settings of the restore configuration
+// to the retry policy of info commands.
+func (r *Restore) InfoRetryPolicy() *models.RetryPolicy {
 	return models.NewRetryPolicy(
 		time.Duration(r.InfoRetryIntervalMilliseconds)*time.Millisecond,
 		r.InfoRetriesMultiplier,
 		r.InfoMaxRetries,
+	)
+}
+
+// WriteRetryPolicy maps the write retry settings of the restore configuration
+// to the retry policy of record, secondary index and UDF writes.
+func (r *Restore) WriteRetryPolicy() *models.RetryPolicy {
+	return models.NewRetryPolicy(
+		time.Duration(r.RetryBaseInterval)*time.Millisecond,
+		r.RetryMultiplier,
+		r.RetryMaxAttempts,
 	)
 }
 

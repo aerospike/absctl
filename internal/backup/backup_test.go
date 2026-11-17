@@ -231,7 +231,7 @@ func Test_BackupInfoPolicies(t *testing.T) {
 		},
 	}
 
-	info, retry := cfg.Backup.InfoPolicy(), cfg.Backup.RetryPolicy()
+	info, retry := cfg.Backup.InfoPolicy(), cfg.Backup.InfoRetryPolicy()
 	require.NotNil(t, info)
 	require.NotNil(t, retry)
 	require.Equal(t, 1500*time.Millisecond, info.Timeout)

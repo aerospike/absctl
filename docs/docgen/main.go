@@ -153,7 +153,7 @@ func generateScan(operation string) error {
 	sb.WriteString(yamlContent)
 	sb.WriteString("```\n")
 
-	return os.WriteFile(docFilePath, []byte(sb.String()), 0o644)
+	return writeDoc(docFilePath, sb.String())
 }
 
 // generateServer reads the existing markdown file, preserves the static header,
@@ -205,7 +205,7 @@ func generateServer(name string, subcommands []server.SubcommandDoc) error {
 	sb.WriteString(yamlContent)
 	sb.WriteString("```\n")
 
-	return os.WriteFile(docPath, []byte(sb.String()), 0o644)
+	return writeDoc(docPath, sb.String())
 }
 
 func generateHelpSectionsContent(sections []server.HelpSection) string {
@@ -862,4 +862,20 @@ func toYAMLComment(usage string) string {
 	}
 
 	return strings.Join(cleaned, "\n")
+}
+
+// writeDoc writes a generated document to path without trailing whitespace,
+// so the output passes the trailing-whitespace pre-commit hook unchanged.
+func writeDoc(path, content string) error {
+	return os.WriteFile(path, []byte(trimTrailingWhitespace(content)), 0o644)
+}
+
+// trimTrailingWhitespace removes spaces and tabs at the end of every line.
+func trimTrailingWhitespace(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+
+	return strings.Join(lines, "\n")
 }

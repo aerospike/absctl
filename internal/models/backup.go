@@ -276,9 +276,9 @@ func (b *Backup) InfoPolicy() *aerospike.InfoPolicy {
 	return p
 }
 
-// RetryPolicy maps backup configuration parameters to a retry policy,
-// including interval, multiplier, and max retries.
-func (b *Backup) RetryPolicy() *models.RetryPolicy {
+// InfoRetryPolicy maps the info retry settings of the backup configuration
+// to the retry policy of info commands.
+func (b *Backup) InfoRetryPolicy() *models.RetryPolicy {
 	return models.NewRetryPolicy(
 		time.Duration(b.InfoRetryIntervalMilliseconds)*time.Millisecond,
 		b.InfoRetriesMultiplier,
