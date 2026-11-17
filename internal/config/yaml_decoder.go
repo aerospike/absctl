@@ -29,7 +29,7 @@ import (
 // Returns an error on failure.
 func DecodeBackupServiceConfig(ctx context.Context, filename string) (*BackupServiceConfig, error) {
 	backupDto := dto.DefaultBackup()
-	if err := decodeFromFile(filename, &backupDto); err != nil {
+	if err := decodeFromFile(filename, backupDto); err != nil {
 		return nil, err
 	}
 
