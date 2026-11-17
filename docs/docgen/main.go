@@ -62,7 +62,7 @@ const (
 	serverConfigSchemaIntro = "\nA single file describes the whole `absctl snapshot-%s` command tree. " +
 		"Pass it to any subcommand with `--config`:\n" +
 		"only the section named after that subcommand is read, the others are ignored.\n" +
-		"When `--config` is set it is the single source of truth \u2014 all other flags are ignored.\n\n" +
+		"%s\n\n" +
 		"```bash\nabsctl snapshot-%s start --config cfg.yaml\n```\n\n"
 )
 
@@ -200,12 +200,23 @@ func generateServer(name string, subcommands []server.SubcommandDoc) error {
 	}
 
 	sb.WriteString(sectionConfigSchema)
-	sb.WriteString(fmt.Sprintf(serverConfigSchemaIntro, name, name))
+	sb.WriteString(serverConfigIntro(name))
 	sb.WriteString("```yaml\n")
 	sb.WriteString(yamlContent)
 	sb.WriteString("```\n")
 
 	return writeDoc(docPath, sb.String())
+}
+
+// markdownFlag renders a flag name as a markdown code span.
+func markdownFlag(name string) string {
+	return "`--" + name + "`"
+}
+
+// serverConfigIntro returns the paragraph printed above the YAML schema of the
+// snapshot command group name.
+func serverConfigIntro(name string) string {
+	return fmt.Sprintf(serverConfigSchemaIntro, name, flags.FormatConfigExclusive(markdownFlag), name)
 }
 
 func generateHelpSectionsContent(sections []server.HelpSection) string {

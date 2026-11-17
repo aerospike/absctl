@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/aerospike/absctl/internal/config/dto"
-	"github.com/aerospike/absctl/internal/models"
 	infomodels "github.com/aerospike/backup-go/pkg/asinfo/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -999,43 +998,6 @@ func TestDecodeServerServiceConfigErrors(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, cfg)
 		assert.Contains(t, err.Error(), "unknown snapshot-backup command")
-	})
-}
-
-func TestDecodeAppConfig(t *testing.T) {
-	t.Parallel()
-
-	t.Run("reads the app section and ignores the rest", func(t *testing.T) {
-		t.Parallel()
-
-		// The full schema is decoded later by the subcommand, so the sections
-		// this call does not care about must not make it fail.
-		filename := createTempFile(t, "app.yaml", validServerBackupYAML)
-
-		app, err := DecodeAppConfig(filename)
-		require.NoError(t, err)
-		require.NotNil(t, app)
-		assert.Equal(t, "info", app.LogLevel)
-	})
-
-	t.Run("falls back to defaults when the section is absent", func(t *testing.T) {
-		t.Parallel()
-
-		filename := createTempFile(t, "no_app.yaml", "backup:\n  namespace: ns1\n")
-
-		app, err := DecodeAppConfig(filename)
-		require.NoError(t, err)
-		require.NotNil(t, app)
-		assert.Equal(t, models.DefaultAppLogLevel, app.LogLevel)
-	})
-
-	t.Run("empty path", func(t *testing.T) {
-		t.Parallel()
-
-		app, err := DecodeAppConfig("")
-		require.Error(t, err)
-		require.Nil(t, app)
-		assert.Contains(t, err.Error(), "config path is empty")
 	})
 }
 

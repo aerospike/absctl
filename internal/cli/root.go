@@ -23,6 +23,7 @@ import (
 	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/logging"
+	"github.com/aerospike/absctl/internal/subcmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -116,7 +117,7 @@ func (c *Cmd) run(cmd *cobra.Command, _ []string) error {
 }
 
 func (c *Cmd) printVersion() {
-	fmt.Printf("version: %s (%s) %s \n", c.appVersion, c.commitHash, c.buildTime)
+	subcmd.PrintVersion(c.appVersion, c.commitHash, c.buildTime)
 }
 
 func newHelpFunction(flagSet *pflag.FlagSet) func() {

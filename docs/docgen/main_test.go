@@ -17,6 +17,7 @@ package main
 import (
 	"testing"
 
+	"github.com/aerospike/absctl/internal/flags"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -41,6 +42,25 @@ func TestTrimTrailingWhitespace(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.want, trimTrailingWhitespace(tt.give))
+		})
+	}
+}
+
+func TestServerConfigIntro(t *testing.T) {
+	t.Parallel()
+
+	for _, op := range []string{opBackup, opRestore} {
+		t.Run(op, func(t *testing.T) {
+			t.Parallel()
+
+			intro := serverConfigIntro(op)
+
+			assert.Contains(t, intro, "absctl snapshot-"+op)
+			assert.Contains(t, intro, flags.FormatConfigExclusive(markdownFlag))
+
+			for _, name := range flags.ConfigCompatibleFlags() {
+				assert.Contains(t, intro, markdownFlag(name))
+			}
 		})
 	}
 }

@@ -30,8 +30,8 @@ func NewRoot() *Root {
 func (f *Root) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.BoolP("help", "Z", models.DefaultAppHelp, "Display help information.")
-	flagSet.BoolVarP(&f.Version, "version", "V",
+	flagSet.BoolP(FlagHelp, "Z", models.DefaultAppHelp, "Display help information.")
+	flagSet.BoolVarP(&f.Version, FlagVersion, "V",
 		models.DefaultAppVersion,
 		"Display version information.")
 

@@ -44,13 +44,6 @@ func defaultApp() App {
 	}
 }
 
-// DefaultAppDTO returns an App section populated with default values. It is
-// exported so the app settings can be read on their own, ahead of the full
-// schema, when a command needs them to initialize its logger.
-func DefaultAppDTO() App {
-	return defaultApp()
-}
-
 func (a *App) ToModelApp() *models.App {
 	return &models.App{
 		Verbose:  derefBool(a.Verbose),

@@ -26,6 +26,44 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Flag names referenced outside the flag set that registers them.
+const (
+	// FlagConfig is the name of the flag that sets the YAML configuration file.
+	FlagConfig = "config"
+	// FlagVersion is the name of the flag that prints the application version.
+	FlagVersion = "version"
+	// FlagHelp is the name of the flag that prints help.
+	FlagHelp = "help"
+)
+
+// ConfigCompatibleFlags returns the names of the flags that may be combined with
+// --config. The configuration file is the single source of truth, so any other flag
+// would be silently overridden by it and is rejected instead.
+func ConfigCompatibleFlags() []string {
+	return []string{FlagConfig, FlagVersion, FlagHelp}
+}
+
+// TextConfigExclusive returns the rule for combining --config with other flags, as
+// plain text for help output.
+func TextConfigExclusive() string {
+	return FormatConfigExclusive(func(name string) string { return "--" + name })
+}
+
+// FormatConfigExclusive returns the rule for combining --config with other flags, with
+// every flag name rendered by flagName, for example as a markdown code span.
+func FormatConfigExclusive(flagName func(name string) string) string {
+	allowed := make([]string, 0, len(ConfigCompatibleFlags()))
+
+	for _, name := range ConfigCompatibleFlags() {
+		if name != FlagConfig {
+			allowed = append(allowed, flagName(name))
+		}
+	}
+
+	return "The file is the single source of truth: no other flags are allowed with " + flagName(FlagConfig) +
+		", except " + strings.Join(allowed, ", ") + "."
+}
+
 type App struct {
 	models.App
 }
@@ -37,7 +75,7 @@ func NewApp() *App {
 func (f *App) NewFlagSet() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 
-	flagSet.BoolP("help", "Z", models.DefaultAppHelp, "Display help information.")
+	flagSet.BoolP(FlagHelp, "Z", models.DefaultAppHelp, "Display help information.")
 	flagSet.BoolVarP(&f.Verbose, "verbose", "v",
 		models.DefaultAppVerbose,
 		"Enable more detailed logging.")
@@ -50,9 +88,9 @@ func (f *App) NewFlagSet() *pflag.FlagSet {
 	flagSet.StringVar(&f.LogFile, "log-file",
 		models.DefaultAppLogFile,
 		"Path to log file. If empty, logs will be printed to stderr.")
-	flagSet.StringVar(&f.ConfigFilePath, "config",
+	flagSet.StringVar(&f.ConfigFilePath, FlagConfig,
 		models.DefaultAppConfigFilePath,
-		"Path to YAML configuration file.")
+		"Path to YAML configuration file. "+TextConfigExclusive())
 
 	return flagSet
 }

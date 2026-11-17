@@ -34,7 +34,7 @@ General Flags:
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty, logs will be printed to stderr.
-      --config string      Path to YAML configuration file.
+      --config string      Path to YAML configuration file. The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
@@ -174,7 +174,7 @@ General Flags:
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty, logs will be printed to stderr.
-      --config string      Path to YAML configuration file.
+      --config string      Path to YAML configuration file. The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
@@ -268,7 +268,7 @@ General Flags:
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty, logs will be printed to stderr.
-      --config string      Path to YAML configuration file.
+      --config string      Path to YAML configuration file. The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
@@ -365,7 +365,7 @@ General Flags:
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty, logs will be printed to stderr.
-      --config string      Path to YAML configuration file.
+      --config string      Path to YAML configuration file. The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
@@ -463,7 +463,7 @@ General Flags:
       --log-level string   Determine log level for --verbose output. Log levels are: debug, info, warn, error. (default "debug")
       --log-json           Set output in JSON format for parsing by external tools.
       --log-file string    Path to log file. If empty, logs will be printed to stderr.
-      --config string      Path to YAML configuration file.
+      --config string      Path to YAML configuration file. The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 Aerospike Client Flags:
   -h, --host host[:tls-name][:port][,...]                                                                     The Aerospike host. (default 127.0.0.1)
@@ -539,7 +539,7 @@ Example: absctl snapshot-restore --azure-account-name secrets:resource1:azaccoun
 
 A single file describes the whole `absctl snapshot-restore` command tree. Pass it to any subcommand with `--config`:
 only the section named after that subcommand is read, the others are ignored.
-When `--config` is set it is the single source of truth — all other flags are ignored.
+The file is the single source of truth: no other flags are allowed with --config, except --version, --help.
 
 ```bash
 absctl snapshot-restore start --config cfg.yaml
