@@ -22,7 +22,6 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/io/encoding/asb"
 	"github.com/aerospike/backup-go/io/storage/aws/s3"
 	"github.com/aerospike/backup-go/io/storage/azure/blob"
@@ -32,16 +31,17 @@ import (
 	"github.com/aerospike/backup-go/io/storage/std"
 )
 
-// NewBackupWriter initializes and returns a backup.Writer
+// NewBackupWriter initializes and returns a Writer
 // based on the provided parameters or cleans up artifacts if required.
+// The caller owns the returned writer and must close it.
 // It returns a nil writer without an error if the backup was launched
-// with --remove-artifacts: the target is cleaned during writer initialization
-// and no further work is needed.
+// with --remove-artifacts: the target is cleaned during writer initialization,
+// the writer is released at once and no further work is needed.
 func NewBackupWriter(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
 	logger *slog.Logger,
-) (backup.Writer, error) {
+) (Writer, error) {
 	writer, err := newWriter(ctx, params, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup writer: %w", err)
@@ -50,6 +50,12 @@ func NewBackupWriter(
 	// If backup was launched with --remove-artifacts, the folder is cleaned
 	// on writer initialization, so we return nil to signal the caller to exit.
 	if params.Backup != nil && params.Backup.RemoveArtifacts {
+		// The artifacts are already removed. A storage client that fails to release
+		// cannot undo that, so the failure is logged rather than returned.
+		if err = writer.Close(); err != nil {
+			logger.Warn("failed to release backup writer", slog.Any("error", err))
+		}
+
 		return nil, nil
 	}
 
@@ -60,7 +66,7 @@ func newWriter(
 	ctx context.Context,
 	params *config.BackupServiceConfig,
 	logger *slog.Logger,
-) (backup.Writer, error) {
+) (Writer, error) {
 	if params == nil {
 		return nil, errors.New("params cannot be nil")
 	}
@@ -150,24 +156,28 @@ func newWriterOpts(
 	)
 }
 
-func newLocalWriter(ctx context.Context, l *models.Local, opts []options.Opt) (backup.Writer, error) {
+func newLocalWriter(ctx context.Context, l *models.Local, opts []options.Opt) (Writer, error) {
 	if l != nil {
 		opts = append(opts, options.WithChunkSize(toBytes(l.BufferSize)))
 	}
 
-	return local.NewWriter(ctx, opts...)
+	w, err := local.NewWriter(ctx, opts...)
+
+	return newOwnedWriter(w, err, noRelease)
 }
 
-func newStdWriter(ctx context.Context, bufferSizeMiB int) (backup.Writer, error) {
-	return std.NewWriter(ctx, toBytes(bufferSizeMiB))
+func newStdWriter(ctx context.Context, bufferSizeMiB int) (Writer, error) {
+	w, err := std.NewWriter(ctx, toBytes(bufferSizeMiB))
+
+	return newOwnedWriter(w, err, noRelease)
 }
 
 func newS3Writer(
 	ctx context.Context,
 	a *models.AwsS3,
 	opts []options.Opt,
-) (backup.Writer, error) {
-	client, err := NewS3Client(ctx, a)
+) (Writer, error) {
+	client, transport, err := newS3Client(ctx, a)
 	if err != nil {
 		return nil, err
 	}
@@ -185,15 +195,17 @@ func newS3Writer(
 		options.WithUploadConcurrency(a.UploadConcurrency),
 	)
 
-	return s3.NewWriter(ctx, client, a.BucketName, opts...)
+	w, err := s3.NewWriter(ctx, client, a.BucketName, opts...)
+
+	return newOwnedWriter(w, err, closeIdle(transport))
 }
 
 func newGcpWriter(
 	ctx context.Context,
 	g *models.GcpStorage,
 	opts []options.Opt,
-) (backup.Writer, error) {
-	client, err := newGcpClient(ctx, g)
+) (Writer, error) {
+	client, transport, err := newGcpClient(ctx, g)
 	if err != nil {
 		return nil, err
 	}
@@ -204,15 +216,17 @@ func newGcpWriter(
 
 	opts = append(opts, options.WithChunkSize(toBytes(g.ChunkSize)))
 
-	return storage.NewWriter(ctx, client, g.BucketName, opts...)
+	w, err := storage.NewWriter(ctx, client, g.BucketName, opts...)
+
+	return newOwnedWriter(w, err, closeGcp(client, transport))
 }
 
 func newAzureWriter(
 	ctx context.Context,
 	a *models.AzureBlob,
 	opts []options.Opt,
-) (backup.Writer, error) {
-	client, err := newAzureClient(a)
+) (Writer, error) {
+	client, transport, err := newAzureClient(a)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +244,9 @@ func newAzureWriter(
 		options.WithUploadConcurrency(a.UploadConcurrency),
 	)
 
-	return blob.NewWriter(ctx, client, a.ContainerName, opts...)
+	w, err := blob.NewWriter(ctx, client, a.ContainerName, opts...)
+
+	return newOwnedWriter(w, err, closeIdle(transport))
 }
 
 func toBytes(m int) int {

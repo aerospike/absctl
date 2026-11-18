@@ -44,7 +44,15 @@ import (
 // NewAerospikeClient initializes and returns a new Aerospike client with the specified configuration and settings.
 // It validates input parameters, applies client policies, and optionally warms up the client for better performance.
 // Returns an Aerospike client instance or an error if initialization fails.
+//
+// The caller owns the returned client and must close it. On error no client is left open.
+//
+// The Aerospike client cannot cancel a connect in progress, so if ctx is done first,
+// NewAerospikeClient returns at once with the context error and the connect keeps running
+// in the background until it succeeds or the client's own timeouts end it; the client
+// it produces, if any, is closed there.
 func NewAerospikeClient(
+	ctx context.Context,
 	cfg *client.AerospikeConfig,
 	cp *models.ClientPolicy,
 	racksIDs []int,
@@ -73,14 +81,83 @@ func NewAerospikeClient(
 		p.RackAware = true
 	}
 
-	asClient, err := aerospike.NewClientWithPolicyAndHost(p, toHosts(cfg.Seeds)...)
+	hosts := toHosts(cfg.Seeds)
+
+	return connectWithContext(
+		ctx,
+		func() (*aerospike.Client, error) {
+			return connectAerospikeClient(p, hosts, warmUp)
+		},
+		(*aerospike.Client).Close,
+	)
+}
+
+// connectWithContext runs connect in the background and returns its result, unless
+// ctx is done first: then it returns the bare context error at once, so that callers
+// wrap it into a short message, and release is called on the value connect produces
+// later, if it succeeds. connect must leave nothing to release when it fails.
+func connectWithContext[T any](
+	ctx context.Context,
+	connect func() (T, error),
+	release func(T),
+) (T, error) {
+	var zero T
+
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+
+	// Unbuffered on purpose: a result is handed over only while the caller is still
+	// waiting for it. Once the caller has given up on ctx, the send can never happen,
+	// so the connecting goroutine knows the value is its own to release.
+	results := make(chan connectResult[T])
+
+	go func() {
+		var res connectResult[T]
+
+		res.value, res.err = connect()
+
+		select {
+		case results <- res:
+		case <-ctx.Done():
+			if res.err == nil {
+				release(res.value)
+			}
+		}
+	}()
+
+	select {
+	case res := <-results:
+		return res.value, res.err
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
+}
+
+// connectResult is the outcome of a connect handed from the connecting goroutine
+// to connectWithContext.
+type connectResult[T any] struct {
+	value T
+	err   error
+}
+
+// connectAerospikeClient connects to the cluster and warms up the connection pool
+// when warmUp is positive. It returns once the client is ready or the attempt fails,
+// at the latest when the client's own timeouts end it. On error no client is left open.
+func connectAerospikeClient(
+	p *aerospike.ClientPolicy,
+	hosts []*aerospike.Host,
+	warmUp int,
+) (*aerospike.Client, error) {
+	asClient, err := aerospike.NewClientWithPolicyAndHost(p, hosts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Aerospike client: %w", err)
 	}
 
 	if warmUp > 0 {
-		_, err = asClient.WarmUp(warmUp)
-		if err != nil {
+		if _, err = asClient.WarmUp(warmUp); err != nil {
+			asClient.Close()
+
 			return nil, fmt.Errorf("failed to warm up Aerospike client: %w", err)
 		}
 	}
@@ -90,6 +167,16 @@ func NewAerospikeClient(
 
 // NewS3Client initializes and returns a new S3 client with the specified configuration.
 func NewS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
+	s3Client, _, err := newS3Client(ctx, a)
+
+	return s3Client, err
+}
+
+// newS3Client is NewS3Client that also returns the transport of the client,
+// so that the caller can close its idle connections when done with the client.
+func newS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, *http.Transport, error) {
+	transport := newTransport(a.MaxConnsPerHost)
+
 	cfgOpts := make([]func(*config.LoadOptions) error, 0)
 
 	// use an adaptive mode for more aggressive retries
@@ -105,7 +192,7 @@ func NewS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 			})
 		}),
 		config.WithHTTPClient(
-			newHTTPClient(newTransport(a.MaxConnsPerHost), a.RequestTimeout)),
+			newHTTPClient(transport, a.RequestTimeout)),
 	)
 
 	if a.Profile != "" {
@@ -126,7 +213,7 @@ func NewS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 
 	cfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -138,27 +225,38 @@ func NewS3Client(ctx context.Context, a *models.AwsS3) (*s3.Client, error) {
 		o.DisableLogOutputChecksumValidationSkipped = true
 	})
 
-	return s3Client, nil
+	return s3Client, transport, nil
 }
 
-func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client, error) {
-	opts := make([]option.ClientOption, 0)
+// newGcpClient returns a GCP storage client and the transport it was built on. Closing
+// the client does not reach the idle connections of that transport through the wrappers
+// around it, so the caller closes them as well.
+func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client, *http.Transport, error) {
+	transport := newTransport(g.MaxConnsPerHost)
+
+	var opts []option.ClientOption
 
 	if g.Endpoint != "" {
-		// Used with fake-gcs for tests only.
-		opts = append(opts, option.WithEndpoint(g.Endpoint), option.WithoutAuthentication())
+		// An endpoint override sends unauthenticated requests. WithoutAuthentication is
+		// kept next to the HTTP client so that creating the client never looks up
+		// credentials in the environment.
+		opts = append(opts,
+			option.WithEndpoint(g.Endpoint),
+			option.WithoutAuthentication(),
+			option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)),
+		)
 	} else {
-		transport, err := getGcpTransport(ctx, g)
+		authTransport, err := newGcpAuthTransport(ctx, g, transport)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get GCP transport: %w", err)
+			return nil, nil, fmt.Errorf("failed to get GCP transport: %w", err)
 		}
 
-		opts = append(opts, option.WithHTTPClient(newHTTPClient(transport, g.RequestTimeout)))
+		opts = append(opts, option.WithHTTPClient(newHTTPClient(authTransport, g.RequestTimeout)))
 	}
 
 	gcpClient, err := gcpStorage.NewClient(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCP client: %w", err)
+		return nil, nil, fmt.Errorf("failed to create GCP client: %w", err)
 	}
 
 	backoff := gax.Backoff{
@@ -172,15 +270,26 @@ func newGcpClient(ctx context.Context, g *models.GcpStorage) (*gcpStorage.Client
 		gcpStorage.WithBackoff(backoff),
 		gcpStorage.WithMaxAttempts(g.RetryMaxAttempts))
 
-	return gcpClient, nil
+	return gcpClient, transport, nil
 }
 
-func getGcpTransport(ctx context.Context, g *models.GcpStorage) (http.RoundTripper, error) {
+// newGcpAuthTransport wraps transport with GCP authentication. Tokens read from a key
+// file or a credentials file are fetched through transport as well, so that closing
+// its idle connections releases them too. Tokens from the GCE metadata server are not:
+// that source always uses the shared client of the metadata package.
+func newGcpAuthTransport(
+	ctx context.Context,
+	g *models.GcpStorage,
+	transport *http.Transport,
+) (http.RoundTripper, error) {
 	var (
-		transport = newTransport(g.MaxConnsPerHost)
-		ts        oauth2.TokenSource
-		err       error
+		ts  oauth2.TokenSource
+		err error
 	)
+
+	// The token sources backed by a file send their requests through the HTTP client
+	// found in ctx, or through http.DefaultClient without one.
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, newHTTPClient(transport, g.RequestTimeout))
 	// GCP can't apply option.WithCredentialsFile() with custom http client option.WithHTTPClient().
 	// So we implement our own logic to load auth key and set http headers.
 	if g.KeyFile != "" {
@@ -221,14 +330,18 @@ func getGcpAuth(ctx context.Context, keyFile string) (*google.Credentials, error
 	return creds, nil
 }
 
-func newAzureClient(a *models.AzureBlob) (*azblob.Client, error) {
+// newAzureClient returns an Azure Blob client and the transport it was built on,
+// so that the caller can close its idle connections when done with the client.
+func newAzureClient(a *models.AzureBlob) (*azblob.Client, *http.Transport, error) {
 	var (
-		azClient *azblob.Client
-		err      error
+		azClient   *azblob.Client
+		err        error
+		transport  = newTransport(a.MaxConnsPerHost)
+		httpClient = newHTTPClient(transport, a.RequestTimeout)
 	)
 
 	azOpts := &azblob.ClientOptions{
-		Transport: newHTTPClient(newTransport(a.MaxConnsPerHost), a.RequestTimeout),
+		Transport: httpClient,
 		Retry: policy.RetryOptions{
 			MaxRetries:    int32(a.RetryMaxAttempts),
 			RetryDelay:    time.Duration(a.RetryDelay) * time.Millisecond,
@@ -248,31 +361,34 @@ func newAzureClient(a *models.AzureBlob) (*azblob.Client, error) {
 	case a.AccountName != "" && a.AccountKey != "":
 		cred, err := azblob.NewSharedKeyCredential(a.AccountName, a.AccountKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Azure shared key credentials: %w", err)
+			return nil, nil, fmt.Errorf("failed to create Azure shared key credentials: %w", err)
 		}
 
 		azClient, err = azblob.NewClientWithSharedKeyCredential(a.Endpoint, cred, azOpts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Azure Blob client with shared key: %w", err)
+			return nil, nil, fmt.Errorf("failed to create Azure Blob client with shared key: %w", err)
 		}
 	case a.TenantID != "" && a.ClientID != "" && a.ClientSecret != "":
-		cred, err := azidentity.NewClientSecretCredential(a.TenantID, a.ClientID, a.ClientSecret, nil)
+		// Tokens are fetched through the same transport as the data, so that closing
+		// its idle connections releases them too.
+		cred, err := azidentity.NewClientSecretCredential(a.TenantID, a.ClientID, a.ClientSecret,
+			&azidentity.ClientSecretCredentialOptions{Transport: httpClient})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Azure AAD credentials: %w", err)
+			return nil, nil, fmt.Errorf("failed to create Azure AAD credentials: %w", err)
 		}
 
 		azClient, err = azblob.NewClient(a.Endpoint, cred, azOpts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Azure Blob client with AAD: %w", err)
+			return nil, nil, fmt.Errorf("failed to create Azure Blob client with AAD: %w", err)
 		}
 	default:
 		azClient, err = azblob.NewClientWithNoCredential(a.Endpoint, azOpts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Azure Blob client with SAS: %w", err)
+			return nil, nil, fmt.Errorf("failed to create Azure Blob client with SAS: %w", err)
 		}
 	}
 
-	return azClient, nil
+	return azClient, transport, nil
 }
 
 func toHosts(htpSlice client.HostTLSPortSlice) []*aerospike.Host {
@@ -288,6 +404,11 @@ func toHosts(htpSlice client.HostTLSPortSlice) []*aerospike.Host {
 	return hosts
 }
 
+// maxIdleConnsPerHost is the least number of idle connections kept per storage host,
+// instead of the default 2, so that parallel requests to one host reuse their
+// connections rather than reopen them. A larger --*-max-conns-per-host raises it.
+const maxIdleConnsPerHost = 100
+
 // newTransport returns a new http.Transport.
 func newTransport(maxConnsPerHost int) *http.Transport {
 	return &http.Transport{
@@ -297,6 +418,7 @@ func newTransport(maxConnsPerHost int) *http.Transport {
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		MaxConnsPerHost:     maxConnsPerHost,
+		MaxIdleConnsPerHost: max(maxConnsPerHost, maxIdleConnsPerHost),
 		IdleConnTimeout:     120 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
 		ReadBufferSize:      64 * 1024,

@@ -144,6 +144,8 @@ func (r *backupRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig,
 		return nil
 	}
 
+	defer svc.Close()
+
 	if err = svc.Run(ctx); err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}

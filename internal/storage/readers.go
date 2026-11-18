@@ -22,7 +22,6 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/models"
-	"github.com/aerospike/backup-go"
 	"github.com/aerospike/backup-go/io/encoding/asb"
 	"github.com/aerospike/backup-go/io/storage/aws/s3"
 	"github.com/aerospike/backup-go/io/storage/azure/blob"
@@ -34,11 +33,12 @@ import (
 )
 
 // NewRestoreReader creates and returns a reader based on the restore mode specified in RestoreServiceConfig.
+// The caller owns the returned reader and must close it.
 func NewRestoreReader(
 	ctx context.Context,
 	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
-) (backup.StreamingReader, error) {
+) (Reader, error) {
 	return NewReader(
 		ctx,
 		&cfg.ServiceConfigCommon,
@@ -53,12 +53,13 @@ func NewRestoreReader(
 }
 
 // NewStateReader initializes a reader for a state file.
+// The caller owns the returned reader and must close it.
 // It returns a nil reader without an error if the state file is not used.
 func NewStateReader(
 	ctx context.Context,
 	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
-) (backup.StreamingReader, error) {
+) (Reader, error) {
 	if cfg.Backup == nil ||
 		!cfg.Backup.ShouldSaveState() ||
 		cfg.Backup.StateFileDst != "" {
@@ -81,6 +82,7 @@ func NewStateReader(
 }
 
 // NewReader creates and returns a reader based on the provided parameters.
+// The caller owns the returned reader and must close it.
 func NewReader(
 	ctx context.Context,
 	cfg *config.ServiceConfigCommon,
@@ -91,7 +93,7 @@ func NewReader(
 	stdBufferSize int,
 	skipCheck bool,
 	logger *slog.Logger,
-) (backup.StreamingReader, error) {
+) (Reader, error) {
 	opts := newReaderOpts(directory, inputFile, parentDirectory, directoryList, skipCheck, logger)
 
 	logger.Info("initializing storage for reader",
@@ -166,20 +168,24 @@ func newReaderOpts(
 	return append(opts, options.WithLogger(logger), options.WithCalculateTotalSize())
 }
 
-func newLocalReader(ctx context.Context, opts []options.Opt) (backup.StreamingReader, error) {
-	return local.NewReader(ctx, opts...)
+func newLocalReader(ctx context.Context, opts []options.Opt) (Reader, error) {
+	r, err := local.NewReader(ctx, opts...)
+
+	return newOwnedReader(r, err, noRelease)
 }
 
-func newStdReader(ctx context.Context, bufferSizeMiB int) (backup.StreamingReader, error) {
-	return std.NewReader(ctx, toBytes(bufferSizeMiB))
+func newStdReader(ctx context.Context, bufferSizeMiB int) (Reader, error) {
+	r, err := std.NewReader(ctx, toBytes(bufferSizeMiB))
+
+	return newOwnedReader(r, err, noRelease)
 }
 
 func newS3Reader(
 	ctx context.Context,
 	a *models.AwsS3,
 	opts []options.Opt,
-) (backup.StreamingReader, error) {
-	client, err := NewS3Client(ctx, a)
+) (Reader, error) {
+	client, transport, err := newS3Client(ctx, a)
 	if err != nil {
 		return nil, err
 	}
@@ -195,15 +201,17 @@ func newS3Reader(
 		newReadRetryPolicy(a.RetryReadBackoff, a.RetryReadMultiplier, a.RetryReadMaxAttempts),
 	))
 
-	return s3.NewReader(ctx, client, a.BucketName, opts...)
+	r, err := s3.NewReader(ctx, client, a.BucketName, opts...)
+
+	return newOwnedReader(r, err, closeIdle(transport))
 }
 
 func newGcpReader(
 	ctx context.Context,
 	g *models.GcpStorage,
 	opts []options.Opt,
-) (backup.StreamingReader, error) {
-	client, err := newGcpClient(ctx, g)
+) (Reader, error) {
+	client, transport, err := newGcpClient(ctx, g)
 	if err != nil {
 		return nil, err
 	}
@@ -212,15 +220,17 @@ func newGcpReader(
 		newReadRetryPolicy(g.RetryReadBackoff, g.RetryReadMultiplier, g.RetryReadMaxAttempts),
 	))
 
-	return storage.NewReader(ctx, client, g.BucketName, opts...)
+	r, err := storage.NewReader(ctx, client, g.BucketName, opts...)
+
+	return newOwnedReader(r, err, closeGcp(client, transport))
 }
 
 func newAzureReader(
 	ctx context.Context,
 	a *models.AzureBlob,
 	opts []options.Opt,
-) (backup.StreamingReader, error) {
-	client, err := newAzureClient(a)
+) (Reader, error) {
+	client, transport, err := newAzureClient(a)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +246,9 @@ func newAzureReader(
 		newReadRetryPolicy(a.RetryReadBackoff, a.RetryReadMultiplier, a.RetryReadMaxAttempts),
 	))
 
-	return blob.NewReader(ctx, client, a.ContainerName, opts...)
+	r, err := blob.NewReader(ctx, client, a.ContainerName, opts...)
+
+	return newOwnedReader(r, err, closeIdle(transport))
 }
 
 // newReadRetryPolicy builds a read retry policy from millisecond-based flag values.

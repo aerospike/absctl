@@ -201,7 +201,7 @@ func TestNewGcpReader(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	client, err := newGcpClient(ctx, params.GcpStorage)
+	client, _, err := newGcpClient(ctx, params.GcpStorage)
 	require.NoError(t, err)
 	err = createTmpFileGcp(ctx, client, dir, testFileNameASB)
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestNewAzureReader(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	client, err := newAzureClient(params.AzureBlob)
+	client, _, err := newAzureClient(params.AzureBlob)
 	require.NoError(t, err)
 	err = createTmpFileAzure(ctx, client, dir, testFileNameASB)
 	require.NoError(t, err)

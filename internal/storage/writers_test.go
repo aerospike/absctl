@@ -196,7 +196,7 @@ func createGcpBucket() error {
 		Endpoint:   testGcpEndpoint,
 	}
 
-	c, err := newGcpClient(ctx, cfg)
+	c, _, err := newGcpClient(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func createAzureContainer() error {
 		ContainerName: testBucket,
 	}
 
-	c, err := newAzureClient(cfg)
+	c, _, err := newAzureClient(cfg)
 	if err != nil {
 		return err
 	}

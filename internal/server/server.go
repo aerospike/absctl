@@ -153,7 +153,7 @@ func (c *infoClient) Close() {
 // The commands served entirely from object storage - "snapshot-backup list" and
 // "snapshot-backup validate" - need no cluster and never get here.
 func (s *Service) newInfoClient(ctx context.Context) (*infoClient, error) {
-	client, err := s.openInfoClient()
+	client, err := s.openInfoClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +169,9 @@ func (s *Service) newInfoClient(ctx context.Context) (*infoClient, error) {
 
 // openInfoClient builds the info client without asking the cluster anything about itself.
 // The caller owns the returned client and must close it.
-func (s *Service) openInfoClient() (*infoClient, error) {
+func (s *Service) openInfoClient(ctx context.Context) (*infoClient, error) {
 	asClient, err := storage.NewAerospikeClient(
+		ctx,
 		s.clientConfig(),
 		s.clientPolicy(),
 		nil,
