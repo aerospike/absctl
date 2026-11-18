@@ -36,6 +36,10 @@ type restoreCtx struct {
 	clear    *flags.ServerRestoreClearStorage
 	// s3Start is the restore read source (start).
 	s3Start *flags.SnapshotS3
+
+	// fileCfg is the service config decoded from --config for the subcommand being
+	// run. It is set by the PersistentPreRunE of the group.
+	fileCfg *config.ServerRestoreServiceConfig
 }
 
 func newRestoreCtx() *restoreCtx {
@@ -49,15 +53,14 @@ func newRestoreCtx() *restoreCtx {
 	}
 }
 
-// restoreServiceConfig builds the service config for one snapshot-restore
-// subcommand. When --config is set, the YAML file is the single source of
-// truth and every other flag is ignored, matching the scan commands; only the
-// section belonging to command is populated, so the unrelated ones are skipped
-// during validation. Otherwise fromFlags supplies the flag-based config.
+// restoreServiceConfig returns the service config for one snapshot-restore
+// subcommand. When --config is set, the YAML file is the single source of truth,
+// matching the scan commands: it was decoded by the PersistentPreRunE of the group,
+// with only the section belonging to the subcommand populated, so the unrelated ones
+// are skipped during validation. Otherwise fromFlags supplies the flag-based config.
 func restoreServiceConfig(
-	ctx context.Context,
 	rc *runCtx,
-	command config.ServerRestoreCommand,
+	rf *restoreCtx,
 	fromFlags func() *config.ServerRestoreServiceConfig,
 ) (*config.ServerRestoreServiceConfig, error) {
 	path := rc.app.GetApp().ConfigFilePath
@@ -65,12 +68,33 @@ func restoreServiceConfig(
 		return fromFlags(), nil
 	}
 
-	cfg, err := config.DecodeServerRestoreServiceConfig(ctx, path, command)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+	// Falling back to the flags here would silently ignore the file the user asked for.
+	if rf.fileCfg == nil {
+		return nil, fmt.Errorf("%w: %s", errConfigNotLoaded, path)
 	}
 
-	return cfg, nil
+	return rf.fileCfg, nil
+}
+
+// restoreConfigLoader returns the configLoader of the snapshot-restore group: it
+// decodes the section of the file that belongs to the subcommand being run and keeps
+// the result in rf for restoreServiceConfig.
+func restoreConfigLoader(rf *restoreCtx, leaves map[*cobra.Command]config.ServerRestoreCommand) configLoader {
+	return func(ctx context.Context, leaf *cobra.Command, path string) (*models.App, error) {
+		command, ok := leaves[leaf]
+		if !ok {
+			return nil, fmt.Errorf("no config file section registered for subcommand %q", leaf.Name())
+		}
+
+		cfg, err := config.DecodeServerRestoreServiceConfig(ctx, path, command)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+		}
+
+		rf.fileCfg = cfg
+
+		return cfg.App, nil
+	}
 }
 
 // newRestoreServiceConfig builds the flag-based service config of a snapshot-restore
@@ -96,22 +120,28 @@ func newRestoreServiceConfig(
 func NewRestoreCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
 
-	rf := newRestoreCtx()
+	return newRestoreCmd(rc, newRestoreCtx())
+}
 
+// newRestoreCmd builds the command group around rc and rf, which hold its flags and
+// the config file decoded for the subcommand being run.
+func newRestoreCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   UseSnapshotRestore,
 		Short: ShortRestore,
+		Args:  groupArgs,
+		RunE:  groupRunE(rc),
 	}
 
-	cmd.AddCommand(
-		newRestoreStartCmd(rc, rf),
-		newRestoreProgressCmd(rc, rf),
-		newRestoreAbortCmd(rc, rf),
-		newRestoreOpenCmd(rc, rf),
-		newRestoreClearStorageCmd(rc, rf),
-	)
+	leaves := addSubcommands(cmd, []subcommandSection[config.ServerRestoreCommand]{
+		{newRestoreStartCmd(rc, rf), config.ServerRestoreCommandStart},
+		{newRestoreProgressCmd(rc, rf), config.ServerRestoreCommandProgress},
+		{newRestoreAbortCmd(rc, rf), config.ServerRestoreCommandAbort},
+		{newRestoreOpenCmd(rc, rf), config.ServerRestoreCommandOpen},
+		{newRestoreClearStorageCmd(rc, rf), config.ServerRestoreCommandClearStorage},
+	})
 
-	applyRootPersistent(cmd, rc)
+	applyRootPersistent(cmd, rc, restoreConfigLoader(rf, leaves))
 	setHelpRestore(cmd)
 
 	return cmd
@@ -137,8 +167,8 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 		// A stray argument is a mistyped flag value, such as "--hydrate-replica false",
 		// which must fail rather than be dropped.
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := restoreServiceConfig(cmd.Context(), rc, config.ServerRestoreCommandStart,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := restoreServiceConfig(rc, rf,
 				func() *config.ServerRestoreServiceConfig {
 					return newRestoreServiceConfig(rc,
 						config.ServerRestoreCommands{Start: rf.start.GetServerRestore()},
@@ -158,7 +188,7 @@ func newRestoreStartCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	common := applyCommon(cmd, rc)
@@ -195,7 +225,6 @@ type restoreSubcommand struct {
 	long  string
 	// usage is the line the help of the subcommand opens with.
 	usage   string
-	command config.ServerRestoreCommand
 	flagSet *pflag.FlagSet
 	// helpSections lays out the help of the subcommand.
 	helpSections func(fs *pflag.FlagSet, common commonFlagSets) []HelpSection
@@ -211,14 +240,14 @@ type restoreSubcommand struct {
 }
 
 // newRestoreSubcommandCmd builds the cobra command of sub.
-func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command {
+func newRestoreSubcommandCmd(rc *runCtx, rf *restoreCtx, sub *restoreSubcommand) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   sub.use,
 		Short: sub.short,
 		Long:  sub.long,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := restoreServiceConfig(cmd.Context(), rc, sub.command,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := restoreServiceConfig(rc, rf,
 				func() *config.ServerRestoreServiceConfig {
 					return newRestoreServiceConfig(rc, sub.commands(), nil)
 				})
@@ -236,7 +265,7 @@ func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command 
 			}
 
 			return sub.run(cmd.Context(), svc)
-		},
+		}),
 	}
 
 	common := applyCommon(cmd, rc)
@@ -257,12 +286,11 @@ func newRestoreSubcommandCmd(rc *runCtx, sub *restoreSubcommand) *cobra.Command 
 }
 
 func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+	return newRestoreSubcommandCmd(rc, rf, &restoreSubcommand{
 		use:          UseProgress,
 		short:        ShortRestoreProgress,
 		long:         LongRestoreProgress,
 		usage:        flags.SectionTextUsageRestoreProgress,
-		command:      config.ServerRestoreCommandProgress,
 		flagSet:      rf.progress.NewFlagSet(),
 		helpSections: restoreProgressHelpSections,
 		commands: func() config.ServerRestoreCommands {
@@ -279,12 +307,11 @@ func newRestoreProgressCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 }
 
 func newRestoreAbortCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+	return newRestoreSubcommandCmd(rc, rf, &restoreSubcommand{
 		use:          UseAbort,
 		short:        ShortRestoreAbort,
 		long:         LongRestoreAbort,
 		usage:        flags.SectionTextUsageRestoreAbort,
-		command:      config.ServerRestoreCommandAbort,
 		flagSet:      rf.abort.NewFlagSet(),
 		helpSections: restoreAbortHelpSections,
 		commands: func() config.ServerRestoreCommands {
@@ -298,12 +325,11 @@ func newRestoreAbortCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 }
 
 func newRestoreOpenCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+	return newRestoreSubcommandCmd(rc, rf, &restoreSubcommand{
 		use:          UseOpen,
 		short:        ShortRestoreOpen,
 		long:         LongRestoreOpen,
 		usage:        flags.SectionTextUsageRestoreOpen,
-		command:      config.ServerRestoreCommandOpen,
 		flagSet:      rf.open.NewFlagSet(),
 		helpSections: restoreOpenHelpSections,
 		commands: func() config.ServerRestoreCommands {
@@ -317,12 +343,11 @@ func newRestoreOpenCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
 }
 
 func newRestoreClearStorageCmd(rc *runCtx, rf *restoreCtx) *cobra.Command {
-	return newRestoreSubcommandCmd(rc, &restoreSubcommand{
+	return newRestoreSubcommandCmd(rc, rf, &restoreSubcommand{
 		use:          UseClearStorage,
 		short:        ShortRestoreClear,
 		long:         LongRestoreClear,
 		usage:        flags.SectionTextUsageRestoreClear,
-		command:      config.ServerRestoreCommandClearStorage,
 		flagSet:      rf.clear.NewFlagSet(),
 		helpSections: restoreClearStorageHelpSections,
 		commands: func() config.ServerRestoreCommands {

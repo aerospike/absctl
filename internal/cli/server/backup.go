@@ -20,6 +20,7 @@ import (
 
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/models"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -39,6 +40,10 @@ type backupCtx struct {
 	s3Reader *flags.SnapshotS3
 	// s3Progress is the backup metadata source (progress).
 	s3Progress *flags.SnapshotS3
+
+	// fileCfg is the service config decoded from --config for the subcommand being
+	// run. It is set by the PersistentPreRunE of the group.
+	fileCfg *config.ServerBackupServiceConfig
 }
 
 func newBackupCtx() *backupCtx {
@@ -55,15 +60,14 @@ func newBackupCtx() *backupCtx {
 	}
 }
 
-// backupServiceConfig builds the service config for one snapshot-backup
-// subcommand. When --config is set, the YAML file is the single source of
-// truth and every other flag is ignored, matching the scan commands; only the
-// section belonging to command is populated, so the unrelated ones are skipped
-// during validation. Otherwise fromFlags supplies the flag-based config.
+// backupServiceConfig returns the service config for one snapshot-backup
+// subcommand. When --config is set, the YAML file is the single source of truth,
+// matching the scan commands: it was decoded by the PersistentPreRunE of the group,
+// with only the section belonging to the subcommand populated, so the unrelated ones
+// are skipped during validation. Otherwise fromFlags supplies the flag-based config.
 func backupServiceConfig(
-	ctx context.Context,
 	rc *runCtx,
-	command config.ServerBackupCommand,
+	bf *backupCtx,
 	fromFlags func() *config.ServerBackupServiceConfig,
 ) (*config.ServerBackupServiceConfig, error) {
 	path := rc.app.GetApp().ConfigFilePath
@@ -71,34 +75,62 @@ func backupServiceConfig(
 		return fromFlags(), nil
 	}
 
-	cfg, err := config.DecodeServerBackupServiceConfig(ctx, path, command)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+	// Falling back to the flags here would silently ignore the file the user asked for.
+	if bf.fileCfg == nil {
+		return nil, fmt.Errorf("%w: %s", errConfigNotLoaded, path)
 	}
 
-	return cfg, nil
+	return bf.fileCfg, nil
+}
+
+// backupConfigLoader returns the configLoader of the snapshot-backup group: it decodes
+// the section of the file that belongs to the subcommand being run and keeps the
+// result in bf for backupServiceConfig.
+func backupConfigLoader(bf *backupCtx, leaves map[*cobra.Command]config.ServerBackupCommand) configLoader {
+	return func(ctx context.Context, leaf *cobra.Command, path string) (*models.App, error) {
+		command, ok := leaves[leaf]
+		if !ok {
+			return nil, fmt.Errorf("no config file section registered for subcommand %q", leaf.Name())
+		}
+
+		cfg, err := config.DecodeServerBackupServiceConfig(ctx, path, command)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config file %s: %w", path, err)
+		}
+
+		bf.fileCfg = cfg
+
+		return cfg.App, nil
+	}
 }
 
 // NewBackupCmd builds the top-level "backup" command for server-integrated
 // backups.
 func NewBackupCmd(flagsRoot *flags.Root, appVersion, commitHash, buildTime string) *cobra.Command {
 	rc := newRunCtx(flagsRoot, appVersion, commitHash, buildTime)
-	bc := newBackupCtx()
 
+	return newBackupCmd(rc, newBackupCtx())
+}
+
+// newBackupCmd builds the command group around rc and bf, which hold its flags and
+// the config file decoded for the subcommand being run.
+func newBackupCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   UseSnapshotBackup,
 		Short: ShortBackup,
+		Args:  groupArgs,
+		RunE:  groupRunE(rc),
 	}
 
-	cmd.AddCommand(
-		newBackupStartCmd(rc, bc),
-		newBackupListCmd(rc, bc),
-		newBackupProgressCmd(rc, bc),
-		newBackupValidateCmd(rc, bc),
-		newBackupAbortCmd(rc, bc),
-	)
+	leaves := addSubcommands(cmd, []subcommandSection[config.ServerBackupCommand]{
+		{newBackupStartCmd(rc, bf), config.ServerBackupCommandStart},
+		{newBackupListCmd(rc, bf), config.ServerBackupCommandList},
+		{newBackupProgressCmd(rc, bf), config.ServerBackupCommandProgress},
+		{newBackupValidateCmd(rc, bf), config.ServerBackupCommandValidate},
+		{newBackupAbortCmd(rc, bf), config.ServerBackupCommandAbort},
+	})
 
-	applyRootPersistent(cmd, rc)
+	applyRootPersistent(cmd, rc, backupConfigLoader(bf, leaves))
 	setHelpBackup(cmd)
 
 	return cmd
@@ -122,8 +154,8 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupStart,
 		Long:  LongBackupStart,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandStart,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := backupServiceConfig(rc, bf,
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						bf.start.GetServerBackup(),
@@ -149,7 +181,7 @@ func newBackupStartCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	common := applyCommon(cmd, rc)
@@ -187,8 +219,8 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupList,
 		Long:  LongBackupList,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandList,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := backupServiceConfig(rc, bf,
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						nil,
@@ -215,7 +247,7 @@ func newBackupListCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	cmd.Flags().AddFlagSet(listFlagSet)
@@ -248,8 +280,8 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupProgress,
 		Long:  LongBackupProgress,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandProgress,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := backupServiceConfig(rc, bf,
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						nil, nil, nil,
@@ -276,7 +308,7 @@ func newBackupProgressCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	cmd.Flags().AddFlagSet(progressFlagSet)
@@ -311,8 +343,8 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupValidate,
 		Long:  LongBackupValidate,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandValidate,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := backupServiceConfig(rc, bf,
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						nil, nil,
@@ -339,7 +371,7 @@ func newBackupValidateCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	cmd.Flags().AddFlagSet(validationFlagSet)
@@ -371,8 +403,8 @@ func newBackupAbortCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 		Short: ShortBackupAbort,
 		Long:  LongBackupAbort,
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := backupServiceConfig(cmd.Context(), rc, config.ServerBackupCommandAbort,
+		RunE: runOrVersion(rc, func(cmd *cobra.Command) error {
+			cfg, err := backupServiceConfig(rc, bf,
 				func() *config.ServerBackupServiceConfig {
 					return config.NewServerBackupServiceConfig(
 						nil, nil, nil, nil,
@@ -400,7 +432,7 @@ func newBackupAbortCmd(rc *runCtx, bf *backupCtx) *cobra.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 
 	common := applyCommon(cmd, rc)

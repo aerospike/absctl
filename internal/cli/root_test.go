@@ -15,6 +15,8 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -45,15 +47,47 @@ func captureStdout(t *testing.T, fn func()) string {
 	orig := os.Stdout
 	os.Stdout = w
 
+	// The pipe is drained while fn runs, so output larger than the pipe buffer
+	// cannot block fn.
+	var (
+		buf     bytes.Buffer
+		readErr error
+	)
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		_, readErr = io.Copy(&buf, r)
+	}()
+
+	restored := false
+	restore := func() error {
+		if restored {
+			return nil
+		}
+
+		restored = true
+		os.Stdout = orig
+		closeErr := w.Close()
+		<-done
+
+		return errors.Join(closeErr, r.Close())
+	}
+
+	// Restores os.Stdout even when fn stops the test early, for example through a
+	// failed require, so later tests in the package do not write into a dead pipe.
+	defer func() {
+		_ = restore()
+	}()
+
 	fn()
 
-	require.NoError(t, w.Close())
-	os.Stdout = orig
+	require.NoError(t, restore())
+	require.NoError(t, readErr)
 
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
+	return buf.String()
 }
 
 func subcommandNames(cmd *cobra.Command) []string {
@@ -119,9 +153,7 @@ func TestRun_VersionPrintsVersion(t *testing.T) {
 		require.NoError(t, c.run(rootCmd, nil))
 	})
 
-	assert.Contains(t, out, testAppVersion)
-	assert.Contains(t, out, testCommitHash)
-	assert.Contains(t, out, testBuildTime)
+	assert.Contains(t, out, versionLine)
 }
 
 func TestRun_NoVersionShowsHelp(t *testing.T) {
@@ -148,7 +180,5 @@ func TestPrintVersion(t *testing.T) {
 
 	out := captureStdout(t, c.printVersion)
 
-	assert.Contains(t, out, testAppVersion)
-	assert.Contains(t, out, testCommitHash)
-	assert.Contains(t, out, testBuildTime)
+	assert.Contains(t, out, versionLine)
 }

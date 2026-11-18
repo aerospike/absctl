@@ -20,7 +20,6 @@ import (
 	"os"
 
 	"github.com/aerospike/absctl/internal/config/dto"
-	"github.com/aerospike/absctl/internal/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -254,37 +253,6 @@ func dtoToServerRestoreServiceConfig(
 	}
 
 	return cfg, nil
-}
-
-// DecodeAppConfig reads only the "app" section of a configuration file.
-//
-// The server command tree initializes its logger in PersistentPreRunE, before
-// the subcommand knows which schema to decode, so the app settings are read
-// separately here. Unknown fields are tolerated on purpose: every other section
-// of the file is irrelevant to this call and is validated by the full decode.
-func DecodeAppConfig(filename string) (*models.App, error) {
-	if filename == "" {
-		return nil, fmt.Errorf("config path is empty")
-	}
-
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open config file %s: %w", filename, err)
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	appDto := struct {
-		App dto.App `yaml:"app"`
-	}{App: dto.DefaultAppDTO()}
-
-	if err := yaml.NewDecoder(file).Decode(&appDto); err != nil {
-		return nil, fmt.Errorf("failed to decode config file %s: %w", filename, err)
-	}
-
-	return appDto.App.ToModelApp(), nil
 }
 
 // decodeFromFile decode yaml to params.

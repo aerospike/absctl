@@ -82,7 +82,8 @@ type Runner interface {
 }
 
 // BuildCommand constructs a cobra.Command with shared flag registration and
-// a standard run lifecycle: version check -> logger init -> service execution.
+// a standard run lifecycle: version check -> rejection of flags combined with --config
+// -> secret resolution -> logger init -> service execution.
 func BuildCommand(
 	name, short, long string,
 	flagsRoot *flags.Root,
@@ -107,6 +108,9 @@ func BuildCommand(
 		Use:   name,
 		Short: short,
 		Long:  long,
+		// A stray argument is usually a mistyped flag value, such as
+		// "--remove-artifacts false", which must fail rather than be dropped.
+		Args: cobra.NoArgs,
 	}
 
 	cmd.PersistentFlags().SortFlags = false
@@ -138,7 +142,22 @@ func BuildCommand(
 	}
 
 	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		// RunE only prints the version, nothing else is needed.
+		if shared.Root.Version {
+			return nil
+		}
+
+		if err := RejectFlagsWithConfig(c); err != nil {
+			return err
+		}
+
+		// The configuration file resolves its own secrets, and no other flag is set.
+		if shared.App.GetApp().ConfigFilePath != "" {
+			return nil
+		}
+
 		sa := shared.SecretAgent.GetSecretAgent()
+
 		return shared.App.PreRun(c, sa)
 	}
 
@@ -169,7 +188,7 @@ func RunCommand(
 	appVersion, commitHash, buildTime string,
 ) error {
 	if shared.Root.Version {
-		fmt.Printf("version: %s (%s) %s \n", appVersion, commitHash, buildTime)
+		PrintVersion(appVersion, commitHash, buildTime)
 
 		return nil
 	}
@@ -206,4 +225,9 @@ func RunCommand(
 	}()
 
 	return runner.RunService(cmd.Context(), cfg, logger)
+}
+
+// PrintVersion prints the application version line.
+func PrintVersion(appVersion, commitHash, buildTime string) {
+	fmt.Printf("version: %s (%s) %s \n", appVersion, commitHash, buildTime)
 }

@@ -15,6 +15,7 @@
 package flags
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,4 +64,26 @@ func TestApp_NewFlagSet_DefaultValues(t *testing.T) {
 	assert.False(t, app.LogJSON, "Log JSON flag should default to false")
 	assert.Empty(t, app.ConfigFilePath, "Config flag should default be empty string")
 	assert.Empty(t, app.LogFile, "Log file flag should default be empty string")
+}
+
+func TestTextConfigExclusive(t *testing.T) {
+	t.Parallel()
+
+	text := TextConfigExclusive()
+
+	for _, name := range ConfigCompatibleFlags() {
+		if name == FlagConfig {
+			continue
+		}
+
+		assert.Contains(t, text, "--"+name)
+	}
+
+	// --config is the flag the rule is about, not one of its exceptions.
+	_, exceptions, found := strings.Cut(text, "except")
+	require.True(t, found)
+	assert.NotContains(t, exceptions, "--"+FlagConfig)
+
+	usage := NewApp().NewFlagSet().Lookup(FlagConfig).Usage
+	assert.Contains(t, usage, text)
 }
