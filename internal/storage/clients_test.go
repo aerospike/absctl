@@ -15,11 +15,17 @@
 package storage
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/testutil"
@@ -61,14 +67,16 @@ func TestClients_newAerospikeClient(t *testing.T) {
 		IdleTimeout:  1000,
 		LoginTimeout: 1000,
 	}
-	_, err := NewAerospikeClient(cfg, cp, []int{1}, 10, slog.Default())
+	asClient, err := NewAerospikeClient(t.Context(), cfg, cp, []int{1}, 10, slog.Default())
 	require.NoError(t, err)
+
+	t.Cleanup(asClient.Close)
 
 	cfg = &client.AerospikeConfig{
 		User:     testASLoginPassword,
 		Password: testASLoginPassword,
 	}
-	_, err = NewAerospikeClient(cfg, cp, nil, 10, slog.Default())
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, nil, 10, slog.Default())
 	require.ErrorContains(t, err, "at least one seed must be provided")
 
 	cfg = &client.AerospikeConfig{
@@ -81,7 +89,7 @@ func TestClients_newAerospikeClient(t *testing.T) {
 			Cert: []byte("error"),
 		},
 	}
-	_, err = NewAerospikeClient(cfg, cp, []int{}, 10, slog.Default())
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, []int{}, 10, slog.Default())
 	require.ErrorContains(t, err, "failed to create Aerospike client policy")
 
 	hostPort.Host = "255.255.255.255"
@@ -92,8 +100,211 @@ func TestClients_newAerospikeClient(t *testing.T) {
 		User:     testASLoginPassword,
 		Password: testASLoginPassword,
 	}
-	_, err = NewAerospikeClient(cfg, cp, nil, 10, slog.Default())
+	_, err = NewAerospikeClient(t.Context(), cfg, cp, nil, 10, slog.Default())
 	require.ErrorContains(t, err, "failed to create Aerospike client")
+}
+
+// TestNewAerospikeClient_ContextDone checks that a context done while the connect is
+// in progress ends NewAerospikeClient without waiting for the connect, and that the
+// connect left running in the background exits on its own once the client timeout ends
+// it: the silent seed outlives the leak check, so nothing else can end the connect.
+func TestNewAerospikeClient_ContextDone(t *testing.T) {
+	// Not parallel: VerifyNoGoroutineLeaks needs the goroutines of this test alone.
+
+	// clientTimeout is how long the connect waits for the silent seed.
+	const clientTimeout = time.Second
+
+	// Started before the leak check, so that the server outlives it.
+	seed, accepted := startSilentServer(t)
+
+	testutil.VerifyNoGoroutineLeaks(t)
+
+	cfg := &client.AerospikeConfig{
+		Seeds: client.HostTLSPortSlice{seed},
+	}
+	cp := &models.ClientPolicy{
+		Timeout:      clientTimeout.Milliseconds(),
+		IdleTimeout:  clientTimeout.Milliseconds(),
+		LoginTimeout: clientTimeout.Milliseconds(),
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	// Cancel once the connect is in progress.
+	go func() {
+		select {
+		case <-accepted:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	// Waiting for the connect would end it with the client timeout error instead.
+	asClient, err := NewAerospikeClient(ctx, cfg, cp, nil, 1, slog.New(slog.DiscardHandler))
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, asClient)
+}
+
+// TestConnectWithContext checks which side owns the connected value: the caller when
+// it gets the value, the connecting goroutine when the caller has given up on ctx.
+func TestConnectWithContext(t *testing.T) {
+	t.Parallel()
+
+	const (
+		connected = 42
+		// rounds repeats each case: a select picks among ready cases at random, so an
+		// ownership bug that loses the race only sometimes must get many chances to show.
+		rounds = 64
+	)
+
+	errConnect := errors.New("connect failed")
+
+	tests := []struct {
+		name string
+		// giveCancel cancels ctx while connect runs, before it returns.
+		giveCancel   bool
+		giveErr      error
+		want         int
+		wantErr      error
+		wantReleased []int
+	}{
+		{
+			name: "connected before done",
+			want: connected,
+		},
+		{
+			name:    "failed before done",
+			giveErr: errConnect,
+			wantErr: errConnect,
+		},
+		{
+			name:         "connected after done is released",
+			giveCancel:   true,
+			wantErr:      context.Canceled,
+			wantReleased: []int{connected},
+		},
+		{
+			name:       "failed after done releases nothing",
+			giveCancel: true,
+			giveErr:    errConnect,
+			wantErr:    context.Canceled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			for range rounds {
+				synctest.Test(t, func(t *testing.T) {
+					ctx, cancel := context.WithCancel(t.Context())
+					defer cancel()
+
+					// connect returns only after the caller has, when it cancels ctx.
+					unblock := make(chan struct{})
+
+					connect := func() (int, error) {
+						if tt.giveCancel {
+							cancel()
+							<-unblock
+						}
+
+						if tt.giveErr != nil {
+							return 0, tt.giveErr
+						}
+
+						return connected, nil
+					}
+
+					var released []int
+
+					got, err := connectWithContext(ctx, connect, func(v int) {
+						released = append(released, v)
+					})
+
+					close(unblock)
+					// Let the connecting goroutine finish before checking what it released.
+					synctest.Wait()
+
+					require.ErrorIs(t, err, tt.wantErr)
+					assert.Equal(t, tt.want, got)
+					assert.Equal(t, tt.wantReleased, released)
+				})
+			}
+		})
+	}
+}
+
+// TestConnectWithContext_DoneBeforeStart checks that a context done before the call
+// fails it without starting the connect.
+func TestConnectWithContext_DoneBeforeStart(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	connect := func() (int, error) {
+		t.Error("connect must not run")
+
+		return 0, nil
+	}
+
+	_, err := connectWithContext(ctx, connect, func(int) {
+		t.Error("release must not run")
+	})
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// startSilentServer starts a TCP server that accepts connections and never answers,
+// so an Aerospike connect to it waits for the client's timeouts. It returns the seed
+// to connect to and a channel closed on the first accepted connection. The server
+// stops when the test ends, after the cleanups registered later.
+func startSilentServer(t *testing.T) (seed *client.HostTLSPort, accepted <-chan struct{}) {
+	t.Helper()
+
+	var lc net.ListenConfig
+
+	ln, err := lc.Listen(t.Context(), "tcp", net.JoinHostPort(testHost, "0"))
+	require.NoError(t, err)
+
+	var (
+		wg           sync.WaitGroup
+		acceptedOnce = make(chan struct{})
+		// conns is written only by the accept goroutine and read after wg.Wait.
+		conns []net.Conn
+	)
+
+	wg.Go(func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				// The listener is closed.
+				return
+			}
+
+			if len(conns) == 0 {
+				close(acceptedOnce)
+			}
+
+			conns = append(conns, conn)
+		}
+	})
+
+	t.Cleanup(func() {
+		_ = ln.Close()
+
+		wg.Wait()
+
+		for _, conn := range conns {
+			_ = conn.Close()
+		}
+	})
+
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+
+	return &client.HostTLSPort{Host: testHost, Port: addr.Port}, acceptedOnce
 }
 
 func TestClients_newS3Client(t *testing.T) {
@@ -118,7 +329,7 @@ func TestClients_newGcpClient(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	_, err := newGcpClient(ctx, cfg)
+	_, _, err := newGcpClient(ctx, cfg)
 	require.NoError(t, err)
 }
 
@@ -132,7 +343,7 @@ func TestClients_newAzureClient(t *testing.T) {
 		ContainerName: testBucket,
 	}
 
-	_, err := newAzureClient(cfg)
+	_, _, err := newAzureClient(cfg)
 	require.NoError(t, err)
 }
 
@@ -154,6 +365,11 @@ func TestNewTransportFields(t *testing.T) {
 	tr := newTransport(42)
 	require.NotNil(t, tr)
 	assert.Equal(t, 42, tr.MaxConnsPerHost)
+	assert.Equal(t, maxIdleConnsPerHost, tr.MaxIdleConnsPerHost)
+
+	// A connection limit above the idle pool raises the pool to match it.
+	tr = newTransport(maxIdleConnsPerHost + 1)
+	assert.Equal(t, maxIdleConnsPerHost+1, tr.MaxIdleConnsPerHost)
 	assert.True(t, tr.ForceAttemptHTTP2)
 }
 
@@ -189,14 +405,14 @@ func TestGetGcpAuth_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse JSON key file")
 }
 
-func TestGetGcpTransport_KeyFileMissing(t *testing.T) {
+func TestNewGcpAuthTransport_KeyFileMissing(t *testing.T) {
 	t.Parallel()
 
 	cfg := &models.GcpStorage{
 		KeyFile: filepath.Join(t.TempDir(), "missing-key.json"),
 	}
 
-	transport, err := getGcpTransport(t.Context(), cfg)
+	transport, err := newGcpAuthTransport(t.Context(), cfg, newTransport(0))
 	require.Error(t, err)
 	assert.Nil(t, transport)
 	assert.Contains(t, err.Error(), "failed to read key file")
@@ -206,12 +422,12 @@ func TestNewGcpClient_KeyFileMissing(t *testing.T) {
 	t.Parallel()
 
 	cfg := &models.GcpStorage{
-		// No Endpoint forces newGcpClient to call getGcpTransport,
+		// No Endpoint forces newGcpClient to call newGcpAuthTransport,
 		// which then fails because the key file is missing.
 		KeyFile: filepath.Join(t.TempDir(), "missing-key.json"),
 	}
 
-	c, err := newGcpClient(t.Context(), cfg)
+	c, _, err := newGcpClient(t.Context(), cfg)
 	require.Error(t, err)
 	assert.Nil(t, c)
 	assert.Contains(t, err.Error(), "failed to get GCP transport")
@@ -227,7 +443,7 @@ func TestNewAzureClient_AAD(t *testing.T) {
 		ClientSecret: "fake-secret",
 	}
 
-	c, err := newAzureClient(cfg)
+	c, _, err := newAzureClient(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, c)
 }
@@ -237,7 +453,7 @@ func TestNewAzureClient_NoCredentials(t *testing.T) {
 
 	cfg := &models.AzureBlob{Endpoint: testAzureEndpoint}
 
-	c, err := newAzureClient(cfg)
+	c, _, err := newAzureClient(cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, c)
 }
@@ -252,7 +468,7 @@ func TestNewAzureClient_InvalidSharedKey(t *testing.T) {
 		AccountKey: "!!!not-base64!!!",
 	}
 
-	c, err := newAzureClient(cfg)
+	c, _, err := newAzureClient(cfg)
 	require.Error(t, err)
 	assert.Nil(t, c)
 	assert.Contains(t, err.Error(), "Azure shared key credentials")

@@ -44,6 +44,9 @@ const (
 	testASLoginPassword = "admin"
 	testHost            = "127.0.0.1"
 	testPort            = 3000
+
+	// errReaderText is part of the error NewService returns when the restore reader fails.
+	errReaderText = "restore reader"
 )
 
 func testHostPort() *client.HostTLSPort {
@@ -97,6 +100,8 @@ func Test_BackupRestore(t *testing.T) {
 	asb, err := appBackup.NewService(ctx, asbParams, logger)
 	require.NoError(t, err)
 
+	t.Cleanup(asb.Close)
+
 	err = asb.Run(ctx)
 	require.NoError(t, err)
 
@@ -138,6 +143,8 @@ func Test_BackupRestore(t *testing.T) {
 	asr, err := NewService(ctx, asrParams, logger)
 	require.NoError(t, err)
 
+	t.Cleanup(asr.Close)
+
 	err = asr.Run(ctx)
 	require.NoError(t, err)
 }
@@ -145,10 +152,12 @@ func Test_BackupRestore(t *testing.T) {
 func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
 	t.Helper()
 
-	aerospikeClient, err := storage.NewAerospikeClient(cfg, cp, nil, 0, slog.Default())
+	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg, cp, nil, 0, slog.Default())
 	if err != nil {
 		return fmt.Errorf("failed to create aerospike client: %w", err)
 	}
+
+	defer aerospikeClient.Close()
 
 	wp := aerospike.NewWritePolicy(0, 0)
 
@@ -203,7 +212,83 @@ func Test_NewService_ValidateOnly_EmptyDir(t *testing.T) {
 	svc, err := NewService(t.Context(), cfg, quietLogger())
 	require.Error(t, err)
 	require.Nil(t, svc)
-	require.Contains(t, err.Error(), "restore reader")
+	require.Contains(t, err.Error(), errReaderText)
+}
+
+// TestNewService_ReaderErrorClosesClient checks that NewService closes the Aerospike
+// client it connected when a later step fails.
+func TestNewService_ReaderErrorClosesClient(t *testing.T) {
+	// Not parallel: VerifyNoGoroutineLeaks needs the goroutines of this test alone.
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
+	testutil.VerifyNoGoroutineLeaks(t)
+
+	cfg := newRestoreCfg(&models.Restore{
+		// Connecting the client comes first; the reader then fails on the missing directory.
+		Directory:       filepath.Join(t.TempDir(), "missing"),
+		Namespace:       testNamespace,
+		Parallel:        1,
+		BatchSize:       1,
+		MaxAsyncBatches: 1,
+	})
+
+	svc, err := NewService(t.Context(), cfg, quietLogger())
+	require.ErrorContains(t, err, errReaderText)
+	require.Nil(t, svc)
+}
+
+// TestService_CloseIsSafe checks that Close is a no-op where there is no client to
+// release, as in validation mode.
+func TestService_CloseIsSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilSvc *Service
+
+	assert.NotPanics(t, nilSvc.Close)
+	assert.NotPanics(t, (&Service{}).Close)
+}
+
+// TestService_CloseReleasesReader checks that Close after Run releases the storage
+// client of the reader.
+func TestService_CloseReleasesReader(t *testing.T) {
+	// Not parallel: VerifyNoGoroutineLeaks needs the goroutines of this test alone.
+	const (
+		bucket = "restore-bucket"
+		dir    = "backup"
+	)
+
+	// Started before the leak check, so that the server outlives it and cannot close
+	// the client connections itself.
+	fakeS3 := testutil.NewFakeS3(t, bucket, map[string][]byte{
+		dir + "/data" + asb.Extension: testutil.NewBackupFile(t, testNamespace, testSet),
+	})
+
+	testutil.VerifyNoGoroutineLeaks(t)
+	testutil.IsolateAWSConfig(t)
+
+	// Validation needs no cluster, so the reader is the only client to release.
+	cfg := newRestoreCfg(&models.Restore{
+		ValidateOnly:    true,
+		Directory:       dir,
+		Namespace:       testNamespace,
+		Parallel:        1,
+		BatchSize:       1,
+		MaxAsyncBatches: 1,
+	})
+	cfg.AwsS3 = &models.AwsS3{
+		BucketName:      bucket,
+		Region:          "us-east-1",
+		Endpoint:        fakeS3.URL,
+		AccessKeyID:     "fake-key-id",
+		SecretAccessKey: "fake-secret",
+	}
+
+	svc, err := NewService(t.Context(), cfg, quietLogger())
+	require.NoError(t, err)
+
+	// Runs before the leak check, which was registered first, even if Run fails.
+	t.Cleanup(svc.Close)
+
+	require.NoError(t, svc.Run(t.Context()))
 }
 
 const (
@@ -263,6 +348,8 @@ func TestRestore_BatchRejectedRecordFails(t *testing.T) {
 
 			svc, err := NewService(t.Context(), cfg, quietLogger())
 			require.NoError(t, err)
+
+			t.Cleanup(svc.Close)
 
 			if tt.wantErr {
 				// Run is what the command executes; it must return the rejection.
@@ -324,7 +411,7 @@ func deleteRecords(t *testing.T, set string, userKeys ...string) {
 
 	cfg := newRestoreCfg(&models.Restore{})
 
-	aerospikeClient, err := storage.NewAerospikeClient(cfg.ClientConfig, cfg.ClientPolicy, nil, 0, quietLogger())
+	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg.ClientConfig, cfg.ClientPolicy, nil, 0, quietLogger())
 	require.NoError(t, err)
 
 	defer aerospikeClient.Close()

@@ -156,7 +156,7 @@ func TestInfoClientSurvivesGarbageCollection(t *testing.T) {
 	//
 	// openInfoClient is used rather than newInfoClient because these tests are about the
 	// lifetime of the client and not about what the cluster it talks to supports.
-	ic, err := newLiveService(t).openInfoClient()
+	ic, err := newLiveService(t).openInfoClient(t.Context())
 	require.NoError(t, err)
 
 	t.Cleanup(ic.Close)
@@ -197,7 +197,7 @@ func TestInfoClientClose(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ic, err := newLiveService(t).openInfoClient()
+			ic, err := newLiveService(t).openInfoClient(t.Context())
 			require.NoError(t, err)
 
 			require.NotEmpty(t, ic.GetNodesNames(),

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path"
 	"testing"
@@ -29,7 +30,9 @@ import (
 	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
+	"github.com/aerospike/backup-go/io/encoding/asb"
 	"github.com/aerospike/tools-common-go/client"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,6 +98,8 @@ func Test_BackupWithState(t *testing.T) {
 	asb, err := NewService(ctx, asbParams, logger)
 	require.NoError(t, err)
 
+	t.Cleanup(asb.Close)
+
 	err = asb.Run(ctx)
 	require.NoError(t, err)
 }
@@ -149,8 +154,127 @@ func Test_BackupEstimates(t *testing.T) {
 	asb, err := NewService(ctx, asbParams, logger)
 	require.NoError(t, err)
 
+	t.Cleanup(asb.Close)
+
 	err = asb.Run(ctx)
 	require.NoError(t, err)
+}
+
+// TestService_CloseReleasesClient checks that Close after Run leaves no goroutine of
+// the Aerospike client running.
+func TestService_CloseReleasesClient(t *testing.T) {
+	// Not parallel: VerifyNoGoroutineLeaks needs the goroutines of this test alone.
+	testutil.RequireIntegration(t, testutil.ServiceAerospike)
+	testutil.VerifyNoGoroutineLeaks(t)
+
+	cfg := newBackupCfg(&models.Backup{
+		FileLimit:                     100000,
+		Directory:                     t.TempDir(),
+		Namespace:                     testNamespace,
+		Parallel:                      1,
+		InfoMaxRetries:                1,
+		InfoRetriesMultiplier:         1,
+		InfoRetryIntervalMilliseconds: 10,
+	})
+
+	svc, err := NewService(t.Context(), cfg, quietLogger())
+	require.NoError(t, err)
+
+	// Runs before the leak check, which was registered first, even if Run fails.
+	t.Cleanup(svc.Close)
+
+	require.NoError(t, svc.Run(t.Context()))
+}
+
+// TestService_CloseIsSafe checks that Close is a no-op where there is no client to release.
+func TestService_CloseIsSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilSvc *Service
+
+	assert.NotPanics(t, nilSvc.Close)
+	assert.NotPanics(t, (&Service{}).Close)
+}
+
+// TestNewService_ErrorReleasesStorage checks that NewService releases the storage
+// clients of the writer and of the state reader it created when a later step fails.
+func TestNewService_ErrorReleasesStorage(t *testing.T) {
+	// Not parallel: VerifyNoGoroutineLeaks needs the goroutines of each subtest alone.
+	const (
+		bucket = "backup-bucket"
+		dir    = "backup"
+	)
+
+	tests := []struct {
+		name string
+		// giveContinue makes NewService create a state reader as well.
+		giveContinue string
+		giveObjects  map[string][]byte
+	}{
+		{
+			name: "writer",
+		},
+		{
+			name:         "writer and state reader",
+			giveContinue: testStateFile,
+			giveObjects: map[string][]byte{
+				dir + "/data" + asb.Extension: testutil.NewBackupFile(t, testNamespace, testSet),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Started before the leak check, so that the server outlives it and cannot
+			// close the client connections itself.
+			fakeS3 := testutil.NewFakeS3(t, bucket, tt.giveObjects)
+
+			testutil.VerifyNoGoroutineLeaks(t)
+			testutil.IsolateAWSConfig(t)
+
+			cfg := newBackupCfg(&models.Backup{
+				FileLimit: 1,
+				Directory: dir,
+				Namespace: testNamespace,
+				Parallel:  1,
+				Continue:  tt.giveContinue,
+			})
+			// The storage is set up first; the Aerospike connect then fails.
+			cfg.ClientConfig.Seeds = client.HostTLSPortSlice{closedHostPort(t)}
+			cfg.ClientConfig.User = ""
+			cfg.ClientConfig.Password = ""
+			cfg.AwsS3 = &models.AwsS3{
+				BucketName:        bucket,
+				Region:            "us-east-1",
+				Endpoint:          fakeS3.URL,
+				AccessKeyID:       "fake-key-id",
+				SecretAccessKey:   "fake-secret",
+				ChunkSize:         5,
+				UploadConcurrency: 1,
+			}
+
+			svc, err := NewService(t.Context(), cfg, quietLogger())
+			require.ErrorContains(t, err, "failed to create aerospike client")
+			require.Nil(t, svc)
+		})
+	}
+}
+
+// closedHostPort returns a local address nothing listens on, so a connect to it is refused.
+func closedHostPort(t *testing.T) *client.HostTLSPort {
+	t.Helper()
+
+	var lc net.ListenConfig
+
+	ln, err := lc.Listen(t.Context(), "tcp", net.JoinHostPort(testHost, "0"))
+	require.NoError(t, err)
+
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+
+	require.NoError(t, ln.Close())
+
+	return &client.HostTLSPort{Host: testHost, Port: addr.Port}
 }
 
 func quietLogger() *slog.Logger {
@@ -338,10 +462,12 @@ func Test_NewService_InvalidModifiedAfter(t *testing.T) {
 func createRecords(t *testing.T, cfg *client.AerospikeConfig, cp *models.ClientPolicy, namespace, set string) error {
 	t.Helper()
 
-	aerospikeClient, err := storage.NewAerospikeClient(cfg, cp, nil, 0, slog.Default())
+	aerospikeClient, err := storage.NewAerospikeClient(t.Context(), cfg, cp, nil, 0, slog.Default())
 	if err != nil {
 		return fmt.Errorf("failed to create aerospike client: %w", err)
 	}
+
+	defer aerospikeClient.Close()
 
 	wp := aerospike.NewWritePolicy(0, 0)
 

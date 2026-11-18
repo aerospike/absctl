@@ -22,40 +22,57 @@ import (
 	"github.com/aerospike/absctl/internal/config"
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 )
 
 // Service represents a type used to handle Aerospike data recovery operations with configurable restore settings.
 type Service struct {
-	backupClient *backup.Client
-	config       *backup.ConfigRestore
-	reader       backup.StreamingReader
-	logger       *slog.Logger
-	reportToLog  bool
+	// aerospikeClient and reader are owned by the Service and released by Close.
+	// aerospikeClient is nil in validation mode.
+	aerospikeClient *aerospike.Client
+	backupClient    *backup.Client
+	config          *backup.ConfigRestore
+	reader          storage.Reader
+	logger          *slog.Logger
+	reportToLog     bool
 }
 
 // NewService initializes and returns a new Service instance,
 // configuring all necessary components for a restore process.
+// The caller owns the returned Service and must close it.
 func NewService(
 	ctx context.Context,
 	cfg *config.RestoreServiceConfig,
 	logger *slog.Logger,
-) (*Service, error) {
-	// Important! Describe the variable as an interface, not the exact *aerospike.Client,
-	// so we can run backup files validation with a nil aerospike client.
-	var (
-		aerospikeClient backup.AerospikeClient
-		err             error
-	)
+) (_ *Service, err error) {
+	// Important! engineClient is what backup-go gets. It is an interface, not the exact
+	// *aerospike.Client, and is assigned only a non-nil client: validation runs with
+	// a nil client, and a typed nil pointer in the interface would not be nil.
+	var engineClient backup.AerospikeClient
 
 	restoreConfig := config.NewRestoreConfig(cfg, logger)
+
+	svc := &Service{
+		config:      restoreConfig,
+		logger:      logger,
+		reportToLog: cfg.App.LogJSON || cfg.App.LogFile != "",
+	}
+
+	// Release whatever was acquired before a later step failed.
+	defer func() {
+		if err != nil {
+			svc.Close()
+		}
+	}()
 
 	// Skip client initialization in validation mode.
 	if !restoreConfig.ValidateOnly {
 		warmUp := GetWarmUp(cfg.Restore.WarmUp, cfg.Restore.MaxAsyncBatches)
 		logger.Debug("warm up is set", slog.Int("value", warmUp))
 
-		aerospikeClient, err = storage.NewAerospikeClient(
+		svc.aerospikeClient, err = storage.NewAerospikeClient(
+			ctx,
 			cfg.ClientConfig,
 			cfg.ClientPolicy,
 			nil,
@@ -65,17 +82,19 @@ func NewService(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create aerospike client: %w", err)
 		}
+
+		engineClient = svc.aerospikeClient
 	}
 
-	reader, err := storage.NewRestoreReader(ctx, cfg, logger)
+	svc.reader, err = storage.NewRestoreReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create restore reader: %w", err)
 	}
 
 	logger.Info("initializing restore client")
 
-	backupClient, err := backup.NewClient(
-		aerospikeClient,
+	svc.backupClient, err = backup.NewClient(
+		engineClient,
 		backup.WithLogger(logger),
 		backup.WithInfoPolicies(cfg.Restore.InfoPolicy(), cfg.Restore.InfoRetryPolicy()),
 	)
@@ -83,13 +102,7 @@ func NewService(
 		return nil, fmt.Errorf("failed to create restore client: %w", err)
 	}
 
-	return &Service{
-		backupClient: backupClient,
-		config:       restoreConfig,
-		reader:       reader,
-		logger:       logger,
-		reportToLog:  cfg.App.LogJSON || cfg.App.LogFile != "",
-	}, nil
+	return svc, nil
 }
 
 // Run executes the restore or validation process based on the configured mode.
@@ -114,6 +127,28 @@ func (r *Service) Run(ctx context.Context) error {
 	logging.ReportRestore(h.GetStats(), r.config.ValidateOnly, r.reportToLog, r.logger)
 
 	return nil
+}
+
+// Close releases the Aerospike client and the storage client of the reader.
+// Call it after Run has returned. It is safe to call on a Service created in
+// validation mode, on a nil Service and more than once.
+//
+// The restore is over by then. A storage client that fails to release cannot
+// affect it, so the failure is logged rather than returned.
+func (r *Service) Close() {
+	if r == nil {
+		return
+	}
+
+	if r.aerospikeClient != nil {
+		r.aerospikeClient.Close()
+	}
+
+	if r.reader != nil {
+		if err := r.reader.Close(); err != nil {
+			r.logger.Warn("failed to release restore reader", slog.Any("error", err))
+		}
+	}
 }
 
 // GetWarmUp calculates and returns the warm-up value based on the provided warmUp and maxAsyncBatches parameters.

@@ -142,6 +142,8 @@ func (r *restoreRunner) RunService(ctx context.Context, cfg subcmd.ServiceConfig
 		return fmt.Errorf("%s initialization failed: %w", logMsg, err)
 	}
 
+	defer svc.Close()
+
 	if err = svc.Run(ctx); err != nil {
 		return fmt.Errorf("%s failed: %w", logMsg, err)
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/aerospike/absctl/internal/logging"
 	"github.com/aerospike/absctl/internal/models"
 	"github.com/aerospike/absctl/internal/storage"
+	"github.com/aerospike/aerospike-client-go/v8"
 	"github.com/aerospike/backup-go"
 )
 
@@ -31,12 +32,15 @@ import (
 // It is responsible for managing backup clients, configurations,
 // and related components with additional operational parameters.
 type Service struct {
-	backupClient *backup.Client
-	config       *backup.ConfigBackup
+	// aerospikeClient, writer and reader are owned by the Service and released by Close.
+	aerospikeClient *aerospike.Client
+	backupClient    *backup.Client
+	config          *backup.ConfigBackup
 
-	writer backup.Writer
-	// reader is used to read a state file.
-	reader backup.StreamingReader
+	// writer is nil for estimates.
+	writer storage.Writer
+	// reader is used to read a state file. It is nil when no state file is read.
+	reader storage.Reader
 
 	// Additional params.
 	isEstimate       bool
@@ -51,36 +55,50 @@ type Service struct {
 // configuring all necessary components for a backup process.
 // It returns a nil Service without an error if the backup was launched
 // with --remove-artifacts and no backup should run.
+// The caller owns the returned Service and must close it.
 func NewService(
 	ctx context.Context,
 	cfg *config.BackupServiceConfig,
 	logger *slog.Logger,
-) (*Service, error) {
+) (_ *Service, err error) {
 	backupConfig, err := config.NewBackupConfig(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
 
+	svc := &Service{
+		config:      backupConfig,
+		logger:      logger,
+		reportToLog: cfg.App.LogJSON || cfg.App.LogFile != "",
+	}
+
+	// Release whatever was acquired before a later step failed.
+	defer func() {
+		if err != nil {
+			svc.Close()
+		}
+	}()
+
 	// We don't need a writer for estimates.
-	var writer backup.Writer
 	if cfg.ShouldInitWriter() {
-		writer, err = storage.NewBackupWriter(ctx, cfg, logger)
+		svc.writer, err = storage.NewBackupWriter(ctx, cfg, logger)
 		if err != nil {
 			return nil, err
 		}
 
 		// For --remove-artifacts we shouldn't start backup.
-		if writer == nil {
+		if svc.writer == nil {
 			return nil, nil
 		}
 	}
 
-	reader, err := storage.NewStateReader(ctx, cfg, logger)
+	svc.reader, err = storage.NewStateReader(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize state reader: %w", err)
 	}
 
-	aerospikeClient, err := storage.NewAerospikeClient(
+	svc.aerospikeClient, err = storage.NewAerospikeClient(
+		ctx,
 		cfg.ClientConfig,
 		cfg.ClientPolicy,
 		backupConfig.RackList,
@@ -92,22 +110,13 @@ func NewService(
 
 	logger.Info("initializing backup client")
 
-	backupClient, err := backup.NewClient(
-		aerospikeClient,
+	svc.backupClient, err = backup.NewClient(
+		svc.aerospikeClient,
 		backup.WithLogger(logger),
 		backup.WithInfoPolicies(cfg.Backup.InfoPolicy(), cfg.Backup.InfoRetryPolicy()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup client: %w", err)
-	}
-
-	svc := &Service{
-		backupClient: backupClient,
-		config:       backupConfig,
-		writer:       writer,
-		reader:       reader,
-		logger:       logger,
-		reportToLog:  cfg.App.LogJSON || cfg.App.LogFile != "",
 	}
 
 	if cfg.Backup != nil {
@@ -149,6 +158,35 @@ func (s *Service) Run(ctx context.Context) error {
 	logging.ReportBackup(h.GetStats(), s.reportToLog, s.logger)
 
 	return nil
+}
+
+// Close releases the Aerospike client and the storage clients of the writer and
+// the state reader. Call it after Run has returned. It is safe to call on a nil
+// Service and more than once.
+//
+// The backup is over by then: backup-go has closed every file it wrote. A storage
+// client that fails to release cannot affect the backup, so the failure is logged
+// rather than returned.
+func (s *Service) Close() {
+	if s == nil {
+		return
+	}
+
+	if s.aerospikeClient != nil {
+		s.aerospikeClient.Close()
+	}
+
+	if s.writer != nil {
+		if err := s.writer.Close(); err != nil {
+			s.logger.Warn("failed to release backup writer", slog.Any("error", err))
+		}
+	}
+
+	if s.reader != nil {
+		if err := s.reader.Close(); err != nil {
+			s.logger.Warn("failed to release state reader", slog.Any("error", err))
+		}
+	}
 }
 
 // errHumanize simplifies technical error messages.
