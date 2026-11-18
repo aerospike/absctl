@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,9 +89,9 @@ func TestNewRestoreCmd_RunnerImplementsRunner(t *testing.T) {
 	}
 }
 
+// TestNewRestoreHelpFunction_Output is not parallel: it captures the process-wide
+// standard streams, which testutil.CaptureOutput does not allow in a parallel test.
 func TestNewRestoreHelpFunction_Output(t *testing.T) {
-	t.Parallel()
-
 	rootFlags := flags.NewRoot()
 	_, shared := NewImportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
@@ -102,7 +103,7 @@ func TestNewRestoreHelpFunction_Output(t *testing.T) {
 		appFS, appFS, appFS,
 	)
 
-	out := captureStdout(t, helpFn)
+	out, _ := testutil.CaptureOutput(t, helpFn)
 	assert.Contains(t, out, textWelcomeMessageRestore)
 	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageRestore)))
 }

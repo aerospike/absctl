@@ -15,13 +15,11 @@
 package scan
 
 import (
-	"io"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/aerospike/absctl/internal/flags"
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,34 +30,6 @@ const (
 	testBuildTime   = "2026-01-01T00:00:00Z"
 	expectedNiceMsg = "use --bandwidth instead"
 )
-
-// captureStdoutMu serializes tests that swap os.Stdout to avoid races between
-// parallel tests in the same package.
-var captureStdoutMu sync.Mutex
-
-// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	captureStdoutMu.Lock()
-	defer captureStdoutMu.Unlock()
-
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	orig := os.Stdout
-	os.Stdout = w
-
-	fn()
-
-	require.NoError(t, w.Close())
-	os.Stdout = orig
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
-}
 
 func TestNewBackupCmd_Structure(t *testing.T) {
 	t.Parallel()
@@ -131,9 +101,9 @@ func TestNewBackupCmd_RunnerImplementsRunner(t *testing.T) {
 	}
 }
 
+// TestNewBackupHelpFunction_Output is not parallel: it captures the process-wide
+// standard streams, which testutil.CaptureOutput does not allow in a parallel test.
 func TestNewBackupHelpFunction_Output(t *testing.T) {
-	t.Parallel()
-
 	rootFlags := flags.NewRoot()
 	_, shared := NewExportCmd(rootFlags, testAppVersion, testCommitHash, testBuildTime)
 
@@ -145,7 +115,7 @@ func TestNewBackupHelpFunction_Output(t *testing.T) {
 		appFS, appFS, appFS, appFS,
 	)
 
-	out := captureStdout(t, helpFn)
+	out, _ := testutil.CaptureOutput(t, helpFn)
 	assert.Contains(t, out, textWelcomeMessageBackup)
 	assert.Contains(t, out, strings.Repeat("-", len(textWelcomeMessageBackup)))
 }

@@ -15,13 +15,9 @@
 package cli
 
 import (
-	"bytes"
-	"errors"
-	"io"
-	"os"
-	"sync"
 	"testing"
 
+	"github.com/aerospike/absctl/internal/testutil"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,63 +28,6 @@ const (
 	testCommitHash = "deadbeef"
 	testBuildTime  = "2026-01-01T00:00:00Z"
 )
-
-var captureStdoutMu sync.Mutex
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	captureStdoutMu.Lock()
-	defer captureStdoutMu.Unlock()
-
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	orig := os.Stdout
-	os.Stdout = w
-
-	// The pipe is drained while fn runs, so output larger than the pipe buffer
-	// cannot block fn.
-	var (
-		buf     bytes.Buffer
-		readErr error
-	)
-
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		_, readErr = io.Copy(&buf, r)
-	}()
-
-	restored := false
-	restore := func() error {
-		if restored {
-			return nil
-		}
-
-		restored = true
-		os.Stdout = orig
-		closeErr := w.Close()
-		<-done
-
-		return errors.Join(closeErr, r.Close())
-	}
-
-	// Restores os.Stdout even when fn stops the test early, for example through a
-	// failed require, so later tests in the package do not write into a dead pipe.
-	defer func() {
-		_ = restore()
-	}()
-
-	fn()
-
-	require.NoError(t, restore())
-	require.NoError(t, readErr)
-
-	return buf.String()
-}
 
 func subcommandNames(cmd *cobra.Command) []string {
 	names := make([]string, 0, len(cmd.Commands()))
@@ -143,13 +82,14 @@ func TestNewCmd_PersistentFlags(t *testing.T) {
 	}
 }
 
-func TestRun_VersionPrintsVersion(t *testing.T) {
-	t.Parallel()
+// The tests below are not parallel: they capture the process-wide standard streams,
+// which testutil.CaptureOutput does not allow in a parallel test.
 
+func TestRun_VersionPrintsVersion(t *testing.T) {
 	rootCmd, c := NewCmd(testAppVersion, testCommitHash, testBuildTime)
 	c.flagsRoot.Version = true
 
-	out := captureStdout(t, func() {
+	out, _ := testutil.CaptureOutput(t, func() {
 		require.NoError(t, c.run(rootCmd, nil))
 	})
 
@@ -157,12 +97,10 @@ func TestRun_VersionPrintsVersion(t *testing.T) {
 }
 
 func TestRun_NoVersionShowsHelp(t *testing.T) {
-	t.Parallel()
-
 	rootCmd, c := NewCmd(testAppVersion, testCommitHash, testBuildTime)
 	c.flagsRoot.Version = false
 
-	out := captureStdout(t, func() {
+	out, _ := testutil.CaptureOutput(t, func() {
 		require.NoError(t, c.run(rootCmd, nil))
 	})
 
@@ -170,15 +108,13 @@ func TestRun_NoVersionShowsHelp(t *testing.T) {
 }
 
 func TestPrintVersion(t *testing.T) {
-	t.Parallel()
-
 	c := &Cmd{
 		appVersion: testAppVersion,
 		commitHash: testCommitHash,
 		buildTime:  testBuildTime,
 	}
 
-	out := captureStdout(t, c.printVersion)
+	out, _ := testutil.CaptureOutput(t, c.printVersion)
 
 	assert.Contains(t, out, versionLine)
 }
