@@ -22,6 +22,8 @@ import (
 	"github.com/aerospike/absctl/internal/cli/server"
 	"github.com/aerospike/absctl/internal/flags"
 	"github.com/aerospike/absctl/internal/subcmd"
+	"github.com/aerospike/absctl/internal/testutil"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +72,15 @@ var (
 	// that resolves secrets fails instead of printing the version.
 	argsSecretAgent = []string{"-P", "secrets:resource:key", "--sa-address", "127.0.0.1", "--sa-port", "1"}
 )
+
+// newTestRootCmd builds the whole command tree and silences the errors of cobra, as main
+// does. The error that main logs itself is returned by the run instead.
+func newTestRootCmd() *cobra.Command {
+	rootCmd, _ := NewCmd(testAppVersion, testCommitHash, testBuildTime)
+	rootCmd.SilenceErrors = true
+
+	return rootCmd
+}
 
 // executeEnv holds the paths a test case may refer to.
 type executeEnv struct {
@@ -239,9 +250,9 @@ func groupCases(g *snapshotGroup) []executeCase {
 // TestExecute_RejectsIgnoredInput runs the real command tree and checks that input the
 // CLI would not act on fails instead of being silently dropped. No case needs a
 // running cluster or Secret Agent: the ones that reach the network expect it to fail.
+//
+// The test is not parallel: testutil.RunCLI captures the process-wide standard streams.
 func TestExecute_RejectsIgnoredInput(t *testing.T) {
-	t.Parallel()
-
 	tests := []executeCase{
 		{
 			name: "stray positional argument after bool flag",
@@ -335,18 +346,9 @@ func TestExecute_RejectsIgnoredInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			env := newExecuteEnv(t, tt.giveConfig)
 
-			rootCmd, _ := NewCmd(testAppVersion, testCommitHash, testBuildTime)
-			rootCmd.SetArgs(tt.giveArgs(env))
-
-			var err error
-
-			out := captureStdout(t, func() {
-				err = rootCmd.ExecuteContext(t.Context())
-			})
+			out, _, err := testutil.RunCLI(t, newTestRootCmd, tt.giveArgs(env)...)
 
 			// No case may remove or change existing backup files.
 			assert.FileExists(t, env.sentinel)
